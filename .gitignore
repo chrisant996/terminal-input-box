@@ -1,0 +1,15 @@
+.agents
+.build
+.github
+.history
+.vs
+.vscode
+bin*86/**
+bin*64/**
+bin*arm/**
+bin*arm64/**
+tags
+*.swp
+*.exe
+*.log
+*.patch
