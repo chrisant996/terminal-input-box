@@ -8,6 +8,8 @@
 #include "tib_base.h"
 #include <vector>
 
+namespace {
+
 enum class binding_type : uint8_t
 {
     func,
@@ -70,3 +72,5 @@ public:
 private:
     std::vector<key_binding> m_bindings;    // Sorted by sequence.
 };
+
+}

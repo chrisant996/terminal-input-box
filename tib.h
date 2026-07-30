@@ -8,6 +8,8 @@
 #include "tib_base.h"
 #include "tib_bindings.h"
 
+namespace tib {
+
 class tib
 {
 public:
@@ -17,3 +19,5 @@ public:
 private:
 	const key_table*    m_bindings = nullptr;
 };
+
+}

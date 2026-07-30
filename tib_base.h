@@ -5,24 +5,47 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
+#include <vector>
 
+namespace tib {
+
+#undef min
+template <class A> A min(A a, A b) { return (a < b) ? a : b; }
+
+#undef max
+template <class A> A max(A a, A b) { return (a > b) ? a : b; }
+
+#undef clamp
+template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
+
+using countof = std::size;
+
+// A counted string that can optionally contain embedded NUL characters.
+//
+// Annoying Note:  c_str() has to check for nullptr as part of supporting a
+// cstring&& r-value constructor for the class.
 class cstring
 {
+    constexpr size_t    c_auto_length = size_t(-1);
+
 public:
-                        ~cstring();
+                        ~cstring() { free(m_text); }
                         cstring() = delete;
-                        cstring(const char* s, uint16_t len=-1);
-                        cstring(const cstring& s);
+                        cstring(const char* s, uint16_t len=c_auto_length) { raw_set(s, len); }
+                        cstring(const cstring& s) { raw_set(s.m_text, s.m_len); }
                         cstring(cstring&& s);
                         cstring& operator=(const cstring& s);
                         cstring& operator=(cstring&& s);
 
-    void                set(const char* s, uint16_t len=-1);
-    uint16_t            length() const { return m_len; }
-    const char*         c_str() const { return m_text; }
+    void                set(const char* s, uint16_t len=c_auto_length);
+    size_t              length() const { return m_len; }
+    const char*         c_str() const { return m_text ? m_text : ""; }
 
 private:
-    uint16_t            m_len;
-    const char*         m_text;
+    void                raw_set(const char* s, uint16_t len);
+    size_t              m_len;
+    char*               m_text;
 };
+
+}
