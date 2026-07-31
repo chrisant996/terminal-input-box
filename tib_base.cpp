@@ -5,6 +5,7 @@
 
 #include "pch.h"
 #include "tib_base.h"
+#include <assert.h>
 
 namespace tib {
 
@@ -32,12 +33,13 @@ cstring& cstring::operator=(cstring&& s)
     m_len = s.m_len;
     s.m_len = l;
 
-    const char* p = m_text;
+    char* p = m_text;
     m_text = s.m_text;
     s.m_text = p;
+    return *this;
 }
 
-void cstring::set(const char* s, uint16_t len)
+void cstring::set(const char* s, size_t len)
 {
     assert(m_text);     // Don't use a cstring after std::move from it.
 
@@ -45,11 +47,10 @@ void cstring::set(const char* s, uint16_t len)
     raw_set(s, len);
 }
 
-void cstring::raw_set(const char* s, uint16_t len)
+void cstring::raw_set(const char* s, size_t len)
 {
     m_len = (len == c_auto_length) ? strlen(s) : len;
     m_text = static_cast<char*>(malloc(m_len + 1));
-    m_owned = true;
 
     memcpy(m_text, s, m_len);
     m_text[m_len] = 0;

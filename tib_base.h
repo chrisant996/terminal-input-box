@@ -19,31 +19,29 @@ template <class A> A max(A a, A b) { return (a > b) ? a : b; }
 #undef clamp
 template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
 
-using countof = std::size;
-
 // A counted string that can optionally contain embedded NUL characters.
 //
 // Annoying Note:  c_str() has to check for nullptr as part of supporting a
 // cstring&& r-value constructor for the class.
 class cstring
 {
-    constexpr size_t    c_auto_length = size_t(-1);
+    enum : size_t { c_auto_length = size_t(-1) };
 
 public:
                         ~cstring() { free(m_text); }
                         cstring() = delete;
-                        cstring(const char* s, uint16_t len=c_auto_length) { raw_set(s, len); }
+                        cstring(const char* s, size_t len=c_auto_length) { raw_set(s, len); }
                         cstring(const cstring& s) { raw_set(s.m_text, s.m_len); }
                         cstring(cstring&& s);
                         cstring& operator=(const cstring& s);
                         cstring& operator=(cstring&& s);
 
-    void                set(const char* s, uint16_t len=c_auto_length);
+    void                set(const char* s, size_t len=c_auto_length);
     size_t              length() const { return m_len; }
     const char*         c_str() const { return m_text ? m_text : ""; }
 
 private:
-    void                raw_set(const char* s, uint16_t len);
+    void                raw_set(const char* s, size_t len);
     size_t              m_len;
     char*               m_text;
 };

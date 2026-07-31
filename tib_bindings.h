@@ -6,9 +6,13 @@
 #pragma once
 
 #include "tib_base.h"
-#include <vector>
 
-namespace {
+#include <vector>
+#include <assert.h>
+
+namespace tib {
+
+class editor_context;
 
 enum class binding_type : uint8_t
 {
@@ -17,8 +21,20 @@ enum class binding_type : uint8_t
     macro,
 };
 
+typedef int32_t (*bindable_func_t)(tib::editor_context& ctx, const char* name);
+
 class binding_target
 {
+    union binding_storage
+    {
+                        ~binding_storage() {}
+                        binding_storage() {}
+
+        bindable_func_t m_func;
+        const char*     m_custom;
+        cstring         m_macro;
+    };
+
 public:
                         ~binding_target();
                         binding_target() = delete;
@@ -28,9 +44,9 @@ public:
                         binding_target& operator=(binding_target&& t);
 
 	binding_type        type() const { return m_type; }
-    bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_func; }
-    const char*         get_custom() const { assert(m_type == binding_type::custom); return m_custom; }
-    const cstring&      get_macro() const { assert(m_type == binding_type::macro); return m_macro; }
+    bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_storage.m_func; }
+    const char*         get_custom() const { assert(m_type == binding_type::custom); return m_storage.m_custom; }
+    const cstring&      get_macro() const { assert(m_type == binding_type::macro); return m_storage.m_macro; }
 
     void                set_func(bindable_func_t func);
     void                set_custom(const char* custom);
@@ -42,13 +58,7 @@ private:
     // store just a target string (`foo` for bindable command name "foo", and
     // `"text"` for macro text "text") and resolve the target on demand.
     binding_type        m_type;
-    union storage {
-        ~storage() {};
-        storage() {};
-        bindable_func_t m_func;
-        const char*     m_custom;
-        cstring         m_macro;
-    };
+    binding_storage     m_storage;
 };
 
 struct key_binding

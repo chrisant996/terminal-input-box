@@ -6,18 +6,18 @@
 #pragma once
 
 #include "tib_base.h"
-#include "tib_bindings.h"
+#include <vector>
 
 namespace tib {
 
-class input_box
+class editor_context
 {
 public:
-                        ~input_box() = default;
-                        input_box() = default;
+                        ~editor_context() = default;
+                        editor_context() = default;
 
 private:
-	const key_table*    m_bindings = nullptr;
 };
 
 }
+
