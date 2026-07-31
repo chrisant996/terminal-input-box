@@ -72,3 +72,13 @@ Colloquial name:    `tib`
   IMPORTANT:  Clip based on grapheme boundaries, NOT on byte or character or
   encoding boundaries!
 
+# NOTES
+
+- The flat list of key bindings is already a problem.  I overlooked the fact
+  that it doesn't always have the full sequence to match at first.  So, that
+  forces the design back to a trie.  But I still want a flat list as the central
+  source of truth -- the trie can be re-generated on demand after changes to the
+  key table.
+
+- I'm considering starting from the List-Redux el cheapo input routine as a
+  starting point, and refactor that into a class with an input driver and so on.
