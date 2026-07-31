@@ -58,7 +58,8 @@ project("tib")
     language("c++")
     kind("staticlib")
 
-    files("*.cpp")
+    includedirs("include")
+    files("tib/*.cpp")
 
 --------------------------------------------------------------------------------
 project("example")
@@ -69,7 +70,7 @@ project("example")
     targetname("example")
     links("tib")
 
-    includedirs(".")
+    includedirs("include")
     files("example/*.cpp")
 
     filter "action:vs*"
