@@ -33,8 +33,9 @@ public:
                         cstring(const char* s, size_t len=c_auto_length) { raw_set(s, len); }
                         cstring(const cstring& s) { raw_set(s.m_text, s.m_len); }
                         cstring(cstring&& s);
-                        cstring& operator=(const cstring& s);
-                        cstring& operator=(cstring&& s);
+    cstring&            operator=(const cstring& s);
+    cstring&            operator=(cstring&& s);
+    bool                operator==(const cstring& s) const;
 
     void                set(const char* s, size_t len=c_auto_length);
     size_t              length() const { return m_len; }
