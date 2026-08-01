@@ -10,6 +10,8 @@
 
 namespace tib {
 
+void (*hook_term_out)(const char* s, size_t len) = nullptr;
+
 size_t resolve_auto_length(size_t len, const char* s)
 {
     return (len == c_auto_length) ? strlen(s) : len;
@@ -61,13 +63,16 @@ bool is_console()
     return c_is_console;
 }
 
-void raw_term_out(const char* s, size_t len)
+void term_out(const char* s, size_t len)
 {
+    len = resolve_auto_length(len, s);
+
+    if (hook_term_out)
+        return hook_term_out(s, len);
+
 #ifdef _WIN32
     static WCHAR* s_buffer = nullptr;
     static size_t s_capacity = 0;
-
-    len = resolve_auto_length(len, s);
     const size_t converted = to_utf16(s, len, s_buffer, s_capacity);
 
     DWORD written;

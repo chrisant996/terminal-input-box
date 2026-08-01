@@ -85,7 +85,7 @@ void CRestoreConsole::Restore()
         {
             DWORD dummy;
             if (m_hout && GetConsoleMode(m_hout, &dummy))
-                tib::raw_term_out("\x1b[m", 3);
+                tib::term_out("\x1b[m", 3);
         }
         SetConsoleMode(m_hout, m_mode_out);
     }

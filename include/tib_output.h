@@ -17,6 +17,8 @@ size_t to_utf16(const char* s, size_t len, WCHAR*& out, size_t& capacity);
 #endif
 
 bool is_console();
-void raw_term_out(const char* s, size_t len=c_auto_length);
+void term_out(const char* s, size_t len=c_auto_length);
+
+extern void (*hook_term_out)(const char* s, size_t len);
 
 } // namespace tib
