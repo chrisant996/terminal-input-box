@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Christopher Antos
 // License: http://opensource.org/licenses/MIT
 
-// vim: set et sw=4 cino={0s:
+// vim: set et ts=4 sw=4 cino={0s:
 
 #include <stdio.h>
 
@@ -18,4 +18,3 @@ int main(int argc, const char** argv)
 
     return 0;
 }
-

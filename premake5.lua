@@ -62,6 +62,15 @@ project("tib")
     files("tib/*.cpp")
 
 --------------------------------------------------------------------------------
+project("tib_host")
+    fatalwarnings("all")
+    language("c++")
+    kind("staticlib")
+
+    includedirs("include")
+    files("host/*.cpp")
+
+--------------------------------------------------------------------------------
 project("example")
     fatalwarnings("all")
     language("c++")
@@ -69,6 +78,7 @@ project("example")
 
     targetname("example")
     links("tib")
+    links("tib_host")
 
     includedirs("include")
     files("example/*.cpp")
