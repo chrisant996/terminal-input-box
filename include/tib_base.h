@@ -24,6 +24,8 @@ template <class A> A max(A a, A b) { return (a > b) ? a : b; }
 #undef clamp
 template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
 
+size_t resolve_auto_length(size_t len, const char* s);
+
 // A counted string that can optionally contain embedded NUL characters.
 template<class T>
 class cstring_t

@@ -23,8 +23,13 @@ enum class binding_type : uint8_t
 
 typedef int32_t (*bindable_func_t)(tib::editor_context& ctx, const char* name);
 
+struct key_trie;
+class key_table;
+
 class binding_target
 {
+    friend key_table;
+
     union binding_storage
     {
                         ~binding_storage() {}
@@ -43,7 +48,7 @@ public:
                         binding_target& operator=(const binding_target& t);
                         binding_target& operator=(binding_target&& t);
 
-	binding_type        type() const { return m_type; }
+    binding_type        type() const { return m_type; }
     bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_storage.m_func; }
     const char*         get_custom() const { assert(m_type == binding_type::custom); return m_storage.m_custom; }
     const cstring&      get_macro() const { assert(m_type == binding_type::macro); return m_storage.m_macro; }
@@ -63,26 +68,30 @@ private:
 
 struct key_binding
 {
-	                    ~key_binding() = default;
+                        ~key_binding() = default;
 
-	cstring             sequence;
-	binding_target      target;
+    cstring             sequence;
+    binding_target      target;
 };
 
 class key_table
 {
 public:
-                        ~key_table() = default;
+                        ~key_table();
                         key_table() = default;
 
     void                add(key_binding&& binding);
     void                remove(const cstring& sequence);
     void                clear();
 
-    // TODO:  Get trie for dispatching.
+    const key_trie*     get_trie();
 
 private:
-    std::vector<key_binding> m_bindings;    // Sorted by sequence.
+    void                free_trie();
+    void                free_trie(key_trie* node);
+
+    std::vector<key_binding> m_bindings;
+    key_trie*           m_trie = nullptr;
 };
 
 }

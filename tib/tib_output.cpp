@@ -13,11 +13,6 @@ namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
 
-size_t resolve_auto_length(size_t len, const char* s)
-{
-    return (len == c_auto_length) ? strlen(s) : len;
-}
-
 #ifdef _WIN32
 size_t to_utf16(const char* s, size_t len, WCHAR*& out, size_t& capacity)
 {
