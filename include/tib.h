@@ -8,6 +8,8 @@
 #include "tib_base.h"
 #include "tib_bindings.h"
 #include "tib_context.h"
+#include "tib_dispatch.h"
+#include "tib_input.h"
 #include "tib_output.h"
 
 namespace tib {
