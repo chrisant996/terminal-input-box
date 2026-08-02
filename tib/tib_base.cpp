@@ -15,4 +15,4 @@ size_t resolve_auto_length(size_t len, const char* s)
     return (len == c_auto_length) ? strlen(s) : len;
 }
 
-}
+} // namespace tib

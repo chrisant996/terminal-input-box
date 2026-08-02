@@ -19,5 +19,4 @@ public:
 private:
 };
 
-}
-
+} // namespace tib

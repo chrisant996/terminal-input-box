@@ -23,4 +23,4 @@ private:
 	const key_table*    m_bindings = nullptr;
 };
 
-}
+} // namespace tib

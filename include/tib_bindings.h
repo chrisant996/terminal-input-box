@@ -141,4 +141,4 @@ private:
     dispatch_outcome    m_outcome = dispatch_outcome::miss;
 };
 
-}
+} // namespace tib

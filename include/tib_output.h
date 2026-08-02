@@ -3,7 +3,6 @@
 
 // vim: set et ts=4 sw=4 cino={0s:
 
-#include "maybe_windows.h"
 #include "tib_base.h"
 
 namespace tib {

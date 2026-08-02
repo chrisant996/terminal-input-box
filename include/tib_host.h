@@ -17,4 +17,4 @@ void set_no_exit_cleanup();
 bool is_signaled();
 void clear_signaled();
 
-}
+} // namespace tib_host

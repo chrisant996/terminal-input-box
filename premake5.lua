@@ -49,8 +49,8 @@ workspace("tib")
     filter {"release", "action:vs*"}
         linktimeoptimization("on")
 
-    filter "action:vs*"
-        defines("_HAS_EXCEPTIONS=0")
+    -- filter "action:vs*"
+    --     defines("_HAS_EXCEPTIONS=0")
 
 --------------------------------------------------------------------------------
 project("tib")
@@ -71,6 +71,21 @@ project("tib_host")
     files("host/*.cpp")
 
 --------------------------------------------------------------------------------
+project("test")
+    fatalwarnings("all")
+    language("c++")
+    kind("consoleapp")
+
+    exceptionhandling("on")
+
+    targetname("test")
+    links("tib")
+    links("tib_host")
+
+    includedirs("include")
+    files("test/*.cpp")
+
+--------------------------------------------------------------------------------
 project("example")
     fatalwarnings("all")
     language("c++")
@@ -82,8 +97,4 @@ project("example")
 
     includedirs("include")
     files("example/*.cpp")
-
-    filter "action:vs*"
-        defines("_CRT_SECURE_NO_WARNINGS")
-        defines("_CRT_NONSTDC_NO_WARNINGS")
 

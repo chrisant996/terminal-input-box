@@ -153,4 +153,4 @@ bool cstring_t<T>::raw_set(const T* s, size_t len)
 
 typedef cstring_t<char> cstring;
 
-}
+} // namespace tib
