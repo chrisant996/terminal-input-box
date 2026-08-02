@@ -6,13 +6,15 @@
 #include <stdio.h>
 
 #include "tib.h"
+#include "tib_host.h"
 #include <assert.h>
 
 int main(int argc, const char** argv)
 {
     --argc, ++argv;
 
-    tib::set_console_vt_input();
+    tib_host::set_crt_locale_utf8();
+    tib_host::set_console_vt_input();
 
     tib::input_box tib;
 

@@ -5,11 +5,12 @@
 
 #pragma once
 
-/*
- * Restore console mode and attributes on exit or ^C or ^Break.
- */
-
 namespace tib_host {
+
+#ifdef _WIN32
+void set_crt_locale_utf8();
+void set_console_vt_input();
+#endif
 
 void set_no_exit_cleanup();
 

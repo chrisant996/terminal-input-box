@@ -1,11 +1,11 @@
-// Copyright (c) 2025 by Christopher Antos
+// Copyright (c) 2026 by Christopher Antos
 // License: http://opensource.org/licenses/MIT
 
 // vim: set et ts=4 sw=4 cino={0s:
 
 #include "pch.h"
 #include "maybe_windows.h"
-#include "signaled.h"
+#include "tib_host.h"
 #include "tib_output.h"
 
 static bool s_signaled = false;
