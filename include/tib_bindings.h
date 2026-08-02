@@ -94,4 +94,21 @@ private:
     key_trie*           m_trie = nullptr;
 };
 
+enum dispatch_outcome { miss, more, match };
+
+class dispatcher
+{
+public:
+                        ~dispatcher() = default;
+                        dispatcher() = default;
+
+    void                reset();
+    dispatch_outcome    step(char c);
+
+private:
+    cstring             m_sequence;
+    const key_trie*     m_node = nullptr;
+    const binding_target* m_target = nullptr;
+};
+
 }

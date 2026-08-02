@@ -129,4 +129,45 @@ void key_table::free_trie()
     }
 }
 
+void dispatcher::reset()
+{
+    m_sequence.clear();
+    // TODO:  Where does it get the trie from?
+    // TODO:  How to handle multiple tries...?
+    m_node = nullptr;
+    m_target = nullptr;
+}
+
+dispatch_outcome dispatcher::step(char c)
+{
+    // If the new character doesn't match any existing key binding, then
+    // discard any sequence so far (as many *nix input drivers seem to do).
+    if (!m_node)
+    {
+miss:
+        assert(!m_target);
+        m_sequence.set(&c, 1);
+        return dispatch_outcome::miss;
+    }
+
+    const uint8_t uc = uint8_t(c);
+    const key_trie_entry& e = m_node->entries[uc];
+
+    if (e.m_is_trie)
+    {
+        assert(e.m_trie);
+        m_node = e.m_trie;
+        m_target = nullptr;
+        m_sequence.append(&c, 1);
+        return dispatch_outcome::more;
+    }
+
+    // TODO:  Reset m_node.
+    m_target = e.m_target;
+    if (!m_target)
+        goto miss;
+
+    return dispatch_outcome::match;
+}
+
 } // namespace tib
