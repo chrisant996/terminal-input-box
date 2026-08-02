@@ -49,6 +49,14 @@ size_t to_utf16(const char* s, size_t len, WCHAR*& out, size_t& capacity)
     out[converted] = 0;
     return converted;
 }
+
+void set_console_vt_input()
+{
+    DWORD mode;
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    if (h && GetConsoleMode(h, &mode))
+        SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
+}
 #endif
 
 static bool is_console_raw()

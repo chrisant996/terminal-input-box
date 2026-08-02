@@ -8,13 +8,13 @@
 #include "tib.h"
 #include <assert.h>
 
-using namespace tib;
-
 int main(int argc, const char** argv)
 {
     --argc, ++argv;
 
-    input_box tib;
+    tib::set_console_vt_input();
+
+    tib::input_box tib;
 
     return 0;
 }

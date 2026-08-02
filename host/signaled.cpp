@@ -22,12 +22,14 @@ public:
 
 private:
     void                Restore();
+#ifdef _WIN32
     static BOOL WINAPI  BreakHandler(DWORD CtrlType);
+#endif
 
 private:
 #ifdef _WIN32
-    HANDLE              m_hout = 0;
-    DWORD               m_mode_out;
+    DWORD               m_orig_modes[3];
+    bool                m_restore_modes = false;
 #else
     // TODO:  POSIX sigaction alternative.
 #endif
@@ -53,19 +55,30 @@ void clear_signaled()
 
 CRestoreConsole::CRestoreConsole()
 {
-#ifdef _WIN32
-    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hout && !GetConsoleMode(hout, &m_mode_out))
-        hout = 0;
-    if (!hout)
+    if (!tib::is_console())
+    {
+no_cleanup:
+        m_exit_cleanup = false;
         return;
+    }
 
-    m_hout = hout;
+#ifdef _WIN32
+    HANDLE handles[3] = {};
+    for (int i = 0; i < 3; ++i)
+    {
+        handles[i] = GetStdHandle(STD_INPUT_HANDLE - i);
+        if (!handles[i])
+            goto no_cleanup;
+        if (!GetConsoleMode(handles[i], &m_orig_modes[i]))
+            goto no_cleanup;
+    }
+
+    m_restore_modes = true;
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
-    if (hout)
-        SetConsoleMode(hout, m_mode_out|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
     // TODO:  POSIX sigaction alternative.
 #endif
@@ -78,24 +91,25 @@ CRestoreConsole::~CRestoreConsole()
 
 void CRestoreConsole::Restore()
 {
-#ifdef _WIN32
-    if (m_hout)
-    {
-        if (m_exit_cleanup)
-        {
-            DWORD dummy;
-            if (m_hout && GetConsoleMode(m_hout, &dummy))
-                tib::term_out("\x1b[m", 3);
-        }
-        SetConsoleMode(m_hout, m_mode_out);
-    }
-    m_hout = 0;
-#else
     if (m_exit_cleanup)
     {
-        // TODO:  POSIX sigaction alternative.
-        // fputs("\x1b[m", stdout);
+        tib::term_out("\x1b[m", 3);
+        m_exit_cleanup = false;
     }
+
+#ifdef _WIN32
+    if (m_restore_modes)
+    {
+        m_restore_modes = false;
+        for (int i = 0; i < 3; ++i)
+        {
+            HANDLE h = GetStdHandle(STD_INPUT_HANDLE - i);
+            if (h)
+                SetConsoleMode(h, m_orig_modes[i]);
+        }
+    }
+#else
+        // TODO:  POSIX sigaction alternative.
 #endif
 }
 
