@@ -24,10 +24,6 @@ enum class binding_type : uint8_t
 
 typedef int32_t (*bindable_func_t)(tib::editor_context& ctx, const char* name);
 
-#ifdef USE_TRIE
-struct key_trie;
-#endif
-
 class key_table;
 
 class binding_target
@@ -90,20 +86,8 @@ public:
     // TODO:  Optionally filter the enumeration to only key bindings that
     // match a prefix sequence.
 
-#ifdef USE_TRIE
-    const key_trie*     get_trie();
-#endif
-
 private:
-#ifdef USE_TRIE
-    void                free_trie();
-    void                free_trie(key_trie* node);
-#endif
-
     std::vector<key_binding> m_bindings;
-#ifdef USE_TRIE
-    key_trie*           m_trie = nullptr;
-#endif
 };
 
 typedef std::vector<std::shared_ptr<key_table>> key_table_list;
@@ -128,10 +112,6 @@ public:
 private:
     key_table_list      m_tables;
     cstring             m_sequence;
-#ifdef USE_TRIE
-    // TODO:  Need one m_node per key_table in m_tables.
-    const key_trie*     m_node = nullptr;
-#endif
     const binding_target* m_target = nullptr;
     dispatch_outcome    m_outcome = dispatch_outcome::miss;
 };
