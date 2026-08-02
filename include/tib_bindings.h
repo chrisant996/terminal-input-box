@@ -79,6 +79,8 @@ public:
     void                remove(const cstring& sequence);
     void                clear();
 
+    // TODO:  Get trie for dispatching.
+
 private:
     std::vector<key_binding> m_bindings;    // Sorted by sequence.
 };
