@@ -15,7 +15,7 @@ namespace tib {
 void binding_target::set_func(bindable_func_t func, const char* text)
 {
     assert(func);
-    m_type = text ? binding_type::custom : binding_type::func;
+    m_type = binding_type::func;
     m_func = func;
     m_text = text;
     m_length = 0;
@@ -133,7 +133,13 @@ dispatch_outcome dispatcher::step(char c)
         return m_outcome;
     }
 
-    m_sequence.set(&c, 1);
+    if (m_sequence.length() > 1)
+    {
+        // Discard the sequence before c and try again.
+        reset();
+        return step(c);
+    }
+
     m_outcome = dispatch_outcome::miss;
     return m_outcome;
 }

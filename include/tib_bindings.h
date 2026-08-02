@@ -18,11 +18,10 @@ class editor_context;
 enum class binding_type : uint8_t
 {
     func,
-    custom,
     macro,
 };
 
-typedef int32_t (*bindable_func_t)(tib::editor_context& ctx, const char* name);
+typedef int32_t (*bindable_func_t)(tib::editor_context& ctx, int32_t key, const char* name);
 
 class key_table;
 
@@ -41,8 +40,8 @@ public:
                         binding_target& operator=(binding_target&& t) = default;
 
     binding_type        get_type() const { return m_type; }
-    bindable_func_t     get_func() const { assert(m_type == binding_type::func || m_type == binding_type::custom); return m_func; }
-    const char*         get_text() const { assert(m_type == binding_type::custom || m_type == binding_type::macro); return m_text; }
+    bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_func; }
+    const char*         get_text() const { return m_text; }
     size_t              get_length() const { assert(m_type == binding_type::macro); return m_length; }
 
     void                set_func(bindable_func_t func, const char* name=nullptr);

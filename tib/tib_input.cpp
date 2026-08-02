@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_input.h"
+#include <conio.h>
 #include <assert.h>
 
 namespace tib {
@@ -21,7 +22,7 @@ char term_in()
     if (hook_term_in)
         return hook_term_in();
 
-    return fgetc(stdin);
+    return _getch();
 }
 
 } // namespace tib

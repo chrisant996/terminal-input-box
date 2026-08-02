@@ -5,9 +5,9 @@
 #include "test.h"
 #include "tib.h"
 
-static int32_t command_one(tib::editor_context&, const char*) { return 1; }
-static int32_t command_two(tib::editor_context&, const char*) { return 2; }
-static int32_t command_override(tib::editor_context&, const char*) { return 3; }
+static int32_t command_one(tib::editor_context&, int32_t, const char*) { return 1; }
+static int32_t command_two(tib::editor_context&, int32_t, const char*) { return 2; }
+static int32_t command_override(tib::editor_context&, int32_t, const char*) { return 3; }
 
 static bool add_binding(tib::key_table& table, const char* sequence, tib::bindable_func_t func)
 {

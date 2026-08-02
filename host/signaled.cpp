@@ -12,37 +12,6 @@ static bool s_signaled = false;
 
 namespace tib_host {
 
-class CRestoreConsole
-{
-public:
-    CRestoreConsole();
-    ~CRestoreConsole();
-
-    void                SetNoExitCleanup() { m_exit_cleanup = false; }
-
-private:
-    void                Restore();
-#ifdef _WIN32
-    static BOOL WINAPI  BreakHandler(DWORD CtrlType);
-#endif
-
-private:
-#ifdef _WIN32
-    DWORD               m_orig_modes[3];
-    bool                m_restore_modes = false;
-#else
-    // TODO:  POSIX sigaction alternative.
-#endif
-    bool                m_exit_cleanup = true;
-};
-
-static CRestoreConsole s_restoreConsole;
-
-void set_no_exit_cleanup()
-{
-    s_restoreConsole.SetNoExitCleanup();
-}
-
 bool is_signaled()
 {
     return s_signaled;
@@ -53,7 +22,12 @@ void clear_signaled()
     s_signaled = false;
 }
 
-CRestoreConsole::CRestoreConsole()
+auto_terminal_init::~auto_terminal_init()
+{
+    restore();
+}
+
+auto_terminal_init::auto_terminal_init()
 {
     if (!tib::is_console())
     {
@@ -77,6 +51,9 @@ no_cleanup:
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
+    // TODO:  Eventually the input handle will also need ENABLE_WINDOW_INPUT
+    // and conditionally ENABLE_MOUSE_INPUT.
+    SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT));
     SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
@@ -84,12 +61,7 @@ no_cleanup:
 #endif
 }
 
-CRestoreConsole::~CRestoreConsole()
-{
-    Restore();
-}
-
-void CRestoreConsole::Restore()
+void auto_terminal_init::restore()
 {
     if (m_exit_cleanup)
     {
@@ -114,7 +86,7 @@ void CRestoreConsole::Restore()
 }
 
 #ifdef _WIN32
-BOOL CRestoreConsole::BreakHandler(DWORD CtrlType)
+BOOL auto_terminal_init::BreakHandler(DWORD CtrlType)
 {
     if (CtrlType == CTRL_C_EVENT || CtrlType == CTRL_BREAK_EVENT)
     {
