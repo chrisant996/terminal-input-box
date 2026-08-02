@@ -34,40 +34,34 @@ class binding_target
 {
     friend key_table;
 
-    union binding_storage
-    {
-                        ~binding_storage() {}
-                        binding_storage() {}
-
-        bindable_func_t m_func;
-        const char*     m_custom;
-        cstring         m_macro;
-    };
-
 public:
-                        ~binding_target();
+                        ~binding_target() = default;
                         binding_target() = delete;
-                        binding_target(const binding_target& t);
-                        binding_target(binding_target&& t);
-                        binding_target& operator=(const binding_target& t);
-                        binding_target& operator=(binding_target&& t);
+                        binding_target(bindable_func_t func, const char* text=nullptr) { set_func(func, text); }
+                        binding_target(const char* text, size_t len=c_auto_length) { set_macro(text, len); }
+                        binding_target(const binding_target& t) = default;
+                        binding_target(binding_target&& t) = default;
+                        binding_target& operator=(const binding_target& t) = default;
+                        binding_target& operator=(binding_target&& t) = default;
 
-    binding_type        type() const { return m_type; }
-    bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_storage.m_func; }
-    const char*         get_custom() const { assert(m_type == binding_type::custom); return m_storage.m_custom; }
-    const cstring&      get_macro() const { assert(m_type == binding_type::macro); return m_storage.m_macro; }
+    binding_type        get_type() const { return m_type; }
+    bindable_func_t     get_func() const { assert(m_type == binding_type::func || m_type == binding_type::custom); return m_func; }
+    const char*         get_text() const { assert(m_type == binding_type::custom || m_type == binding_type::macro); return m_text; }
+    size_t              get_length() const { assert(m_type == binding_type::macro); return m_length; }
 
-    void                set_func(bindable_func_t func);
-    void                set_custom(const char* custom);
-    void                set_macro(const char* macro, uint16_t len);
+    void                set_func(bindable_func_t func, const char* name=nullptr);
+    void                set_macro(const char* text, size_t len=c_auto_length);
 
 private:
     // Optimize dispatching key bindings by storing a pre-resolved encoding of
     // the operation.  If runtime cost didn't matter, it could be cleaner to
     // store just a target string (`foo` for bindable command name "foo", and
     // `"text"` for macro text "text") and resolve the target on demand.
+    // TODO:  Analyze actual performance cost of resolving targets on demand.
     binding_type        m_type;
-    binding_storage     m_storage;
+    bindable_func_t     m_func;
+    const char*         m_text; // Borrowed, not owned.
+    size_t              m_length;
 };
 
 struct key_binding
@@ -86,8 +80,9 @@ public:
                         ~key_table();
                         key_table() = default;
 
-    void                add(key_binding&& binding);
-    void                remove(const cstring& sequence);
+    // TODO:  Need some way to troubleshoot messed up bindings.
+    bool                add(key_binding&& binding);
+    bool                remove(const cstring& sequence);
     void                clear();
 
     // TODO:  Enumerate m_bindings to be able to report current available key

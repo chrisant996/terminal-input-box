@@ -5,18 +5,222 @@
 #include "test.h"
 #include "tib.h"
 
+static int32_t command_one(tib::editor_context&, const char*) { return 1; }
+static int32_t command_two(tib::editor_context&, const char*) { return 2; }
+static int32_t command_override(tib::editor_context&, const char*) { return 3; }
+
+static bool add_binding(tib::key_table& table, const char* sequence, tib::bindable_func_t func)
+{
+    return table.add({ sequence, tib::binding_target(func) });
+}
+
 TEST_CASE("Key bindings")
 {
     SECTION("Main")
     {
-        // TODO:  Implement some tests for key bindings.
-        // - It's sufficient for the binding_target's to all use the same actual function pointer, and verification can rely only on the command name to differentiate between them.
-        // - Create a key_table with several VT key sequences.
-        // - Add it to a key_table_list.
-        // - Verify stepping and resolving some bindings -- ones that match, ones that don't, ones that have a common prefix but later don't match.
-        // - Create another key_table that overrides some key sequences in common with the first key_table.
-        // - Add it to a key_table_list.
-        // - Verify that sequences overridden by the second key_table match the second key_table, not the first one.
+        auto base = std::make_shared<tib::key_table>();
+        add_binding(*base, "\x1b[A", command_one);
+        add_binding(*base, "\x1b[B", command_two);
+        add_binding(*base, "\x1b[1~", command_one);
+
+        auto overlay = std::make_shared<tib::key_table>();
+        add_binding(*overlay, "\x1b[A", command_override);
+
+        tib::key_table_list tables = { base };
+        tib::dispatcher dispatcher;
+
+        SECTION("Base table")
+        {
+            dispatcher.init(tables);
+
+            REQUIRE(dispatcher.step('\x1b') == tib::more);
+            REQUIRE(dispatcher.step('[') == tib::more);
+            REQUIRE(dispatcher.step('A') == tib::match);
+            REQUIRE(dispatcher.get_target());
+            REQUIRE(dispatcher.get_target()->get_func() == command_one);
+
+            REQUIRE(dispatcher.step('x') == tib::miss);
+            REQUIRE(!dispatcher.get_target());
+            REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
+
+            REQUIRE(dispatcher.step('\x1b') == tib::more);
+            REQUIRE(dispatcher.step('[') == tib::more);
+            REQUIRE(dispatcher.step('Z') == tib::miss);
+            REQUIRE(!dispatcher.get_target());
+            REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
+        }
+
+        SECTION("Overlay table")
+        {
+            tables.emplace_back(overlay);
+            dispatcher.init(tables);
+
+            REQUIRE(dispatcher.step('\x1b') == tib::more);
+            REQUIRE(dispatcher.step('[') == tib::more);
+            REQUIRE(dispatcher.step('A') == tib::match);
+            REQUIRE(dispatcher.get_target());
+            REQUIRE(dispatcher.get_target()->get_func() == command_override);
+
+            REQUIRE(dispatcher.step('\x1b') == tib::more);
+            REQUIRE(dispatcher.step('[') == tib::more);
+            REQUIRE(dispatcher.step('B') == tib::match);
+            REQUIRE(dispatcher.get_target());
+            REQUIRE(dispatcher.get_target()->get_func() == command_two);
+        }
+    }
+}
+
+PERF_CASE("Perf, resolve 26000 bindings")
+{
+    SECTION("Main")
+    {
+        static const char* const c_sequences[] = // 260 sequences.
+        {
+            // 100 one-char sequences.
+            "\001", "\002", "\003", "\004", "\005", "\006", "\007", "\010", "\011", "\012",
+            "\013", "\014", "\015", "\016", "\017", "\020", "\021", "\022", "\023", "\024",
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+            "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+            "u", "v", "w", "x", "y", "z", "[", "]", ",", ".",
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+            "U", "V", "W", "X", "Y", "Z", "{", "}", "<", ">",
+            "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+            "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
+            // 30 two-char sequences.
+            "\033A", "\033B", "\033C", "\033D", "\033E", "\033F", "\033G", "\033H", "\033I", "\033J",
+            "\033K", "\033L", "\033M", "\033N", "\033O", "\033P", "\033Q", "\033R", "\033S", "\033T",
+            "\033U", "\033V", "\033W", "\033X", "\033Y", "\033Z", "\033!", "\033@", "\033#", "\033$",
+            // 30 three-char sequences.
+            "\033[A", "\033[B", "\033[C", "\033[D", "\033[E", "\033[F", "\033[G", "\033[H", "\033[I", "\033[J",
+            "\033[K", "\033[L", "\033[M", "\033[N", "\033[O", "\033[P", "\033[Q", "\033[R", "\033[S", "\033[T",
+            "\033[U", "\033[V", "\033[W", "\033[X", "\033[Y", "\033[Z", "\033[!", "\033[@", "\033[#", "\033[$",
+            // 40 longer sequences.
+            "\033[27;27~",
+            "\033[27;1;101~",
+            "\033[27;1;102~",
+            "\033[27;1;103~",
+            "\033[27;1;104~",
+            "\033[27;1;105~",
+            "\033[27;1;106~",
+            "\033[27;1;107~",
+            "\033[27;1;108~",
+            "\033[27;1;109~",
+            "\033[27;2;100~",
+            "\033[27;2;101~",
+            "\033[27;2;102~",
+            "\033[27;2;103~",
+            "\033[27;2;104~",
+            "\033[27;2;105~",
+            "\033[27;2;106~",
+            "\033[27;2;107~",
+            "\033[27;2;108~",
+            "\033[27;2;109~",
+            "\033[27;3;100~",
+            "\033[27;3;101~",
+            "\033[27;3;102~",
+            "\033[27;3;103~",
+            "\033[27;3;104~",
+            "\033[27;3;105~",
+            "\033[27;3;106~",
+            "\033[27;3;107~",
+            "\033[27;3;108~",
+            "\033[27;3;109~",
+            "\033[27;4;100~",
+            "\033[27;4;101~",
+            "\033[27;4;102~",
+            "\033[27;4;103~",
+            "\033[27;4;104~",
+            "\033[27;4;105~",
+            "\033[27;4;106~",
+            "\033[27;4;107~",
+            "\033[27;4;108~",
+            "\033[27;4;109~",
+            // 40 more interleaved longer sequences.
+            "\033[27;3;150~",
+            "\033[27;3;151~",
+            "\033[27;3;152~",
+            "\033[27;3;153~",
+            "\033[27;3;154~",
+            "\033[27;3;155~",
+            "\033[27;3;156~",
+            "\033[27;3;157~",
+            "\033[27;3;158~",
+            "\033[27;3;159~",
+            "\033[27;3;160~",
+            "\033[27;3;161~",
+            "\033[27;3;162~",
+            "\033[27;3;163~",
+            "\033[27;3;164~",
+            "\033[27;3;165~",
+            "\033[27;3;166~",
+            "\033[27;3;167~",
+            "\033[27;3;168~",
+            "\033[27;3;169~",
+            "\033[27;3;170~",
+            "\033[27;3;171~",
+            "\033[27;3;172~",
+            "\033[27;3;173~",
+            "\033[27;3;174~",
+            "\033[27;3;175~",
+            "\033[27;3;176~",
+            "\033[27;3;177~",
+            "\033[27;3;178~",
+            "\033[27;3;179~",
+            "\033[27;3;180~",
+            "\033[27;3;181~",
+            "\033[27;3;182~",
+            "\033[27;3;183~",
+            "\033[27;3;184~",
+            "\033[27;3;185~",
+            "\033[27;3;186~",
+            "\033[27;3;187~",
+            "\033[27;3;188~",
+            "\033[27;3;189~",
+            // 10 short chord sequences.
+            "\030a", "\030b", "\030c", "\030d", "\030e", "\030f", "\030g", "\030h", "\030i", "\030j",
+            // 10 long chord sequences.
+            "\030\033[27;1;101~",
+            "\030\033[27;1;102~",
+            "\030\033[27;1;103~",
+            "\030\033[27;1;104~",
+            "\030\033[27;1;105~",
+            "\030\033[27;1;106~",
+            "\030\033[27;1;107~",
+            "\030\033[27;1;108~",
+            "\030\033[27;1;109~",
+            "\030\033[27;1;110~",
+        };
+        static_assert(std::size(c_sequences) == 260);
+
+        auto table = std::make_shared<tib::key_table>();
+        for (const char* sequence : c_sequences)
+            REQUIRE(add_binding(*table, sequence, command_one));
+
+        tib::dispatcher dispatcher;
+        dispatcher.init({ table });
+
+        constexpr uint32_t c_passes = 100;
+
+        uint32_t resolved = 0;
+        for (size_t pass = 0; pass < c_passes; ++pass)
+        {
+            for (const char* sequence : c_sequences)
+            {
+                tib::dispatch_outcome outcome = tib::miss;
+                for (const char* p = sequence; *p; ++p)
+                {
+                    outcome = dispatcher.step(*p);
+                    REQUIRE(!p[1] || outcome == tib::dispatch_outcome::more);
+                }
+                REQUIRE(outcome == tib::match);
+                ++resolved;
+            }
+        }
+
+        REQUIRE(resolved == c_passes * std::size(c_sequences));
+
+        static_assert(c_passes * std::size(c_sequences) == 26000);
     }
 }
 

@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 
+#include "maybe_windows.h"
 #include "tib.h"
 #include "tib_host.h"
 #include <assert.h>

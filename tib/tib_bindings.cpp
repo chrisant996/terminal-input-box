@@ -12,6 +12,25 @@
 
 namespace tib {
 
+void binding_target::set_func(bindable_func_t func, const char* text)
+{
+    assert(func);
+    m_type = text ? binding_type::custom : binding_type::func;
+    m_func = func;
+    m_text = text;
+    m_length = 0;
+}
+
+void binding_target::set_macro(const char* text, size_t len)
+{
+    assert(text);
+    len = resolve_auto_length(len, text);
+    m_type = binding_type::macro;
+    m_func = nullptr;
+    m_text = text;
+    m_length = len;
+}
+
 #ifdef USE_TRIE
 struct key_trie;
 
@@ -37,8 +56,12 @@ key_table::~key_table()
 #endif
 }
 
-void key_table::add(key_binding&& binding)
+bool key_table::add(key_binding&& binding)
 {
+    assert(binding.sequence.length() > 0);
+    if (!binding.sequence.length())
+        return false;
+
     const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), binding.sequence, [](const key_binding& candidate, const cstring& sequence) {
         const size_t common_length = min(candidate.sequence.length(), sequence.length());
         const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
@@ -53,10 +76,15 @@ void key_table::add(key_binding&& binding)
 #ifdef USE_TRIE
     free_trie(); // Regenerate on demand.
 #endif
+    return true;
 }
 
-void key_table::remove(const cstring& sequence)
+bool key_table::remove(const cstring& sequence)
 {
+    assert(sequence.length() > 0);
+    if (!sequence.length())
+        return false;
+
     const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), sequence, [](const key_binding& candidate, const cstring& sequence) {
         const size_t common_length = min(candidate.sequence.length(), sequence.length());
         const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
@@ -69,6 +97,7 @@ void key_table::remove(const cstring& sequence)
 #ifdef USE_TRIE
     free_trie(); // Regenerate on demand.
 #endif
+    return true;
 }
 
 void key_table::clear()

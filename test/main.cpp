@@ -2,6 +2,7 @@
 // Derived from clink/test/main.cpp, portions Copyright (c) 2015 Martin Ridgers
 // License: http://opensource.org/licenses/MIT
 
+#include "maybe_windows.h"
 #include "tib.h"
 #include "test.h"
 
@@ -19,6 +20,13 @@ static void install_crt_invalid_parameter_handler()
     _set_invalid_parameter_handler(do_nothing);
 }
 #endif
+
+static bool s_performance_tests = false;
+
+bool test::include_perf_tests()
+{
+    return s_performance_tests;
+}
 
 int main(int argc, char** argv)
 {
@@ -38,18 +46,24 @@ int main(int argc, char** argv)
         if (!strcmp(argv[0], "-?") || !strcmp(argv[0], "--help"))
         {
             puts(  "Options:\n"
-                   "  -?            Show this help.\n"
-                   "  -t            Show individual test times.\n"
-                   "  --list-tests  List test names.");
+                   "  -?                Show this help.\n"
+                   "  -t                Show individual test times.\n"
+                   "  --list            List test names.\n"
+                   "  --performance     Include performance tests.");
             return 1;
         }
         else if (!strcmp(argv[0], "-t"))
         {
             times = true;
         }
-        else if (!strcmp(argv[0], "--list-tests"))
+        else if (!strcmp(argv[0], "--list"))
         {
             list = true;
+        }
+        else if (!strcmp(argv[0], "--performance") || !strcmp(argv[0], "--perf"))
+        {
+            s_performance_tests = true;
+            times = true;
         }
         else if (!strcmp(argv[0], "--"))
         {

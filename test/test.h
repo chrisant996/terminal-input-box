@@ -25,6 +25,7 @@ private:
 };
 
 double clock();
+bool include_perf_tests();
 
 struct section
 {
@@ -51,6 +52,15 @@ struct section
         tree_iter->m_active = true;
 
         get_outer_store() = this;
+    }
+
+    void report(const char* format, ...) {
+        va_list args;
+        va_start(args, format);
+        printf("\t(");
+        vprintf(format, args);
+        printf(")");
+        va_end(args);
     }
 
     static section*&    get_outer_store() { static section* section; return section; }
@@ -80,10 +90,12 @@ struct test
     test*               m_next = nullptr;
     test_func*          m_func;
     const char*         m_name;
+    bool                m_perf;
 
-    test(const char* name, test_func* func)
+    test(const char* name, test_func* func, bool perf=false)
     : m_func(func)
     , m_name(name)
+    , m_perf(perf)
     {
         if (get_head() == nullptr)
             get_head() = this;
@@ -115,6 +127,9 @@ inline bool run(const char* prefix="", bool times=false)
 
     for (test* test = test::get_head(); test != nullptr; test = test->m_next)
     {
+        if (test->m_perf && !include_perf_tests())
+            continue;
+
         // Cheap lower-case prefix test.
         const char* a = prefix, *b = test->m_name;
         for (; *a && (*a & ~0x20) == (*b & ~0x20); ++a, ++b);
@@ -211,13 +226,17 @@ void fail(const char* expr, const char* file, int32_t line, callback&& cb)
     static test::test TEST_IDENT(test)(name, TEST_IDENT(test_func));\
     static void TEST_IDENT(test_func)(test::section*& _test_tree_iter)
 
+#define PERF_CASE(name)\
+    static void TEST_IDENT(test_func)(test::section*&);\
+    static test::test TEST_IDENT(test)(name, TEST_IDENT(test_func), true/*perf*/);\
+    static void TEST_IDENT(test_func)(test::section*& _test_tree_iter)
+
 #define SECTION(name)\
     static test::section TEST_IDENT(section);\
     if (test::section::scope TEST_IDENT(scope) = test::section::scope(_test_tree_iter, TEST_IDENT(section), name))
 
 #define MAKE_CLEANUP(lambda)\
-    test::cleanup TEST_IDENT(cleanup)(std::move(lambda));
-
+    test::cleanup TEST_IDENT(cleanup)(std::move(lambda))
 
 #define SECTIONNAME()\
     test::section::get_outer_store()->m_name
@@ -230,12 +249,4 @@ void fail(const char* expr, const char* file, int32_t line, callback&& cb)
         \
         if (!(expr))\
             test::fail(#expr, __FILE__, __LINE__, ##__VA_ARGS__);\
-    } while (0)
-
-#define REQUIRE_LUA_DO_STRING(lua, script)\
-    do {\
-        str<> errmsg;\
-        REQUIRE(lua.do_string(script, -1, &errmsg), [&]() {\
-            puts(errmsg.length() ? errmsg.c_str() : "<no error message>");\
-        });\
     } while (0)
