@@ -16,14 +16,25 @@ static bool s_done = false;
 
 static int32_t backspace(tib::editor_context& ctx, int32_t key, const char* name)
 {
-    puts("backspace");
+    ctx.backspace();
     return 0;
 }
 
 static int32_t accept_line(tib::editor_context& ctx, int32_t key, const char* name)
 {
     s_done = true;
-    puts("accept_line");
+    return 0;
+}
+
+static int32_t begin_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.begin_of_input();
+    return 0;
+}
+
+static int32_t end_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.end_of_input();
     return 0;
 }
 
@@ -38,6 +49,9 @@ std::shared_ptr<tib::key_table_list> make_basic_key_table()
 
     t->add({ "\b", tib::binding_target(backspace) });
     t->add({ "\r", tib::binding_target(accept_line) });
+    // TODO:  Whoa, the \xe0 and \x1e0O do not seem like VT sequences...
+    t->add({ "\xe0G", tib::binding_target(begin_of_line) });
+    t->add({ "\xe0O", tib::binding_target(end_of_line) });
     t->add({ "\033", tib::binding_target(eat_escape) });
 
     auto tables = std::make_shared<tib::key_table_list>();
@@ -55,11 +69,25 @@ int main(int argc, const char** argv)
     tib::input_box tib;
     tib.set_bindings(make_basic_key_table());
 
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    tib.set_origin(csbi.dwCursorPosition);
+#else
+    // TODO:  Query the terminal for the current position.
+#endif
+
+    // TODO:  input_box should treat 0 max width as the current terminal width.
+    tib.set_max_width(32);
+    tib.initialize_text("hello world");
+
     tib::dispatcher dispatcher;
     dispatcher.init(tib.get_bindings());
 
     while (!s_done)
     {
+        tib.display();
+
         const int32_t c = tib::term_in();
 
         switch (dispatcher.step(c))

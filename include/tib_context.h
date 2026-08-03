@@ -119,6 +119,7 @@ public:
     int32_t             go(void* cookie=nullptr);
 #endif
     int32_t             do_binding_target(const binding_target* target, int32_t c);
+    void                display();
 
     void                begin_of_input(bool select=false);
     void                end_of_input(bool select=false);
@@ -162,6 +163,7 @@ private:
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
+    void                inc_change_counter();
 
 private:
     // NOTE:  Content and selection are contained in the base class.
@@ -170,7 +172,7 @@ private:
     std::shared_ptr<const key_table_list> m_bindings;
     std::shared_ptr<const color_table> m_colors;
     uint32_t            m_max_width = 0;
-    uint32_t            m_max_length = 0;
+    uint32_t            m_max_length = INT16_MAX;
     coord               m_origin = { -1, -1 };
     bool                m_horiz_scroll_markers = true;
 
@@ -183,7 +185,12 @@ private:
 #endif
     bool                m_can_drag = false;
 
-    // undo/redo queue.
+    // Display.
+    uint32_t            m_displayed_change_counter = 0;
+    textpos_t           m_displayed_anchor = 0;
+    textpos_t           m_displayed_caret = 0;
+
+    // Undo/redo queue.
     undo_entry*         m_undo_head = nullptr;
     undo_entry*         m_undo_tail = nullptr;
     undo_entry*         m_undo_current = nullptr;

@@ -242,7 +242,7 @@ void editor_context::initialize_text(const char* text, size_t len)
         text = "";
         len = 0;
     }
-    else if (len < 0)
+    else
     {
         len = min<size_t>(INT16_MAX, resolve_auto_length(len, text));
     }
@@ -251,13 +251,13 @@ void editor_context::initialize_text(const char* text, size_t len)
     m_selection.set_caret(0);
     insert_text(text, len);
     m_selection.clear_dirty();
-    m_left = textpos_t(m_text.length());
+    m_left = 0;
     init_undo();
 
     assert(!m_selection.is_dirty());
-    assert(!m_selection.get_caret());
-    assert(!m_selection.get_anchor());
-    assert(m_text.empty());
+    assert(m_selection.get_caret() == len);
+    assert(m_selection.get_anchor() == len);
+    assert(m_text.length() == len);
     assert(!m_defer_init_undo);
 
 #if 0
@@ -399,6 +399,24 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
     }
 
     return -1;
+}
+
+void editor_context::display()
+{
+    // TODO:  Also detect color changes, terminal size changes, input_box
+    // config changes, and etc.
+    if (m_displayed_change_counter &&
+        m_displayed_change_counter == m_change_counter &&
+        m_displayed_anchor == m_selection.get_anchor() &&
+        m_displayed_caret == m_selection.get_caret())
+        return;
+
+    m_displayed_change_counter = m_change_counter;
+    m_displayed_anchor = m_selection.get_anchor();
+    m_displayed_caret = m_selection.get_caret();
+
+    ensure_left();
+    print_visible();
 }
 
 void editor_context::ensure_left()
@@ -724,7 +742,7 @@ void editor_context::paste_from_clipboard()
 #if 0
 void editor_context::replace_from_history(const cstring& s, bool keep_undo)
 {
-    ++m_change_counter;
+    inc_change_counter();
 
     m_text.set(s);
     m_selection.set_caret(m_text.Length());
@@ -766,7 +784,7 @@ void editor_context::insert_text(const char* s, size_t available)
         len += iter.character_length();
     }
 
-    ++m_change_counter;
+    inc_change_counter();
 
     if (m_selection.get_caret() == m_text.length())
     {
@@ -793,7 +811,7 @@ void editor_context::remove_text(textpos_t begin, textpos_t end)
 
     m_selection.reset_word_anchor();
 
-    ++m_change_counter;
+    inc_change_counter();
 
     if (end == m_text.length())
     {
@@ -845,6 +863,13 @@ void editor_context::init_undo()
 void editor_context::unlink_endo_entry(undo_entry* p)
 {
     p->unlink(m_undo_head, m_undo_tail);
+}
+
+void editor_context::inc_change_counter()
+{
+    ++m_change_counter;
+    if (!m_change_counter)
+        ++m_change_counter;
 }
 
 void editor_context::begin_undo_group()
@@ -908,7 +933,7 @@ void editor_context::undo()
     if (!p)
         return;
 
-    ++m_change_counter;
+    inc_change_counter();
     m_text.set(p->m_text);
     m_selection = m_undo_current->m_sel_before;
     m_undo_current = p;
@@ -928,7 +953,7 @@ void editor_context::redo()
     undo_entry* r = m_undo_current->m_next;
     assert(r);
 
-    ++m_change_counter;
+    inc_change_counter();
     m_text.set(r->m_text);
     m_selection = r->m_sel_after;
 
