@@ -26,7 +26,9 @@ TEST_CASE("Key bindings")
         auto overlay = std::make_shared<tib::key_table>();
         add_binding(*overlay, "\x1b[A", command_override);
 
-        tib::key_table_list tables = { base };
+        std::shared_ptr<tib::key_table_list> tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(base);
+
         tib::dispatcher dispatcher;
 
         SECTION("Base table")
@@ -52,7 +54,7 @@ TEST_CASE("Key bindings")
 
         SECTION("Overlay table")
         {
-            tables.emplace_back(overlay);
+            tables->emplace_back(overlay);
             dispatcher.init(tables);
 
             REQUIRE(dispatcher.step('\x1b') == tib::more);
@@ -197,8 +199,11 @@ PERF_CASE("Perf, resolve 26000 bindings")
         for (const char* sequence : c_sequences)
             REQUIRE(add_binding(*table, sequence, command_one));
 
+        std::shared_ptr<tib::key_table_list> tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(table);
+
         tib::dispatcher dispatcher;
-        dispatcher.init({ table });
+        dispatcher.init(tables);
 
         constexpr uint32_t c_passes = 100;
 

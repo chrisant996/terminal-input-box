@@ -34,4 +34,18 @@ int __vsnprintf(WCHAR* const buffer, size_t const len, const WCHAR* const format
 }
 #endif
 
+template<>
+const char* cstring_t<char>::c_str() const
+{
+    return m_text ? m_text : "";
+}
+
+#ifdef _WIN32
+template<>
+const WCHAR* cstring_t<WCHAR>::c_str() const
+{
+    return m_text ? m_text : L"";
+}
+#endif
+
 } // namespace tib

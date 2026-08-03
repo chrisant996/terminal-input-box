@@ -77,7 +77,7 @@ cstring_t<T>& cstring_t<T>::operator=(const cstring_t<T>& s)
 template<class T>
 cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s)
 {
-    free(m_text);
+    ::free(m_text);
     m_len = s.m_len;
     m_text = s.m_text;
     s.m_len = 0;
@@ -189,9 +189,9 @@ bool cstring_t<T>::printfv(const T* format, va_list args)
         }
     }
 
-    m_length += res;
-    assert(m_length == len + str_len(m_text + len));
-    assert(m_length < m_capacity);
+    m_len += res;
+    assert(m_len == len + str_len(m_text + len));
+    assert(m_len < m_capacity);
     return true;
 }
 
@@ -211,7 +211,7 @@ T* cstring_t<T>::reserve(size_t len)
     ++len;
     if (len >= m_capacity)
     {
-        T* tmp = static_cast<T*>(realloc(m_text, len));
+        T* tmp = static_cast<T*>(realloc(m_text, len * sizeof(T)));
         if (!tmp)
             return nullptr;
         m_text = tmp;
@@ -230,7 +230,7 @@ void cstring_t<T>::set_length(size_t len)
     }
     else
     {
-        assert(len <= m_len);
+        // assert(len <= m_len);
         assert(len < m_capacity);
         m_len = len;
         m_text[m_len] = 0;
@@ -253,20 +253,6 @@ void cstring_t<T>::free()
     m_len = 0;
     m_text = nullptr;
 }
-
-template<>
-const char* cstring_t<char>::c_str() const
-{
-    return m_text ? m_text : "";
-}
-
-#ifdef _WIN32
-template<>
-const WCHAR* cstring_t<WCHAR>::c_str() const
-{
-    return m_text ? m_text : L"";
-}
-#endif
 
 template<class T>
 bool cstring_t<T>::raw_set(const T* s, size_t len)

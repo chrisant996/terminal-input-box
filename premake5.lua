@@ -71,6 +71,15 @@ project("tib_host")
     files("host/*.cpp")
 
 --------------------------------------------------------------------------------
+project("tib_wcwidth")
+    fatalwarnings("all")
+    language("c++")
+    kind("staticlib")
+
+    includedirs("include")
+    files("wcwidth/*.cpp")
+
+--------------------------------------------------------------------------------
 project("test")
     fatalwarnings("all")
     language("c++")
@@ -81,6 +90,7 @@ project("test")
     targetname("test")
     links("tib")
     links("tib_host")
+    links("tib_wcwidth")
 
     includedirs("include")
     files("test/*.cpp")
@@ -94,6 +104,7 @@ project("example")
     targetname("example")
     links("tib")
     links("tib_host")
+    links("tib_wcwidth")
 
     includedirs("include")
     files("example/*.cpp")

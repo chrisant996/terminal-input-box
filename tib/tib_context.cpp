@@ -6,10 +6,8 @@
 #include "pch.h"
 #include "maybe_windows.h"
 #include "tib.h"
+#include "wcwidth.h"
 #include <assert.h>
-
-// TODO:  Need __wcswidth.
-// TODO:  Need wcwidth_iter.
 
 namespace tib {
 
