@@ -99,7 +99,7 @@ public:
                         ~dispatcher() = default;
                         dispatcher() = default;
 
-    void                init(const key_table_list& tables);
+    void                init(std::shared_ptr<const key_table_list> tables);
 
     void                reset();
     dispatch_outcome    step(char c);
@@ -109,7 +109,7 @@ public:
     dispatch_outcome    get_outcome() const { return m_outcome; }
 
 private:
-    key_table_list      m_tables;
+    std::shared_ptr<const key_table_list> m_tables;
     cstring             m_sequence;
     const binding_target* m_target = nullptr;
     dispatch_outcome    m_outcome = dispatch_outcome::miss;

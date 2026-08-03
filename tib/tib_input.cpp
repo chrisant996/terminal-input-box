@@ -12,9 +12,9 @@
 
 namespace tib {
 
-char (*hook_term_in)() = nullptr;
+int32_t (*hook_term_in)() = nullptr;
 
-char term_in()
+int32_t term_in()
 {
     // TODO:  Pushed input.
     // TODO:  Macro playback.
@@ -22,7 +22,7 @@ char term_in()
     if (hook_term_in)
         return hook_term_in();
 
-    return _getch();
+    return uint8_t(_getch());
 }
 
 } // namespace tib

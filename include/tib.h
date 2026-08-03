@@ -7,20 +7,18 @@
 
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_colors.h"
 #include "tib_context.h"
 #include "tib_input.h"
 #include "tib_output.h"
 
 namespace tib {
 
-class input_box
+class input_box : public editor_context
 {
 public:
                         ~input_box() = default;
                         input_box() = default;
-
-private:
-	const key_table*    m_bindings = nullptr;
 };
 
 } // namespace tib

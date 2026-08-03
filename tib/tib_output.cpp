@@ -13,37 +13,60 @@ namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
 
+const char c_hide_cursor[] = "\x1b[?25l";
+const char c_show_cursor[] = "\x1b[?25h";
+
 #ifdef _WIN32
-size_t to_utf16(const char* s, size_t len, WCHAR*& out, size_t& capacity)
+bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out)
 {
+    out.clear();
+
     len = resolve_auto_length(len, s);
-    const int needed = len ? MultiByteToWideChar(CP_UTF8, 0, s, int(len), nullptr, 0) : 0;
-    if (len && !needed)
-        return false;
-
-    if (needed >= capacity)
+    if (len)
     {
-        WCHAR* tmp = static_cast<WCHAR*>(malloc(needed + 1));
-        if (!tmp)
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, s, int(len), nullptr, 0, nullptr, nullptr);
+        if (needed <= 0)
             return false;
-        out = tmp;
-        capacity = needed + 1;
+        if (!out.reserve(needed))
+            return false;
+
+        const int converted = WideCharToMultiByte(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()), nullptr, nullptr);
+        if (converted <= 0)
+        {
+            out.clear();
+            return false;
+        }
+
+        out.set_length(converted);
     }
 
-    if (!len)
+    return true;
+}
+
+bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out)
+{
+    out.clear();
+
+    len = resolve_auto_length(len, s);
+    if (len)
     {
-        out[0] = 0;
-        return 0;
+        const int needed = MultiByteToWideChar(CP_UTF8, 0, s, int(len), nullptr, 0);
+        if (needed <= 0)
+            return false;
+        if (!out.reserve(needed))
+            return false;
+
+        const int converted = MultiByteToWideChar(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()));
+        if (converted <= 0)
+        {
+            out.clear();
+            return false;
+        }
+
+        out.set_length(converted);
     }
 
-    const int converted = MultiByteToWideChar(CP_UTF8, 0, s, int(len), out, int(capacity));
-    if (!converted)
-    {
-        out[0] = 0;
-        return false;
-    }
-    out[converted] = 0;
-    return converted;
+    return true;
 }
 #endif
 
@@ -59,6 +82,38 @@ bool is_console()
     return c_is_console;
 }
 
+size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_width, uint16_t* truncated_width)
+{
+    uint16_t length_fits = 0;
+    uint16_t width_fits = 0;
+    uint16_t width = 0;
+
+    wcwidth_iter iter(s, len);
+    while (true)
+    {
+        const char32_t c = iter.next();
+        if (!c)
+            break;
+
+        const uint16_t w = iter.character_wcwidth_onectrl();
+        width += w;
+
+        if (width > truncate_width)
+        {
+            if (truncated_width)
+                *truncated_width = width_fits;
+            return length_fits;
+        }
+
+        length_fits = unsigned(iter.get_pointer() - s);
+        width_fits = width;
+    }
+
+    if (truncated_width)
+        *truncated_width = width_fits;
+    return length_fits;
+}
+
 void term_out(const char* s, size_t len)
 {
     len = resolve_auto_length(len, s);
@@ -67,15 +122,15 @@ void term_out(const char* s, size_t len)
         return hook_term_out(s, len);
 
 #ifdef _WIN32
-    static WCHAR* s_buffer = nullptr;
-    static size_t s_capacity = 0;
-    const size_t converted = to_utf16(s, len, s_buffer, s_capacity);
+    static cstring_t<WCHAR> s_buffer;
+    if (!to_utf16(s, len, s_buffer))
+        return;
 
     DWORD written;
     if (is_console())
-        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer, DWORD(converted), &written, nullptr);
+        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
     else
-        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer, DWORD(converted), &written, nullptr);
+        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
 #else
     fwrite(s, resolve_auto_length(len, s), 1, stdout);
 #endif

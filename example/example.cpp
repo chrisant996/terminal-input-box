@@ -27,15 +27,21 @@ static int32_t accept_line(tib::editor_context& ctx, int32_t key, const char* na
     return 0;
 }
 
-tib::key_table_list make_basic_key_table()
+static int32_t eat_escape(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    return 0;
+}
+
+std::shared_ptr<tib::key_table_list> make_basic_key_table()
 {
     auto t = std::make_shared<tib::key_table>();
 
     t->add({ "\b", tib::binding_target(backspace) });
     t->add({ "\r", tib::binding_target(accept_line) });
+    t->add({ "\033", tib::binding_target(eat_escape) });
 
-    tib::key_table_list tables;
-    tables.emplace_back(std::move(t));
+    auto tables = std::make_shared<tib::key_table_list>();
+    tables->emplace_back(std::move(t));
     return tables;
 }
 
@@ -47,19 +53,23 @@ int main(int argc, const char** argv)
     tib_host::set_console_vt_input();
 
     tib::input_box tib;
-    tib::dispatcher dispatcher;
-    tib::editor_context ctx; // TODO:  Eventually this belongs inside tib::input_box.
+    tib.set_bindings(make_basic_key_table());
 
-    dispatcher.init(make_basic_key_table());
+    tib::dispatcher dispatcher;
+    dispatcher.init(tib.get_bindings());
 
     while (!s_done)
     {
-        char c = tib::term_in();
+        const int32_t c = tib::term_in();
 
         switch (dispatcher.step(c))
         {
         case tib::dispatch_outcome::miss:
-            // TODO:  Insert the text into the input_box.
+            if (!(c & 0xffffff00))
+            {
+                // Insert the char into the input_box.
+                tib.insert_char(char(c));
+            }
             break;
         case tib::dispatch_outcome::more:
             break;
@@ -67,23 +77,7 @@ int main(int argc, const char** argv)
             {
                 const auto target = dispatcher.get_target();
                 assert(target);
-
-                // TODO:  Eventually tib::input_box needs a method to execute
-                // a binding_target, which will keep tib::editor_context
-                // encapsulated inside tib::input_box.
-                switch (target->get_type())
-                {
-                case tib::binding_type::func:
-                    {
-                        const auto func = target->get_func();
-                        assert(func);
-                        func(ctx, uint8_t(c), target->get_text());
-                    }
-                    break;
-                default:
-                    assert(false);
-                    break;
-                }
+                tib.do_binding_target(target, c);
             }
             break;
         }

@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <assert.h>
 
 namespace tib {
 
@@ -25,6 +26,9 @@ template <class A> A max(A a, A b) { return (a > b) ? a : b; }
 template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
 
 size_t resolve_auto_length(size_t len, const char* s);
+#ifdef _WIN32
+size_t resolve_auto_length(size_t len, const WCHAR* s);
+#endif
 
 // A counted string that can optionally contain embedded NUL characters.
 template<class T>
@@ -41,13 +45,20 @@ public:
     bool                operator==(const cstring_t& s) const;
 
     bool                set(const T* s, size_t len=c_auto_length);
+    bool                set(const cstring_t<T>& s);
     bool                append(const T* s, size_t len=c_auto_length);
-    bool                reserve(size_t len);
+    bool                append_color(const T* sgr_params);
+    bool                printf(const T* format, ...);
+    bool                printfv(const T* format, va_list args);
+    T*                  reserve(size_t len);
+    void                set_length(size_t len);
     void                clear();
     void                free();
 
+    bool                empty() const { return !m_len; }
     size_t              length() const { return m_len; }
-    const T*            c_str() const { return m_text ? m_text : ""; }
+    size_t              capacity() const { return m_capacity; }
+    const T*            c_str() const;
 
 private:
     bool                raw_set(const T* s, size_t len);
@@ -87,6 +98,12 @@ bool cstring_t<T>::set(const T* s, size_t len)
 }
 
 template<class T>
+bool cstring_t<T>::set(const cstring_t<T>& s)
+{
+    return raw_set(s.c_str(), s.length());
+}
+
+template<class T>
 bool cstring_t<T>::append(const T* s, size_t len)
 {
     len = resolve_auto_length(len, s);
@@ -106,19 +123,118 @@ bool cstring_t<T>::append(const T* s, size_t len)
 }
 
 template<class T>
-bool cstring_t<T>::reserve(size_t len)
+bool cstring_t<T>::append_color(const T* sgr_params)
+{
+    const size_t orig_len = length();
+
+    if (!append("\x1b[", 2))
+    {
+nope:
+        set_length(orig_len);
+        return false;
+    }
+
+    if (sgr_params)
+        (void)append(sgr_params);   // Intentionally ignore failure.
+    if (!append("m"))
+        goto nope;
+
+    return true;
+}
+
+inline size_t str_len(const char* s) { return strlen(s); }
+int __vsnprintf(char* buffer, size_t len, const char* format, va_list args);
+
+#ifdef _WIN32
+inline size_t str_len(const WCHAR* s) { return wcslen(s); }
+int __vsnprintf(WCHAR* buffer, size_t len, const WCHAR* format, va_list args);
+#endif
+
+template<class T>
+bool cstring_t<T>::printfv(const T* format, va_list args)
+{
+    const size_t len = length();
+    size_t cap = m_capacity - len;
+
+    int res = -1;
+    if (cap > 1)
+    {
+        errno = 0;
+        res = __vsnprintf(m_text + len, cap, format, args);
+        if (errno)
+        {
+            m_text[len] = 0;
+            return false;
+        }
+    }
+
+    if (res < 0)
+    {
+        cap = std::max<size_t>(cap * 2, 100);
+        while (res < 0)
+        {
+            // Subtract 1 from the max character count to ensure room for null
+            // terminator; see MSDN for idiosyncracy of the snprintf family of
+            // functions.
+            if (!reserve(len + cap))
+                return false;
+            errno = 0;
+            res = __vsnprintf(m_text + len, cap, format, args);
+            if (errno)
+            {
+                m_text[len] = 0;
+                return false;
+            }
+            cap *= 2;
+        }
+    }
+
+    m_length += res;
+    assert(m_length == len + str_len(m_text + len));
+    assert(m_length < m_capacity);
+    return true;
+}
+
+template<class T>
+bool cstring_t<T>::printf(const T* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    const bool ret = printfv(format, args);
+    va_end(args);
+    return ret;
+}
+
+template<class T>
+T* cstring_t<T>::reserve(size_t len)
 {
     ++len;
     if (len >= m_capacity)
     {
-        char* tmp = static_cast<T*>(realloc(m_text, len));
+        T* tmp = static_cast<T*>(realloc(m_text, len));
         if (!tmp)
-            return false;
+            return nullptr;
         m_text = tmp;
         m_text[m_len] = 0;
         m_capacity = len;
     }
-    return true;
+    return m_text;
+}
+
+template<class T>
+void cstring_t<T>::set_length(size_t len)
+{
+    if (!len)
+    {
+        clear();
+    }
+    else
+    {
+        assert(len <= m_len);
+        assert(len < m_capacity);
+        m_len = len;
+        m_text[m_len] = 0;
+    }
 }
 
 template<class T>
@@ -137,6 +253,20 @@ void cstring_t<T>::free()
     m_len = 0;
     m_text = nullptr;
 }
+
+template<>
+const char* cstring_t<char>::c_str() const
+{
+    return m_text ? m_text : "";
+}
+
+#ifdef _WIN32
+template<>
+const WCHAR* cstring_t<WCHAR>::c_str() const
+{
+    return m_text ? m_text : L"";
+}
+#endif
 
 template<class T>
 bool cstring_t<T>::raw_set(const T* s, size_t len)

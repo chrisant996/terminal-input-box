@@ -3,15 +3,24 @@
 
 // vim: set et ts=4 sw=4 cino={0s:
 
+#pragma once
+
 #include "tib_base.h"
 
 namespace tib {
 
+extern const char c_hide_cursor[];
+extern const char c_show_cursor[];
+
 #ifdef _WIN32
-size_t to_utf16(const char* s, size_t len, WCHAR*& out, size_t& capacity);
+bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out);
+bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
 #endif
 
 bool is_console();
+
+size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_width, uint16_t* truncated_width);
+
 void term_out(const char* s, size_t len=c_auto_length);
 
 extern void (*hook_term_out)(const char* s, size_t len);

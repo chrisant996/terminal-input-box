@@ -78,7 +78,7 @@ void key_table::clear()
     m_bindings.clear();
 }
 
-void dispatcher::init(const key_table_list& tables)
+void dispatcher::init(std::shared_ptr<const key_table_list> tables)
 {
     // Copy the key_table_list.  This isolates the dispatcher from changes to
     // the caller's key_table_list.  Compromise:  however, it does not isolate
@@ -101,10 +101,10 @@ dispatch_outcome dispatcher::step(char c)
 
     m_sequence.append(&c, 1);
 
-    // Search they key tables in priority order (later entries overlay earlier
-    // entries) looking for an exact match or a prefix match.
+    // Search the key tables in priority order (later tables overlay earlier
+    // tables) looking for an exact match or a prefix match.
     bool is_prefix = false;
-    for (auto table = m_tables.rbegin(); table != m_tables.rend(); ++table)
+    for (auto table = m_tables.get()->rbegin(); table != m_tables.get()->rend(); ++table)
     {
         const auto& bindings = (*table)->m_bindings;
         const auto found = std::lower_bound(bindings.begin(), bindings.end(), m_sequence, [](const key_binding& candidate, const cstring& sequence) {
