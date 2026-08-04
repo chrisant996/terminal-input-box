@@ -87,8 +87,10 @@ void colors::initialize()
         HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
         if (GetConsoleMode(h, &mode))
         {
-            // REDUNDANT:  CRestoreConsole in signaled.cpp sets the mode.
-            // SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#if 0
+            // REDUNDANT:  auto_terminal_init in signaled.cpp sets the mode.
+            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#endif
             *get_colored_storage() = true;
         }
     }
