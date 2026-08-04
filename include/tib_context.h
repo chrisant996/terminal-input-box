@@ -13,14 +13,11 @@ namespace tib {
 
 typedef int32_t textpos_t;
 
-#ifdef _WIN32
-typedef COORD coord;
-#else
-typedef struct _coord {
-    int16_t X;
-    int16_t Y;
-} coord;
-#endif
+struct coord
+{
+    int16_t         x;
+    int16_t         y;
+};
 
 struct selection_state
 {
@@ -100,13 +97,15 @@ public:
                         ~editor_context();
                         editor_context();
 
-    void                set_max_width(uint32_t m) { m_max_width = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
     void                set_max_length(uint32_t m) { m_max_length = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
+    void                set_max_width(uint32_t m) { m_max_width = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
+    void                set_max_height(uint32_t m) { m_max_height = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
+    void                set_variable_height(bool v) { m_variable_height = v; }
 #if 0
     void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
 #endif
-    void                set_origin(coord coord) { m_origin = coord; }
+    void                set_origin(int16_t x=-1, int16_t y=-1) { m_origin = { x, y }; }
     void                set_horiz_scroll_markers(bool show) { m_horiz_scroll_markers = show; }
 
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
@@ -172,8 +171,10 @@ private:
     std::shared_ptr<const key_table_list> m_bindings;
     std::shared_ptr<const color_table> m_colors;
     uint32_t            m_max_width = 0;
+    uint32_t            m_max_height = 1;
     uint32_t            m_max_length = INT16_MAX;
     coord               m_origin = { -1, -1 };
+    bool                m_variable_height = false;
     bool                m_horiz_scroll_markers = true;
 
     // State.

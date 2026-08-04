@@ -445,7 +445,18 @@ void editor_context::ensure_left()
 void editor_context::print_visible()
 {
     cstring tmp;
-    tmp.printf("%s\x1b[%u;%uH", c_hide_cursor, m_origin.Y + 1, m_origin.X + 1);
+    tmp.set(c_hide_cursor);
+    // TODO:  Encapsulate terminal codes behind some termcap layer.
+    if (m_origin.y > 0)
+    {
+        tmp.printf("\x1b[%u;%uH", m_origin.y, m_origin.x);
+    }
+    else
+    {
+        // TODO:  Move up to the origin row using relative positioning.
+        // That's crucial for supporting an input box with variable height.
+        tmp.printf("\x1b[%uG", m_origin.x);
+    }
     term_out(tmp.c_str(), tmp.length());
 
     uint16_t max_width = m_max_width;
@@ -522,7 +533,18 @@ void editor_context::print_visible()
         tmp.append_color(m_colors.get()->get_color(color_element::input_horiz_scroll));
         tmp.append(">", 1);
     }
-    tmp.printf("\x1b[%u;%uH%s", m_origin.Y + 1, m_origin.X + 1 + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit), c_show_cursor);
+    const int16_t cursor_x = m_origin.x + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit);
+    if (m_origin.y > 0)
+    {
+        tmp.printf("\x1b[%u;%uH", m_origin.y, cursor_x);
+    }
+    else
+    {
+        // TODO:  Move up to the origin row using relative positioning.
+        // That's crucial for supporting an input box with variable height.
+        tmp.printf("\x1b[%uG", cursor_x);
+    }
+    tmp.append(c_show_cursor);
     term_out(tmp.c_str(), tmp.length());
 }
 
