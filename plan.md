@@ -10,11 +10,11 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 
 ## Goals
 
-- Customizable key bindings.
-    - Allow "overlaying" a set of key bindings.
+- [x] Customizable key bindings.
+    - [x] Allow "overlaying" a set of key bindings.
 - Bindable commands.
     - Basic set of bindable commands for input editing.
-    - Extensibility framework to allow registering custom bindable commands.
+    - [x] Extensibility framework to allow registering custom bindable commands.
 - History integration through a history provider interface.
     - Default to no history integration.
     - A built-in optional simple in-memory history provider can be used.
@@ -26,20 +26,34 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
     - Default to no input coloring.
 - Hookable events.
     - Enough hooks that a caller can manage optional contextual regions, such as a clickable toolbar, or a hint row, or etc.
+    - [ ] Allow optional contextual regions outside the border.
+    - [ ] Allow optional contextual regions inside the border?
 - Optional interface for host to provide input.
     - Default to using built-in input driver for native VT input.
     - Optional interface for the host to provide its own input driver.
+    - [x] `term_out_hook` callback for host to handle output.
+    - [x] `term_in_hook` callback for host to provide input.
 - Region.
     - Let the caller specify a screen region, and whether the region can grow vertically as needed (and min and max heights).
     - Optional border around the input box (imagine line drawing characters, or block graphics like Codex uses, or custom-defined borders).
     - Support for irregular shape on the first line (e.g. prompt on the left and right-prompt on the right).
+- Display.
+    - [ ] Custom border drawing.
+    - [ ] Custom prompt drawing.
+    - [ ] Custom prompt drawing, optionally within border.
+    - [ ] Custom padding inside border.
+    - [ ] Relative cursor positioning, esp. for multi-line display.
 - Platform abstraction.
     - Abstract platform-dependent functionality behind an interface, and only provide a built-in lowest-common-denominator implementation.
 - Config options.
     - Word wrapping.
+    - Multi-line.
     - Horizontal scrolling.
     - Vertical scrolling.
-- Max input size?
+    - [x] Max width.
+    - [ ] Max height.
+    - [ ] Variable height (grow up to max height).
+- [x] Max input size.
 
 ## Internal encoding
 
