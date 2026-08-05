@@ -424,7 +424,8 @@ void editor_context::ensure_left()
     m_left = min(m_left, m_selection.get_caret());
 
     // Auto-scroll horizontally forward.
-    while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= m_max_width)
+    const uint32_t max_width = get_effective_max_width();
+    while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= max_width)
     {
         wcwidth_iter iter(m_text.c_str() + m_left, m_text.length() - m_left);
         if (!iter.next())
@@ -459,7 +460,7 @@ void editor_context::print_visible()
     }
     term_out(tmp.c_str(), tmp.length());
 
-    uint16_t max_width = m_max_width;
+    uint16_t max_width = get_effective_max_width();
     bool left_marker = m_horiz_scroll_markers && (m_left > 0);
     bool right_marker = false;
     size_t lo_limit = m_left;
@@ -571,7 +572,8 @@ void editor_context::end_of_input(bool select)
         m_selection.set_selection(m_selection.get_anchor(), textpos_t(m_text.length()));
     m_left = m_selection.get_caret();
 
-    back_up_by_amount(m_left, m_text.c_str(), m_selection.get_caret(), m_max_width - 1);
+    const uint32_t max_width = max<uint32_t>(2, get_effective_max_width());
+    back_up_by_amount(m_left, m_text.c_str(), m_selection.get_caret(), max_width - 1);
 
     if (!select)
         m_selection.reset_word_anchor();
@@ -771,7 +773,8 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
     m_defer_init_undo = !keep_undo;
 
     m_left = get_caret();
-    back_up_by_amount(m_left, m_text.c_str(), m_left, m_max_width - 1);
+    const uint32_t max_width = max<uint32_t>(2, get_effective_max_width());
+    back_up_by_amount(m_left, m_text.c_str(), m_left, max_width - 1);
 }
 #endif
 
@@ -892,6 +895,29 @@ void editor_context::inc_change_counter()
     ++m_change_counter;
     if (!m_change_counter)
         ++m_change_counter;
+}
+
+uint32_t editor_context::get_effective_max_width() const
+{
+// TODO:  Abstract behind a terminal object.
+#ifdef _WIN32
+    const HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(hout, &csbi))
+        return min<uint32_t>(80, m_max_width);
+
+    uint32_t max_width = m_max_width;
+    if (uint32_t(m_origin.x) + max_width >= uint32_t(csbi.dwSize.X))
+    {
+        max_width = uint32_t(csbi.dwSize.X - m_origin.x) + 1;
+        if (int32_t(max_width) < 8)
+            return 0;
+    }
+    return max_width;
+#else
+    // TODO:  Alternative Linux implementation.
+#endif
 }
 
 void editor_context::begin_undo_group()

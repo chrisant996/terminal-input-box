@@ -20,60 +20,6 @@ bool g_color_emoji = true;
 const char c_hide_cursor[] = "\x1b[?25l";
 const char c_show_cursor[] = "\x1b[?25h";
 
-#ifdef _WIN32
-bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out)
-{
-    out.clear();
-
-    len = resolve_auto_length(len, s);
-    if (len)
-    {
-        const int needed = WideCharToMultiByte(CP_UTF8, 0, s, int(len), nullptr, 0, nullptr, nullptr);
-        if (needed <= 0)
-            return false;
-        if (!out.reserve(needed))
-            return false;
-
-        const int converted = WideCharToMultiByte(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()), nullptr, nullptr);
-        if (converted <= 0)
-        {
-            out.clear();
-            return false;
-        }
-
-        out.set_length(converted);
-    }
-
-    return true;
-}
-
-bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out)
-{
-    out.clear();
-
-    len = resolve_auto_length(len, s);
-    if (len)
-    {
-        const int needed = MultiByteToWideChar(CP_UTF8, 0, s, int(len), nullptr, 0);
-        if (needed <= 0)
-            return false;
-        if (!out.reserve(needed))
-            return false;
-
-        const int converted = MultiByteToWideChar(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()));
-        if (converted <= 0)
-        {
-            out.clear();
-            return false;
-        }
-
-        out.set_length(converted);
-    }
-
-    return true;
-}
-#endif
-
 static bool is_console_raw()
 {
     DWORD mode;

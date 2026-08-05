@@ -8,6 +8,10 @@
 #include "tib_base.h"
 #include <assert.h>
 
+#ifndef _WIN32
+#include <time.h>
+#endif
+
 namespace tib {
 
 size_t resolve_auto_length(size_t len, const char* s)
@@ -47,5 +51,129 @@ const WCHAR* cstring_t<WCHAR>::c_str() const
     return m_text ? m_text : L"";
 }
 #endif
+
+#ifdef _WIN32
+bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out)
+{
+    out.clear();
+
+    len = resolve_auto_length(len, s);
+    if (len)
+    {
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, s, int(len), nullptr, 0, nullptr, nullptr);
+        if (needed <= 0)
+            return false;
+        if (!out.reserve(needed))
+            return false;
+
+        const int converted = WideCharToMultiByte(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()), nullptr, nullptr);
+        if (converted <= 0)
+        {
+            out.clear();
+            return false;
+        }
+
+        out.set_length(converted);
+    }
+
+    return true;
+}
+
+bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out)
+{
+    out.clear();
+
+    len = resolve_auto_length(len, s);
+    if (len)
+    {
+        const int needed = MultiByteToWideChar(CP_UTF8, 0, s, int(len), nullptr, 0);
+        if (needed <= 0)
+            return false;
+        if (!out.reserve(needed))
+            return false;
+
+        const int converted = MultiByteToWideChar(CP_UTF8, 0, s, int(len), out.reserve(0), int(out.capacity()));
+        if (converted <= 0)
+        {
+            out.clear();
+            return false;
+        }
+
+        out.set_length(converted);
+    }
+
+    return true;
+}
+#endif
+
+class high_resolution_clock
+{
+public:
+                        high_resolution_clock();
+    double              elapsed() const;
+private:
+#ifdef _WIN32
+    double              m_freq;
+    int64_t             m_start;
+#else
+    double              m_start;
+#endif
+};
+
+high_resolution_clock::high_resolution_clock()
+{
+#ifdef _WIN32
+    LARGE_INTEGER freq;
+    LARGE_INTEGER start;
+    if (QueryPerformanceFrequency(&freq) &&
+        QueryPerformanceCounter(&start) &&
+        freq.QuadPart)
+    {
+        m_freq = double(freq.QuadPart);
+        m_start = start.QuadPart;
+    }
+    else
+    {
+        m_freq = 0;
+        m_start = 0;
+    }
+#else
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    m_start = double(start.tv_sec) + (start.tv_nsec * 1e-9);
+#endif
+}
+
+double high_resolution_clock::elapsed() const
+{
+#ifdef _WIN32
+    if (!m_freq)
+        return -1;
+
+    LARGE_INTEGER current;
+    if (!QueryPerformanceCounter(&current))
+        return -1;
+
+    const int64_t delta = current.QuadPart - m_start;
+    if (delta < 0)
+        return -1;
+
+    const double result = double(delta) / m_freq;
+    return result;
+#else
+    struct timespec current;
+    clock_gettime(CLOCK_MONOTONIC, &current);
+
+    const double now = double(current.tv_sec) + (current.tv_nsec * 1e-9);
+    return now - m_start;
+#endif
+}
+
+static high_resolution_clock s_clock;
+
+double clock()
+{
+    return s_clock.elapsed();
+}
 
 } // namespace tib

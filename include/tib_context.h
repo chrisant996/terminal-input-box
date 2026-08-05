@@ -163,6 +163,7 @@ private:
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
     void                inc_change_counter();
+    uint32_t            get_effective_max_width() const;
 
 private:
     // NOTE:  Content and selection are contained in the base class.
@@ -170,7 +171,7 @@ private:
     // Configuration.
     std::shared_ptr<const key_table_list> m_bindings;
     std::shared_ptr<const color_table> m_colors;
-    uint32_t            m_max_width = 0;
+    uint32_t            m_max_width = INT16_MAX;
     uint32_t            m_max_height = 1;
     uint32_t            m_max_length = INT16_MAX;
     coord               m_origin = { -1, -1 };

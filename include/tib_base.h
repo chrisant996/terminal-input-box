@@ -78,8 +78,10 @@ template<class T>
 cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s)
 {
     ::free(m_text);
+    m_capacity = s.m_capacity;
     m_len = s.m_len;
     m_text = s.m_text;
+    s.m_capacity = 0;
     s.m_len = 0;
     s.m_text = nullptr;
     return *this;
@@ -268,5 +270,12 @@ bool cstring_t<T>::raw_set(const T* s, size_t len)
 }
 
 typedef cstring_t<char> cstring;
+
+#ifdef _WIN32
+bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out);
+bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
+#endif
+
+double clock();
 
 } // namespace tib

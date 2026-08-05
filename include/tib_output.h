@@ -12,11 +12,6 @@ namespace tib {
 extern const char c_hide_cursor[];
 extern const char c_show_cursor[];
 
-#ifdef _WIN32
-bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out);
-bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
-#endif
-
 bool is_console();
 
 size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_width, uint16_t* truncated_width);

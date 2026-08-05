@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "tib_base.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <exception>
@@ -24,7 +25,6 @@ private:
     static bool* get_colored_storage() { static bool s_colored = false; return &s_colored; }
 };
 
-double clock();
 bool include_perf_tests();
 
 struct section
@@ -140,7 +140,7 @@ inline bool run(const char* prefix="", bool times=false)
         printf(".........%s %s", times ? "........" : "", test->m_name);
 
         section root;
-        const double began = clock();
+        const double began = tib::clock();
 
         try
         {
@@ -171,7 +171,7 @@ inline bool run(const char* prefix="", bool times=false)
         printf("\r%sok%s ", colors::get_ok(), colors::get_normal());
         if (times)
         {
-            const uint32_t elapsed = uint32_t((clock() - began) * 1000);
+            const uint32_t elapsed = uint32_t((tib::clock() - began) * 1000);
             const char* time_color = (elapsed >= 500) ? colors::get_warning() : colors:: get_normal();
             printf("%s%5u ms%s ", time_color, elapsed, colors::get_normal());
         }
