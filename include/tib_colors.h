@@ -13,6 +13,8 @@ namespace tib {
 
 enum class color_element
 {
+    base,
+    border,
     input,
     input_selection,
     input_horiz_scroll,
@@ -27,6 +29,8 @@ public:
 
     const char*         get_color(color_element color) const; // Safe when this == nullptr.
     void                set_color(color_element color, const char* sgr_params);
+
+    bool                append_color(cstring& out, color_element color, color_element overlay=color_element::MAX) const;
 
 private:
     cstring             m_colors[size_t(color_element::MAX)];

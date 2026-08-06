@@ -38,10 +38,10 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
     - Optional border around the input box (imagine line drawing characters, or block graphics like Codex uses, or custom-defined borders).
     - Support for irregular shape on the first line (e.g. prompt on the left and right-prompt on the right).
 - Display.
-    - [ ] Custom border drawing.
+    - [x] Custom border drawing.
     - [ ] Custom prompt drawing.
     - [ ] Custom prompt drawing, optionally within border.
-    - [ ] Custom padding inside border.
+    - [x] Custom padding inside border.
     - [ ] Relative cursor positioning, esp. for multi-line display.
 - Platform abstraction.
     - Abstract platform-dependent functionality behind an interface, and only provide a built-in lowest-common-denominator implementation.

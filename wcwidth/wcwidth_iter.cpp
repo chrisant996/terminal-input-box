@@ -32,6 +32,12 @@ extern "C" uint32_t __wcswidth_expandctrl(const char* s, size_t len)
     return count;
 }
 
+extern "C" uint32_t cell_count(const char* s, size_t len)
+{
+    // TODO:  Parse and ignore ECMA48 escape sequences.
+    return __wcswidth(s, len);
+}
+
 wcwidth_iter::wcwidth_iter(const char* s, size_t len)
 : m_iter(s, len)
 {

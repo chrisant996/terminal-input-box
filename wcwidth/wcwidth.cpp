@@ -828,6 +828,10 @@ void reset_wcwidths()
     }
 }
 
+#if defined(__cplusplus)
+} // extern "C"
+#endif
+
 #ifdef _WIN32
 int32_t test_ambiguous_width_char(char32_t ucs, str_iter* iter)
 {
@@ -840,10 +844,6 @@ int32_t test_ambiguous_width_char(char32_t ucs, str_iter* iter)
 
     return 0; // Char width is not known to be ambiguous (but still could be).
 }
-#endif
-
-#if defined(__cplusplus)
-} // extern "C"
 #endif
 
 // vim: ts=2 expandtab sw=2

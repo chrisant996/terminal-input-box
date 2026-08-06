@@ -3,17 +3,28 @@
 
 #pragma once
 
-#include "str_iter.h"
-
 typedef int32_t wcwidth_func_t(char32_t);
 extern "C" wcwidth_func_t* wcwidth;
-extern void detect_ucs2_limitation(bool force=false);
+extern "C" uint32_t __wcswidth(const char* s, size_t len/*=-1*/);
+extern "C" uint32_t __wcswidth_expandctrl(const char* s, size_t len/*=-1*/);
+extern "C" uint32_t cell_count(const char* s, size_t len/*=-1*/);
 extern "C" void reset_wcwidths();
-extern "C" int32_t test_ambiguous_width_char(char32_t ucs, str_iter* iter);
+#if 0
 extern "C" void reset_cached_font();
+#endif
+
+#ifdef __cplusplus
+
+#include "str_iter.h"
+
 bool is_variant_selector(char32_t ucs);
 bool is_possible_unqualified_half_width(char32_t ucs);
 bool is_emoji(char32_t ucs);
+
+#ifdef _WIN32
+void detect_ucs2_limitation(bool force=false);
+int32_t test_ambiguous_width_char(char32_t ucs, str_iter* iter);
+#endif
 
 class combining_mark_width_scope
 {
@@ -23,9 +34,6 @@ public:
 private:
     const int32_t m_old;
 };
-
-extern "C" uint32_t __wcswidth(const char* s, size_t len);
-extern "C" uint32_t __wcswidth_expandctrl(const char* s, size_t len);
 
 class wcwidth_iter
 {
@@ -57,3 +65,5 @@ private:
     int32_t         m_chr_wcwidth = 0;
     bool            m_emoji = false;
 };
+
+#endif // __cplusplus

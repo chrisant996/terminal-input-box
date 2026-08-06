@@ -16,13 +16,13 @@ namespace tib {
 
 size_t resolve_auto_length(size_t len, const char* s)
 {
-    return (len == c_auto_length) ? strlen(s) : len;
+    return !s ? 0 : (len == c_auto_length) ? strlen(s) : len;
 }
 
 #ifdef _WIN32
 size_t resolve_auto_length(size_t len, const WCHAR* s)
 {
-    return (len == c_auto_length) ? wcslen(s) : len;
+    return !s ? 0 : (len == c_auto_length) ? wcslen(s) : len;
 }
 #endif
 
@@ -36,6 +36,14 @@ int __vsnprintf(WCHAR* const buffer, size_t const len, const WCHAR* const format
 {
     return _vsnwprintf_s(buffer, len, _TRUNCATE, format, args);
 }
+#endif
+
+template<>
+const char* const cstring_t<char>::c_spaces = "                                ";
+
+#ifdef _WIN32
+template<>
+const WCHAR* const cstring_t<WCHAR>::c_spaces = L"                                ";
 #endif
 
 template<>

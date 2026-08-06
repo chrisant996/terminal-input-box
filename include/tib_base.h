@@ -47,6 +47,7 @@ public:
     bool                set(const T* s, size_t len=c_auto_length);
     bool                set(const cstring_t<T>& s);
     bool                append(const T* s, size_t len=c_auto_length);
+    bool                append_spaces(int16_t n);
     bool                append_color(const T* sgr_params);
     bool                printf(const T* format, ...);
     bool                printfv(const T* format, va_list args);
@@ -65,6 +66,8 @@ private:
     size_t              m_capacity = 0;
     size_t              m_len = 0;
     T*                  m_text = nullptr;
+
+    static const T* const c_spaces;
 };
 
 template<class T>
@@ -125,9 +128,25 @@ bool cstring_t<T>::append(const T* s, size_t len)
 }
 
 template<class T>
+bool cstring_t<T>::append_spaces(int16_t n)
+{
+    while (n > 0)
+    {
+        const int16_t chunk_size = min<uint16_t>(n, 32);
+        if (!append(c_spaces, chunk_size))
+            return false;
+        n -= chunk_size;
+    }
+    return true;
+}
+
+template<class T>
 bool cstring_t<T>::append_color(const T* sgr_params)
 {
     const size_t orig_len = length();
+
+    if (sgr_params && sgr_params[0] == 0x1b && sgr_params[1] == '[' && sgr_params[strlen(sgr_params) - 1] == 'm')
+        return append(sgr_params);
 
     if (!append("\x1b[", 2))
     {

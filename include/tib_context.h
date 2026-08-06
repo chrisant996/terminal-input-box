@@ -12,6 +12,9 @@
 namespace tib {
 
 typedef int32_t textpos_t;
+struct border_definition;
+
+extern const border_definition c_light_border;
 
 struct coord
 {
@@ -78,17 +81,34 @@ protected:
 
 struct undo_entry
 {
-                    undo_entry() = default;
-                    ~undo_entry();
-    void            link_at_tail(undo_entry*& head, undo_entry*& tail);
-    void            unlink(undo_entry*& head, undo_entry*& tail);
+                        undo_entry() = default;
+                        ~undo_entry();
+    void                link_at_tail(undo_entry*& head, undo_entry*& tail);
+    void                unlink(undo_entry*& head, undo_entry*& tail);
 
-    cstring         m_text;
-    selection_state m_sel_before;
-    selection_state m_sel_after;
+    cstring             m_text;
+    selection_state     m_sel_before;
+    selection_state     m_sel_after;
 
-    undo_entry*     m_prev = nullptr;
-    undo_entry*     m_next = nullptr;
+    undo_entry*         m_prev = nullptr;
+    undo_entry*         m_next = nullptr;
+};
+
+struct border_definition
+{
+    bool                has_top() const { return top && *top; }
+    bool                has_bottom() const { return bottom && *bottom; }
+    bool                has_left() const { return left && *left; }
+    bool                has_right() const { return right && *right; }
+
+    const char*         top_left;
+    const char*         top;
+    const char*         top_right;
+    const char*         left;
+    const char*         right;
+    const char*         bottom_left;
+    const char*         bottom;
+    const char*         bottom_right;
 };
 
 class editor_context : public input_buffer
@@ -101,6 +121,7 @@ public:
     void                set_max_width(uint32_t m) { m_max_width = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
     void                set_max_height(uint32_t m) { m_max_height = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
     void                set_variable_height(bool v) { m_variable_height = v; }
+    void                set_border(const border_definition* border);
 #if 0
     void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
@@ -159,6 +180,7 @@ public:
 private:
     void                ensure_left();
     void                print_visible();
+    void                append_border(const coord& origin, cstring& out);
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
@@ -174,7 +196,8 @@ private:
     uint32_t            m_max_width = INT16_MAX;
     uint32_t            m_max_height = 1;
     uint32_t            m_max_length = INT16_MAX;
-    coord               m_origin = { -1, -1 };
+    coord               m_origin = { 1, -1 };
+    const border_definition* m_border = nullptr;
     bool                m_variable_height = false;
     bool                m_horiz_scroll_markers = true;
 
@@ -191,6 +214,7 @@ private:
     uint32_t            m_displayed_change_counter = 0;
     textpos_t           m_displayed_anchor = 0;
     textpos_t           m_displayed_caret = 0;
+    bool                m_border_dirty = false;
 
     // Undo/redo queue.
     undo_entry*         m_undo_head = nullptr;

@@ -11,6 +11,18 @@
 
 namespace tib {
 
+const border_definition c_light_border =
+{
+    "┌",
+    "─",
+    "┐",
+    "│",
+    "│",
+    "└",
+    "─",
+    "┘",
+};
+
 void selection_state::set_selection(textpos_t anchor, textpos_t caret)
 {
     assert(anchor != static_cast<textpos_t>(-1));
@@ -222,6 +234,15 @@ editor_context::editor_context()
     init_undo();
 }
 
+void editor_context::set_border(const border_definition* border)
+{
+    if (border && !border->has_top() && !border->has_bottom() && !border->has_left() && !border->has_right())
+        border = nullptr;
+    if (m_border != border)
+        m_border_dirty = true;
+    m_border = border;
+}
+
 #if 0
 void editor_context::SetCallback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback)
 {
@@ -283,6 +304,8 @@ std::shared_ptr<const color_table> editor_context::get_color_table() const
 void editor_context::set_color_table(std::shared_ptr<const color_table> colors)
 {
     m_colors = colors;
+    m_border_dirty = true;
+    // TODO:  Dirty.
 }
 
 #if 0
@@ -419,6 +442,63 @@ void editor_context::display()
     print_visible();
 }
 
+void editor_context::append_border(const coord& origin, cstring& out)
+{
+    const border_definition& b = *m_border;
+    const uint16_t b_left_width = b.has_left() ? cell_count(b.left, -1) : 0;
+    const uint16_t b_right_width = b.has_right() ? cell_count(b.right, -1) : 0;
+    const uint16_t extra_border_width = b_left_width + b_right_width;
+    const uint16_t extra_border_height = b.has_top() + b.has_bottom();
+    const uint16_t _width = get_effective_max_width();
+    if (!_width)
+        return;
+    const uint16_t width = _width + extra_border_width;
+    // TODO:  Multi-line, and variable height.
+    const uint16_t height = m_max_height + extra_border_height;
+
+    out.append_color(m_colors->get_color(tib::color_element::border));
+
+    if (b.top)
+    {
+        out.printf("\x1b[%uG", origin.x);
+        if (b.top_left)
+            out.append(b.top_left);
+        for (uint16_t i = width - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
+            out.append(b.top);
+        if (b.top_right)
+            out.append(b.top_right);
+    }
+
+    for (uint16_t i = height - extra_border_height; i--;)
+    {
+        out.append("\r\n");
+        if (b_left_width)
+        {
+            out.printf("\x1b[%uG", origin.x);
+            out.append(b.left);
+        }
+        if (b_right_width)
+        {
+            out.printf("\x1b[%uG", origin.x + width - b_right_width);
+            out.append(b.right);
+        }
+    }
+
+    if (b.bottom)
+    {
+        out.printf("\r\n\x1b[%uG", origin.x);
+        if (b.bottom_left)
+            out.append(b.bottom_left);
+        for (uint16_t i = width - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)
+            out.append(b.bottom);
+        if (b.bottom_right)
+            out.append(b.bottom_right);
+    }
+
+    if (height > 1)
+        out.printf("\x1b[%uA", height - 1);
+}
+
 void editor_context::ensure_left()
 {
     m_left = min(m_left, m_selection.get_caret());
@@ -445,20 +525,51 @@ void editor_context::ensure_left()
 
 void editor_context::print_visible()
 {
-    cstring tmp;
-    tmp.set(c_hide_cursor);
+    cstring out;
+
     // TODO:  Encapsulate terminal codes behind some termcap layer.
-    if (m_origin.y > 0)
+
+    out.set(c_hide_cursor);
+
+    // TODO:  This is a temporary hack for borders with single line tib.
+    if (m_border && m_border->has_top())
+        out.append("\x1b[A");
+
+    auto goto_origin = [&](bool inner, coord& origin)
     {
-        tmp.printf("\x1b[%u;%uH", m_origin.y, m_origin.x);
-    }
-    else
+        origin = m_origin;
+        if (inner && m_border)
+        {
+            if (m_origin.y > 0)
+                origin.y += m_border->has_top();
+            origin.x += m_border->has_left() ? cell_count(m_border->left, -1) : 0;
+        }
+        if (m_origin.y > 0)
+        {
+            out.printf("\x1b[%u;%uH", origin.y, origin.x);
+        }
+        else
+        {
+            // TODO:  Move up to the origin row using relative positioning.
+            // That's crucial for supporting an input box with variable height.
+            if (inner && m_border && m_border->has_top())
+                out.append("\r\n");
+            out.printf("\x1b[%uG", origin.x);
+        }
+    };
+
+    coord origin;
+    if (m_border)
     {
-        // TODO:  Move up to the origin row using relative positioning.
-        // That's crucial for supporting an input box with variable height.
-        tmp.printf("\x1b[%uG", m_origin.x);
+        goto_origin(false/*inner*/, origin);
+        if (m_border_dirty)
+        {
+            append_border(origin, out);
+            m_border_dirty = false;
+        }
     }
-    term_out(tmp.c_str(), tmp.length());
+    goto_origin(true/*inner*/, origin);
+    m_colors->append_color(out, tib::color_element::base);
 
     uint16_t max_width = get_effective_max_width();
     bool left_marker = m_horiz_scroll_markers && (m_left > 0);
@@ -499,54 +610,54 @@ void editor_context::print_visible()
         }
     }
 
-    tmp.clear();
     if (left_marker)
     {
-        tmp.append_color(m_colors.get()->get_color(color_element::input_horiz_scroll));
-        tmp.append("<", 1);
+        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
+        out.append("<", 1);
     }
-    tmp.append_color(m_colors.get()->get_color(color_element::input));
+    m_colors->append_color(out, color_element::base, color_element::input);
 
     if (m_selection.get_anchor() <= m_text.length())
     {
         const textpos_t begin = clamp<textpos_t>(m_selection.get_sel_begin(), textpos_t(lo_limit), textpos_t(hi_limit));
         const textpos_t end = clamp<textpos_t>(m_selection.get_sel_end(), textpos_t(lo_limit), textpos_t(hi_limit));
-        tmp.append(m_text.c_str() + lo_limit, begin - lo_limit);
+        out.append(m_text.c_str() + lo_limit, begin - lo_limit);
         if (begin < end)
         {
-            tmp.append_color(m_colors.get()->get_color(color_element::input_selection));
-            tmp.append(m_text.c_str() + begin, end - begin);
+            m_colors->append_color(out, color_element::base, color_element::input_selection);
+            out.append(m_text.c_str() + begin, end - begin);
             // REVIEW:  Should this append a space here if the selection isn't fully drawn due to character width clipping?
-            tmp.append_color(m_colors.get()->get_color(color_element::input));
+            m_colors->append_color(out, color_element::base, color_element::input);
         }
         if (hi_limit > end)
-            tmp.append(m_text.c_str() + end, hi_limit - end);
+            out.append(m_text.c_str() + end, hi_limit - end);
     }
     else
     {
-        tmp.append(m_text.c_str() + lo_limit, len);
+        out.append(m_text.c_str() + lo_limit, len);
     }
 
-    for (uint16_t n = max_width - width; n--;)
-        tmp.append(" ", 1);
+    out.append_spaces(max_width - width);
     if (right_marker)
     {
-        tmp.append_color(m_colors.get()->get_color(color_element::input_horiz_scroll));
-        tmp.append(">", 1);
+        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
+        out.append(">", 1);
     }
-    const int16_t cursor_x = m_origin.x + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit);
-    if (m_origin.y > 0)
+    const int16_t cursor_x = origin.x + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit);
+    if (origin.y > 0)
     {
-        tmp.printf("\x1b[%u;%uH", m_origin.y, cursor_x);
+        out.printf("\x1b[%u;%uH", origin.y, cursor_x);
     }
     else
     {
         // TODO:  Move up to the origin row using relative positioning.
         // That's crucial for supporting an input box with variable height.
-        tmp.printf("\x1b[%uG", cursor_x);
+        out.printf("\x1b[%uG", cursor_x);
     }
-    tmp.append(c_show_cursor);
-    term_out(tmp.c_str(), tmp.length());
+
+    out.append(c_show_cursor);
+
+    term_out(out.c_str(), out.length());
 }
 
 void editor_context::begin_of_input(bool select)
@@ -904,13 +1015,18 @@ uint32_t editor_context::get_effective_max_width() const
     const HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
 
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (!GetConsoleScreenBufferInfo(hout, &csbi))
-        return min<uint32_t>(80, m_max_width);
+    const uint16_t term_width = (GetConsoleScreenBufferInfo(hout, &csbi) ? csbi.dwSize.X : 80);
+
+    const uint16_t b_left_width = (m_border && m_border->has_left()) ? cell_count(m_border->left, -1) : 0;
+    const uint16_t b_right_width = (m_border && m_border->has_right()) ? cell_count(m_border->right, -1) : 0;
+    const uint16_t extra_border_width = b_left_width + b_right_width;
 
     uint32_t max_width = m_max_width;
-    if (uint32_t(m_origin.x) + max_width >= uint32_t(csbi.dwSize.X))
+    if (uint32_t(m_origin.x) + max_width + extra_border_width >= term_width)
     {
-        max_width = uint32_t(csbi.dwSize.X - m_origin.x) + 1;
+        if (term_width <= m_origin.x + extra_border_width)
+            return 0;
+        max_width = uint32_t(term_width - (m_origin.x + extra_border_width - 1));
         if (int32_t(max_width) < 8)
             return 0;
     }

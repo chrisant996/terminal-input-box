@@ -14,6 +14,18 @@ static tib_host::auto_terminal_init s_auto_terminal_init;
 
 static bool s_done = false;
 
+static const tib::border_definition c_padding_border =
+{
+    nullptr,
+    "▄",
+    nullptr,
+    "██",
+    "██",
+    nullptr,
+    "▀",
+    nullptr,
+};
+
 static int32_t backspace(tib::editor_context& ctx, int32_t key, const char* name)
 {
     ctx.backspace();
@@ -122,8 +134,18 @@ int main(int argc, const char** argv)
     tib_host::set_crt_locale_utf8();
     tib_host::set_console_vt_input();
 
+    const tib::border_definition* border = nullptr;
+    // border = &tib::c_light_border;
+    // border = &c_padding_border;
+
+    std::shared_ptr<tib::color_table> colors = std::make_shared<tib::color_table>();
+    colors->set_color(tib::color_element::base, "0;48;2;33;33;33");
+    colors->set_color(tib::color_element::border, "0;38;2;33;33;33");
+
     tib::input_box tib;
     tib.set_bindings(make_basic_key_table());
+    tib.set_border(border);
+    tib.set_color_table(colors);
 
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -143,18 +165,39 @@ int main(int argc, const char** argv)
     tib::term_out(tmp.c_str(), tmp.length());
 
     tib::cstring sequence;
+    tib::cstring show_sequence;
     double last_clock = tib::clock();
 
     while (!s_done)
     {
         tib.display();
 
+        if (!show_sequence.empty())
+        {
+            tmp.set("\033[s\n");
+            tmp.append_color(colors->get_color(tib::color_element::border));
+            tmp.append_color("7;46");
+            tmp.append("\x1b[4G keys:  ");
+            tmp.append(show_sequence.c_str(), show_sequence.length());
+            tmp.append_color(colors->get_color(tib::color_element::border));
+            for (size_t n = 25 - show_sequence.length(); n--;)
+                tmp.append(border ? border->bottom : " ");
+            tmp.append("\033[u");
+            tib::term_out(tmp.c_str(), tmp.length());
+            tib.set_border(border);
+        }
+
         const int32_t c = tib::term_in();
 
         const double now = tib::clock();
         if (now - last_clock >= 0.1)
             sequence.clear();
-        while (sequence.length() > 40)
+        last_clock = now;
+        if (c > 0x20 && c < 0x7f)
+            sequence.printf("%c ", char(c));
+        else
+            sequence.printf("0x%02.2x ", c);
+        while (sequence.length() > 25)
         {
             const char* p = sequence.c_str();
             while (*p && *p != ' ')
@@ -164,16 +207,7 @@ int main(int argc, const char** argv)
             tmp.set(p);
             sequence = std::move(tmp);
         }
-        last_clock = now;
-
-        if (c > 0x20 && c < 0x7f)
-            sequence.printf("%c ", char(c));
-        else
-            sequence.printf("0x%02.2x ", c);
-        tmp.set("\033[s\n\033[90mkeys:  ");
-        tmp.append(sequence.c_str(), sequence.length());
-        tmp.append("\033[K\033[u");
-        tib::term_out(tmp.c_str(), tmp.length());
+        show_sequence.set(sequence.c_str(), sequence.length());
 
         switch (dispatcher.step(c))
         {

@@ -19,6 +19,8 @@ const char* color_table::get_color(color_element color) const
         static const char* const c_default_colors[] =
         {
             "",
+            "",
+            "",
             "7",
             "1",
         };
@@ -32,6 +34,18 @@ void color_table::set_color(color_element color, const char* sgr_params)
 {
     m_colors[size_t(color)].clear();
     m_colors[size_t(color)].append_color(sgr_params);
+}
+
+bool color_table::append_color(cstring& out, color_element color, color_element overlay) const
+{
+    const char* sgr_overlay = (overlay == color_element::MAX) ? nullptr : get_color(overlay);
+    if (!(sgr_overlay && sgr_overlay[0] == '0') && !out.append_color(get_color(color)))
+        return false;
+    if (overlay == color_element::MAX)
+        return true;
+    if (!sgr_overlay || !*sgr_overlay)
+        return true;
+    return out.append_color(sgr_overlay);
 }
 
 } // namespace tib
