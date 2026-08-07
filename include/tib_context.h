@@ -16,12 +16,6 @@ struct border_definition;
 
 extern const border_definition c_light_border;
 
-struct coord
-{
-    int16_t         x;
-    int16_t         y;
-};
-
 struct selection_state
 {
                     selection_state() : m_anchor(0), m_caret(0), m_dirty(false) { reset_word_anchor(); }
@@ -77,6 +71,7 @@ public:
 protected:
     cstring             m_text;
     selection_state     m_selection;
+    uint32_t            m_change_counter = 0;
 };
 
 struct undo_entry
@@ -111,6 +106,15 @@ struct border_definition
     const char*         bottom_right;
 };
 
+struct layout_info
+{
+    coord               origin = { -1, -1 };
+    coord               extent = { 0, 0 };
+    uint16_t            max_width = INT16_MAX;
+    uint16_t            max_height = 1;
+    bool                variable_height = false;
+};
+
 class editor_context : public input_buffer
 {
 public:
@@ -118,15 +122,15 @@ public:
                         editor_context();
 
     void                set_max_length(uint32_t m) { m_max_length = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
-    void                set_max_width(uint32_t m) { m_max_width = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
-    void                set_max_height(uint32_t m) { m_max_height = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
-    void                set_variable_height(bool v) { m_variable_height = v; }
+    void                set_max_width(uint16_t m) { m_layout.max_width = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
+    void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
+    void                set_variable_height(bool v) { m_layout.variable_height = v; }
     void                set_border(const border_definition* border);
 #if 0
     void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
 #endif
-    void                set_origin(int16_t x=-1, int16_t y=-1) { m_origin = { x, y }; }
+    void                set_origin(int16_t x=-1, int16_t y=-1) { m_layout.origin = { x, y }; }
     void                set_horiz_scroll_markers(bool show) { m_horiz_scroll_markers = show; }
 
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
@@ -193,16 +197,12 @@ private:
     // Configuration.
     std::shared_ptr<const key_table_list> m_bindings;
     std::shared_ptr<const color_table> m_colors;
-    uint32_t            m_max_width = INT16_MAX;
-    uint32_t            m_max_height = 1;
+    layout_info         m_layout;
     uint32_t            m_max_length = INT16_MAX;
-    coord               m_origin = { 1, -1 };
     const border_definition* m_border = nullptr;
-    bool                m_variable_height = false;
     bool                m_horiz_scroll_markers = true;
 
     // State.
-    uint32_t            m_change_counter = 0;
     uint16_t            m_terminal_row = 0;
     textpos_t           m_left = 0;
 #if 0

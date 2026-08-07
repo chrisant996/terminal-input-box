@@ -30,6 +30,12 @@ size_t resolve_auto_length(size_t len, const char* s);
 size_t resolve_auto_length(size_t len, const WCHAR* s);
 #endif
 
+struct coord
+{
+    int16_t             x;
+    int16_t             y;
+};
+
 // A counted string that can optionally contain embedded NUL characters.
 template<class T>
 class cstring_t

@@ -319,10 +319,10 @@ int32_t editor_context::go(void* cookie)
 
     if (unsigned(csbi.dwCursorPosition.X) + 8 >= unsigned(csbi.dwSize.X))
         return false;
-    if (unsigned(csbi.dwCursorPosition.X) + m_max_width >= unsigned(csbi.dwSize.X))
-        m_max_width = csbi.dwSize.X - csbi.dwCursorPosition.X;
+    if (unsigned(csbi.dwCursorPosition.X) + m_layout.max_width >= unsigned(csbi.dwSize.X))
+        m_layout.max_width = csbi.dwSize.X - csbi.dwCursorPosition.X;
 
-    if (m_origin.X < 0 || m_origin.Y < 0)
+    if (m_layout.origin.X < 0 || m_layout.origin.Y < 0)
         SetOrigin(csbi.dwCursorPosition);
 
     AutoMouseConsoleMode mouse(g_options.allow_mouse);
@@ -454,7 +454,7 @@ void editor_context::append_border(const coord& origin, cstring& out)
         return;
     const uint16_t width = _width + extra_border_width;
     // TODO:  Multi-line, and variable height.
-    const uint16_t height = m_max_height + extra_border_height;
+    const uint16_t height = m_layout.max_height + extra_border_height;
 
     out.append_color(m_colors->get_color(tib::color_element::border));
 
@@ -537,14 +537,14 @@ void editor_context::print_visible()
 
     auto goto_origin = [&](bool inner, coord& origin)
     {
-        origin = m_origin;
+        origin = m_layout.origin;
         if (inner && m_border)
         {
-            if (m_origin.y > 0)
+            if (m_layout.origin.y > 0)
                 origin.y += m_border->has_top();
             origin.x += m_border->has_left() ? cell_count(m_border->left, -1) : 0;
         }
-        if (m_origin.y > 0)
+        if (m_layout.origin.y > 0)
         {
             out.printf("\x1b[%u;%uH", origin.y, origin.x);
         }
@@ -1021,12 +1021,12 @@ uint32_t editor_context::get_effective_max_width() const
     const uint16_t b_right_width = (m_border && m_border->has_right()) ? cell_count(m_border->right, -1) : 0;
     const uint16_t extra_border_width = b_left_width + b_right_width;
 
-    uint32_t max_width = m_max_width;
-    if (uint32_t(m_origin.x) + max_width + extra_border_width >= term_width)
+    uint32_t max_width = m_layout.max_width;
+    if (uint32_t(m_layout.origin.x) + max_width + extra_border_width >= term_width)
     {
-        if (term_width <= m_origin.x + extra_border_width)
+        if (term_width <= m_layout.origin.x + extra_border_width)
             return 0;
-        max_width = uint32_t(term_width - (m_origin.x + extra_border_width - 1));
+        max_width = uint32_t(term_width - (m_layout.origin.x + extra_border_width - 1));
         if (int32_t(max_width) < 8)
             return 0;
     }
