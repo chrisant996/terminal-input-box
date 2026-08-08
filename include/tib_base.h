@@ -48,7 +48,7 @@ public:
                         cstring_t(cstring_t<T>&& s) { *this = std::move(s); }
     cstring_t<T>&       operator=(const cstring_t<T>& s);
     cstring_t<T>&       operator=(cstring_t<T>&& s);
-    bool                operator==(const cstring_t& s) const;
+    bool                operator==(const cstring_t<T>& s) const;
 
     bool                set(const T* s, size_t len=c_auto_length);
     bool                set(const cstring_t<T>& s);

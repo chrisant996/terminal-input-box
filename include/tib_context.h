@@ -6,6 +6,7 @@
 #pragma once
 
 #include "tib_base.h"
+#include "tib_bindings.h"
 #include "tib_colors.h"
 #include <vector>
 
