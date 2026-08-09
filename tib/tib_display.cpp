@@ -29,10 +29,25 @@ const border_definition c_light_border =
     "┘",
 };
 
+display_line::display_line(uint16_t x1)
+: m_x1(x1)
+, m_x2(x1)
+{
+    assert(m_x1);
+}
+
+void display_line::append(const char* p, uint32_t len, uint32_t width, char face)
+{
+    m_text.append(p, len);
+    const size_t faces_len = m_faces.length();
+    memset(m_faces.reserve(faces_len + len) + faces_len, face, len);
+    m_faces.set_length(faces_len + len);
+
+    this->m_x2 += width;
+}
+
 void display_lines::clear()
 {
-    m_faces.clear();
-    m_text.clear();
     m_pos = 0;
     m_left = 0;
     m_selection_length = 0;
@@ -198,9 +213,9 @@ bool display_manager::display()
         move_to_column(cursor, 0, tmp.m_inner_offset.x);
 
         char face = 0;
-        const char* t = line.m_text;
-        const char* f = line.m_faces;
-        for (size_t len = line.m_length; len > 0;)
+        const char* t = line->m_text.c_str();
+        const char* f = line->m_faces.c_str();
+        for (size_t len = line->m_text.length(); len > 0;)
         {
             if (*f != face)
             {
@@ -217,16 +232,8 @@ bool display_manager::display()
             const uint32_t clen = iter.character_length();
             assert(clen <= len);
 
-            if (c >= 0 && c < ' ')
-            {
-                const char ctrl = c + '@';
-                output("^", 1);
-                output(&ctrl, 1);
-            }
-            else
-            {
-                output(iter.character_pointer(), clen);
-            }
+            // TODO: optimize to add a run instead of just a grapheme.
+            output(iter.character_pointer(), clen);
 
             t += clen;
             f += clen;
@@ -235,10 +242,10 @@ bool display_manager::display()
         }
 
         // Fill remaining width.
-        if (line.m_width < max_width)
+        if (line->width() < max_width)
         {
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
-            erase_row(max_width - line.m_width);
+            erase_row(max_width - line->width());
         }
     }
 
@@ -334,21 +341,20 @@ bool display_manager::build(display_lines& out)
         sel_end - sel_begin == m_displayed.m_selection_length)
         return false;
 
+    const cstring& text = m_buffer->get_text();
+
     // TODO: callback to provide faces.
+    cstring faces;
+    faces.append_spaces(text.length());     // FACE_DEFAULT == space.
+
+    // Overlay selection color into faces.
+    memset(faces.reserve(0) + sel_begin, FACE_SELECTION, sel_end - sel_begin);
 
     display_lines tmp;
-    if (!tmp.m_text.set(m_buffer->get_text()) || !tmp.m_faces.reserve(m_buffer->get_text().length()))
-        return false;
     tmp.m_pos = pos;
     tmp.m_left = left;
     tmp.m_change_counter = change_counter;
     tmp.m_selection_length = sel_end - sel_begin;
-
-    const cstring& text = tmp.m_text;
-    tmp.m_faces.append_spaces(text.length());   // FACE_DEFAULT == space.
-
-    // Overlay selection color into faces.
-    memset(tmp.m_faces.reserve(0) + sel_begin, FACE_SELECTION, sel_end - sel_begin);
 
     // Set up border.
     if (m_style && m_style->border)
@@ -364,78 +370,74 @@ bool display_manager::build(display_lines& out)
     // Parse text into rows (lines).
     wcwidth_iter iter(text.c_str(), text.length());
     const char* const cursor_ptr = text.c_str() + pos;
-    const char* row_text = text.c_str();
-    const char* row_faces = tmp.m_faces.c_str();
-    size_t row_len = 0;
-    uint16_t row_width = 0;
+    // const char* row_text = text.c_str();
+    const char* face = faces.c_str();
+    char pending = 0;
+    bool expanding = false;
     const uint32_t max_width = get_effective_max_width();
+    std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
 // TODO: handle single line input_box.
 // TODO: handle fixed-height input_box.
     while (iter.more())
     {
         // BUGBUG: does not handle invalid UTF8 correctly.
         const char32_t c = iter.next();
-        const uint32_t clen = iter.character_length();
-        const uint32_t cwidth = iter.character_wcwidth_twoctrl();
+        const char* p = iter.character_pointer();
+        uint32_t clen = iter.character_length();
+        uint32_t cwidth = iter.character_wcwidth_twoctrl();
 
-        const bool update_cursor = (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen);
-
-        if (row_width + cwidth > max_width)
+        if (clen == 1 && *p >= 0 && *p < 0x20)
         {
-            display_line line;
-            line.m_text = row_text;
-            line.m_faces = row_faces;
-            line.m_width = row_width;
-            line.m_length = row_len;
-            line.m_x1 = m_origin.x;
-            line.m_x2 = m_origin.x + max_width - 1;
-            tmp.m_lines.emplace_back(std::move(line));
-
-            row_text += row_len;
-            row_faces += row_len;
-            row_len = 0;
-            row_width = 0;
+            pending = *p + '@';
+            expanding = true;
+            p = "^";
+            assert(clen == 1);
+            cwidth = 1;
         }
 
-        if (update_cursor)
+        if (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen)
         {
-            tmp.m_cursor.x = row_width;
+            tmp.m_cursor.x = line->width();
             tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
         }
 
-        row_len += clen;
-        row_width += cwidth;
+again:
+        if (line->width() + cwidth > max_width)
+        {
+            tmp.m_lines.emplace_back(std::move(line));
+            line = std::make_unique<display_line>(m_origin.x);
+        }
+
+        line->append(p, clen, cwidth, *face);
+
+        if (expanding)
+        {
+            p = &pending;
+            assert(clen == 1);
+            assert(cwidth == 1);
+            expanding = false;
+            goto again;
+        }
+
+        face += clen;
     }
 
     // Add last line.
-    display_line line;
-    line.m_text = row_text;
-    line.m_faces = row_faces;
-    line.m_width = row_width;
-    line.m_length = row_len;
-    line.m_x1 = m_origin.x;
-    line.m_x2 = m_origin.x + get_effective_max_width() - 1;
-    tmp.m_lines.emplace_back(std::move(line));
-
     if (tmp.m_cursor.x < 0)
     {
-        assert(tmp.m_lines.size() > 0);
-        tmp.m_cursor.x = row_width;
-        tmp.m_cursor.y = uint16_t(tmp.m_lines.size()) - 1;
+        tmp.m_cursor.x = line->width();
+        tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
     }
+    tmp.m_lines.emplace_back(std::move(line));
     if (uint32_t(tmp.m_cursor.x) >= max_width)
     {
-        display_line line;
-        line.m_text = "";
-        line.m_faces = "";
-        line.m_width = 0;
-        line.m_length = 0;
-        line.m_x1 = m_origin.x;
-        line.m_x2 = m_origin.x + get_effective_max_width() - 1;
-        tmp.m_lines.emplace_back(std::move(line));
-
         tmp.m_cursor.x = 0;
         ++tmp.m_cursor.y;
+        while (tmp.m_cursor.y >= tmp.m_lines.size())
+        {
+            line = std::make_unique<display_line>(m_origin.x);
+            tmp.m_lines.emplace_back(std::move(line));
+        }
     }
 
     tmp.m_extent.x += max_width;

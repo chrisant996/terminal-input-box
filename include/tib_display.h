@@ -13,6 +13,8 @@
 #include <vector>
 #include <map>
 
+class wcwidth_iter;
+
 namespace tib {
 
 extern bool g_coalesce_output;
@@ -57,27 +59,31 @@ struct style_info
 
 struct display_line
 {
-    uint16_t            m_x1;
-    uint16_t            m_x2;
-    const char*         m_faces;
-    const char*         m_text;
-    uint16_t            m_width;
-    size_t              m_length;
+                        ~display_line() = default;
+                        display_line(uint16_t x1);
+    void                append(const char* p, uint32_t len, uint32_t width, char face);
+    uint16_t            width() const { return m_x2 - m_x1; }
+
+    cstring             m_text;
+    cstring             m_faces;
+    uint16_t            m_x1 = 0;       // First column in the line (1-based, inclusive).
+    uint16_t            m_x2 = 0;       // Last column in the line (1-based, EXCLUSIVE).
+    uint16_t            m_lead = 0;     // Number of leading columns (e.g. wrapped part of ^X).
+    uint16_t            m_trail = 0;    // Number of trailing columns of spaces past m_lastcol.
+    uint16_t            m_width = 0;    // Width of the line in cells.
 };
 
 struct display_lines
 {
     void                clear();
 
-    cstring             m_faces;
-    cstring             m_text;
     textpos_t           m_pos = 0;
     textpos_t           m_left = 0;
     size_t              m_selection_length = 0;
     uint32_t            m_change_counter = 0;
 
-    std::vector<display_line> m_lines;
-    coord               m_cursor = { -1, -1 };
+    std::vector<std::unique_ptr<display_line>> m_lines;
+    coord               m_cursor = { -1, -1 };  // Offset from m_inner_offset.
 
     coord               m_inner_offset = { 0, 0 };
     coord               m_extent = { 0, 0 };
