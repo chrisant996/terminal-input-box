@@ -386,19 +386,28 @@ bool display_manager::build(display_lines& out)
         uint32_t clen = iter.character_length();
         uint32_t cwidth = iter.character_wcwidth_twoctrl();
 
-        if (clen == 1 && *p >= 0 && *p < 0x20)
-        {
-            pending = *p + '@';
-            expanding = true;
-            p = "^";
-            assert(clen == 1);
-            cwidth = 1;
-        }
-
         if (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen)
         {
             tmp.m_cursor.x = line->width();
             tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
+        }
+
+        if (iter.character_wcwidth_signed() < 0)
+        {
+            if (*p == '\n' && m_layout->max_height > 1)
+            {
+                tmp.m_lines.emplace_back(std::move(line));
+                line = std::make_unique<display_line>(m_origin.x);
+                goto next;
+            }
+            else
+            {
+                pending = *p + '@';
+                expanding = true;
+                p = "^";
+                assert(clen == 1);
+                cwidth = 1;
+            }
         }
 
 again:
@@ -419,6 +428,7 @@ again:
             goto again;
         }
 
+next:
         face += clen;
     }
 

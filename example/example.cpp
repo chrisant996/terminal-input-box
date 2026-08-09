@@ -248,6 +248,7 @@ int main(int argc, const char** argv)
         tib.set_empty_face(tib::FACE_DEFAULT);
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
+    // tib.set_max_height(2);
 
 #ifdef _WIN32
     // CONSOLE_SCREEN_BUFFER_INFO csbi;
