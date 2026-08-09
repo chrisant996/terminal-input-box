@@ -11,28 +11,6 @@
 
 namespace tib {
 
-const border_definition c_light_border =
-{
-    "┌",
-    "─",
-    "┐",
-    "│",
-    "│",
-    "└",
-    "─",
-    "┘",
-};
-
-void selection_state::set_selection(textpos_t anchor, textpos_t caret)
-{
-    assert(anchor != static_cast<textpos_t>(-1));
-    assert(caret != static_cast<textpos_t>(-1));
-    if (anchor != m_anchor || caret != m_caret)
-        m_dirty = true;
-    m_anchor = anchor;
-    m_caret = caret;
-}
-
 undo_entry::~undo_entry()
 {
     assert(!m_prev);
@@ -100,20 +78,17 @@ static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t le
     return characters;
 }
 
-static void back_up_by_amount(textpos_t& pos, const char* s, size_t len, size_t backup)
+static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
 {
     if (pos)
     {
         size_t index_pos = 0;
         std::vector<grapheme_info> characters = parse_graphemes(s, len, pos, index_pos);
         if (!characters.size())
-            return;
+            return pos;
 
         if (!index_pos)
-        {
-            pos = 0;
-            return;
-        }
+            return 0;
 
         if (index_pos >= characters.size() || characters[index_pos].index == pos)
             --index_pos;
@@ -129,6 +104,7 @@ static void back_up_by_amount(textpos_t& pos, const char* s, size_t len, size_t 
             --index_pos;
         }
     }
+    return pos;
 }
 
 static textpos_t pos_mover(const char* s, const size_t len, textpos_t& pos, const bool forward, const bool word)
@@ -232,15 +208,18 @@ editor_context::~editor_context()
 editor_context::editor_context()
 {
     init_undo();
+    m_display.init_buffer(this);
+    m_display.init_layout(&m_layout);
+    m_display.init_style(&m_style);
 }
 
 void editor_context::set_border(const border_definition* border)
 {
     if (border && !border->has_top() && !border->has_bottom() && !border->has_left() && !border->has_right())
         border = nullptr;
-    if (m_border != border)
-        m_border_dirty = true;
-    m_border = border;
+    if (m_style.border != border)
+        m_display.invalidate_border();
+    m_style.border = border;
 }
 
 #if 0
@@ -298,14 +277,12 @@ void editor_context::set_bindings(std::shared_ptr<const key_table_list> bindings
 
 std::shared_ptr<const color_table> editor_context::get_color_table() const
 {
-    return m_colors;
+    return m_display.get_color_table();
 }
 
 void editor_context::set_color_table(std::shared_ptr<const color_table> colors)
 {
-    m_colors = colors;
-    m_border_dirty = true;
-    // TODO:  Dirty.
+    m_display.set_color_table(colors);
 }
 
 #if 0
@@ -426,77 +403,12 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
 
 void editor_context::display()
 {
-    // TODO:  Also detect color changes, terminal size changes, input_box
-    // config changes, and etc.
-    if (m_displayed_change_counter &&
-        m_displayed_change_counter == m_change_counter &&
-        m_displayed_anchor == m_selection.get_anchor() &&
-        m_displayed_caret == m_selection.get_caret())
-        return;
+    // TODO: terminal size changes should invalidate.
 
-    m_displayed_change_counter = m_change_counter;
-    m_displayed_anchor = m_selection.get_anchor();
-    m_displayed_caret = m_selection.get_caret();
-
+    // TODO: optimize this away where possible.
     ensure_left();
-    print_visible();
-}
 
-void editor_context::append_border(const coord& origin, cstring& out)
-{
-    const border_definition& b = *m_border;
-    const uint16_t b_left_width = b.has_left() ? cell_count(b.left, -1) : 0;
-    const uint16_t b_right_width = b.has_right() ? cell_count(b.right, -1) : 0;
-    const uint16_t extra_border_width = b_left_width + b_right_width;
-    const uint16_t extra_border_height = b.has_top() + b.has_bottom();
-    const uint16_t _width = get_effective_max_width();
-    if (!_width)
-        return;
-    const uint16_t width = _width + extra_border_width;
-    // TODO:  Multi-line, and variable height.
-    const uint16_t height = m_layout.max_height + extra_border_height;
-
-    out.append_color(m_colors->get_color(tib::color_element::border));
-
-    if (b.top)
-    {
-        out.printf("\x1b[%uG", origin.x);
-        if (b.top_left)
-            out.append(b.top_left);
-        for (uint16_t i = width - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
-            out.append(b.top);
-        if (b.top_right)
-            out.append(b.top_right);
-    }
-
-    for (uint16_t i = height - extra_border_height; i--;)
-    {
-        out.append("\r\n");
-        if (b_left_width)
-        {
-            out.printf("\x1b[%uG", origin.x);
-            out.append(b.left);
-        }
-        if (b_right_width)
-        {
-            out.printf("\x1b[%uG", origin.x + width - b_right_width);
-            out.append(b.right);
-        }
-    }
-
-    if (b.bottom)
-    {
-        out.printf("\r\n\x1b[%uG", origin.x);
-        if (b.bottom_left)
-            out.append(b.bottom_left);
-        for (uint16_t i = width - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)
-            out.append(b.bottom);
-        if (b.bottom_right)
-            out.append(b.bottom_right);
-    }
-
-    if (height > 1)
-        out.printf("\x1b[%uA", height - 1);
+    m_display.display();
 }
 
 void editor_context::ensure_left()
@@ -504,7 +416,7 @@ void editor_context::ensure_left()
     m_left = min(m_left, m_selection.get_caret());
 
     // Auto-scroll horizontally forward.
-    const uint32_t max_width = get_effective_max_width();
+    const uint32_t max_width = m_display.get_effective_max_width();
     while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= max_width)
     {
         wcwidth_iter iter(m_text.c_str() + m_left, m_text.length() - m_left);
@@ -523,6 +435,7 @@ void editor_context::ensure_left()
     }
 }
 
+#if 0
 void editor_context::print_visible()
 {
     cstring out;
@@ -659,6 +572,7 @@ void editor_context::print_visible()
 
     term_out(out.c_str(), out.length());
 }
+#endif
 
 void editor_context::begin_of_input(bool select)
 {
@@ -668,7 +582,9 @@ void editor_context::begin_of_input(bool select)
         m_selection.set_selection(m_selection.get_caret(), 0);
     else
         m_selection.set_selection(m_selection.get_anchor(), 0);
+
     m_left = 0;
+
     if (!select)
         m_selection.reset_word_anchor();
 }
@@ -681,10 +597,10 @@ void editor_context::end_of_input(bool select)
         m_selection.set_selection(m_selection.get_caret(), textpos_t(m_text.length()));
     else
         m_selection.set_selection(m_selection.get_anchor(), textpos_t(m_text.length()));
-    m_left = m_selection.get_caret();
 
-    const uint32_t max_width = max<uint32_t>(2, get_effective_max_width());
-    back_up_by_amount(m_left, m_text.c_str(), m_selection.get_caret(), max_width - 1);
+    // TODO: messy; this seems too early, since effective width can change asynchronously.
+    const uint32_t max_width = max<uint32_t>(2, m_display.get_effective_max_width());
+    m_left = back_up_by_amount(m_selection.get_caret(), m_text.c_str(), m_selection.get_caret(), max_width - 1);
 
     if (!select)
         m_selection.reset_word_anchor();
@@ -883,9 +799,8 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
     m_selection.set_caret(m_text.Length());
     m_defer_init_undo = !keep_undo;
 
-    m_left = get_caret();
     const uint32_t max_width = max<uint32_t>(2, get_effective_max_width());
-    back_up_by_amount(m_left, m_text.c_str(), m_left, max_width - 1);
+    m_left = back_up_by_amount(get_caret(), m_text.c_str(), m_left, max_width - 1);
 }
 #endif
 
@@ -1006,34 +921,6 @@ void editor_context::inc_change_counter()
     ++m_change_counter;
     if (!m_change_counter)
         ++m_change_counter;
-}
-
-uint32_t editor_context::get_effective_max_width() const
-{
-// TODO:  Abstract behind a terminal object.
-#ifdef _WIN32
-    const HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    const uint16_t term_width = (GetConsoleScreenBufferInfo(hout, &csbi) ? csbi.dwSize.X : 80);
-
-    const uint16_t b_left_width = (m_border && m_border->has_left()) ? cell_count(m_border->left, -1) : 0;
-    const uint16_t b_right_width = (m_border && m_border->has_right()) ? cell_count(m_border->right, -1) : 0;
-    const uint16_t extra_border_width = b_left_width + b_right_width;
-
-    uint32_t max_width = m_layout.max_width;
-    if (uint32_t(m_layout.origin.x) + max_width + extra_border_width >= term_width)
-    {
-        if (term_width <= m_layout.origin.x + extra_border_width)
-            return 0;
-        max_width = uint32_t(term_width - (m_layout.origin.x + extra_border_width - 1));
-        if (int32_t(max_width) < 8)
-            return 0;
-    }
-    return max_width;
-#else
-    // TODO:  Alternative Linux implementation.
-#endif
 }
 
 void editor_context::begin_undo_group()

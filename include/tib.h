@@ -7,6 +7,7 @@
 
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_buffer.h"
 #include "tib_colors.h"
 #include "tib_context.h"
 #include "tib_input.h"

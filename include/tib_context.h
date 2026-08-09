@@ -7,73 +7,12 @@
 
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_buffer.h"
 #include "tib_colors.h"
+#include "tib_display.h"
 #include <vector>
 
 namespace tib {
-
-typedef int32_t textpos_t;
-struct border_definition;
-
-extern const border_definition c_light_border;
-
-struct selection_state
-{
-                    selection_state() : m_anchor(0), m_caret(0), m_dirty(false) { reset_word_anchor(); }
-                    selection_state(textpos_t caret) : m_anchor(caret), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
-                    selection_state(textpos_t anchor, textpos_t caret) : m_anchor(anchor), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
-
-    void            set_caret(textpos_t caret) { set_selection(caret, caret); }
-    void            set_selection(textpos_t anchor, textpos_t caret);
-#if 0
-    void            reset_word_anchor() { m_word_anchor_begin = m_anchor; m_word_anchor_end = m_caret; }
-    void            reset_word_anchor(textpos_t caret) { m_word_anchor_begin = m_anchor; m_word_anchor_end = caret; }
-#else
-    void            reset_word_anchor() {}
-#endif
-
-    textpos_t       get_anchor() const { return m_anchor; }
-    textpos_t       get_caret() const { return m_caret; }
-    textpos_t       get_sel_begin() const { return min(m_anchor, m_caret); }
-    textpos_t       get_sel_end() const { return max(m_anchor, m_caret); }
-#if 0
-    int             get_word_anchor_begin() const { return m_word_anchor_begin; }
-    int             get_word_anchor_end() const { return m_word_anchor_end; }
-#endif
-    bool            has_selection() const { return m_anchor != m_caret; }
-
-    bool            is_dirty() const { return m_dirty; }
-    void            clear_dirty() { m_dirty = false; }
-
-    textpos_t&      get_anchor_out() { return m_anchor; }
-    textpos_t&      get_caret_out() { return m_caret; }
-
-private:
-    textpos_t       m_anchor;
-    textpos_t       m_caret;
-#if 0
-    short           m_word_anchor_begin;
-    short           m_word_anchor_end;
-#endif
-    bool            m_dirty;
-};
-
-class input_buffer
-{
-public:
-                        ~input_buffer() = default;
-                        input_buffer() = default;
-
-    textpos_t           get_caret() const { return m_selection.get_caret(); }
-    const selection_state& get_selection_state() const { return m_selection; }
-
-    const cstring&      get_text() const { return m_text; }
-
-protected:
-    cstring             m_text;
-    selection_state     m_selection;
-    uint32_t            m_change_counter = 0;
-};
 
 struct undo_entry
 {
@@ -88,32 +27,6 @@ struct undo_entry
 
     undo_entry*         m_prev = nullptr;
     undo_entry*         m_next = nullptr;
-};
-
-struct border_definition
-{
-    bool                has_top() const { return top && *top; }
-    bool                has_bottom() const { return bottom && *bottom; }
-    bool                has_left() const { return left && *left; }
-    bool                has_right() const { return right && *right; }
-
-    const char*         top_left;
-    const char*         top;
-    const char*         top_right;
-    const char*         left;
-    const char*         right;
-    const char*         bottom_left;
-    const char*         bottom;
-    const char*         bottom_right;
-};
-
-struct layout_info
-{
-    coord               origin = { -1, -1 };
-    coord               extent = { 0, 0 };
-    uint16_t            max_width = INT16_MAX;
-    uint16_t            max_height = 1;
-    bool                variable_height = false;
 };
 
 class editor_context : public input_buffer
@@ -132,7 +45,7 @@ public:
     void                set_history(std::vector<StrW>* history);
 #endif
     void                set_origin(int16_t x=-1, int16_t y=-1) { m_layout.origin = { x, y }; }
-    void                set_horiz_scroll_markers(bool show) { m_horiz_scroll_markers = show; }
+    void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
 
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
     std::shared_ptr<const key_table_list> get_bindings() const;
@@ -185,37 +98,29 @@ public:
 private:
     void                ensure_left();
     void                print_visible();
-    void                append_border(const coord& origin, cstring& out);
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
     void                inc_change_counter();
-    uint32_t            get_effective_max_width() const;
 
 private:
     // NOTE:  Content and selection are contained in the base class.
 
     // Configuration.
     std::shared_ptr<const key_table_list> m_bindings;
-    std::shared_ptr<const color_table> m_colors;
-    layout_info         m_layout;
+    layout_info         m_layout;   // REVIEW: does tib_context actually need access to this?
+    style_info          m_style;    // REVIEW: does tib_context actually need access to this?
     uint32_t            m_max_length = INT16_MAX;
-    const border_definition* m_border = nullptr;
-    bool                m_horiz_scroll_markers = true;
 
     // State.
     uint16_t            m_terminal_row = 0;
-    textpos_t           m_left = 0;
 #if 0
     MouseHelper         m_mouse_helper;
 #endif
     bool                m_can_drag = false;
 
     // Display.
-    uint32_t            m_displayed_change_counter = 0;
-    textpos_t           m_displayed_anchor = 0;
-    textpos_t           m_displayed_caret = 0;
-    bool                m_border_dirty = false;
+    display_manager     m_display;
 
     // Undo/redo queue.
     undo_entry*         m_undo_head = nullptr;

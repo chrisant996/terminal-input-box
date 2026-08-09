@@ -30,6 +30,8 @@ size_t resolve_auto_length(size_t len, const char* s);
 size_t resolve_auto_length(size_t len, const WCHAR* s);
 #endif
 
+typedef int32_t textpos_t;
+
 struct coord
 {
     int16_t             x;
@@ -53,7 +55,7 @@ public:
     bool                set(const T* s, size_t len=c_auto_length);
     bool                set(const cstring_t<T>& s);
     bool                append(const T* s, size_t len=c_auto_length);
-    bool                append_spaces(int16_t n);
+    bool                append_spaces(size_t n);
     bool                append_color(const T* sgr_params);
     bool                printf(const T* format, ...);
     bool                printfv(const T* format, va_list args);
@@ -134,11 +136,11 @@ bool cstring_t<T>::append(const T* s, size_t len)
 }
 
 template<class T>
-bool cstring_t<T>::append_spaces(int16_t n)
+bool cstring_t<T>::append_spaces(size_t n)
 {
     while (n > 0)
     {
-        const int16_t chunk_size = min<uint16_t>(n, 32);
+        const size_t chunk_size = min<size_t>(n, 32);
         if (!append(c_spaces, chunk_size))
             return false;
         n -= chunk_size;

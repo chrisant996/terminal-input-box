@@ -136,7 +136,7 @@ int main(int argc, const char** argv)
 
     const tib::border_definition* border = nullptr;
     // border = &tib::c_light_border;
-    // border = &c_padding_border;
+    border = &c_padding_border;
 
     std::shared_ptr<tib::color_table> colors = std::make_shared<tib::color_table>();
     colors->set_color(tib::color_element::base, "0;48;2;33;33;33");
