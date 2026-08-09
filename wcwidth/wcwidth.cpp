@@ -490,7 +490,8 @@ void detect_ucs2_limitation(bool force)
     {
 #pragma warning(push)
 #pragma warning(disable:4996)
-// TODO:  Deprecated and inaccurate; use the updated SDK macros/etc instead.
+        // For this to work correctly, the application must be manifested for
+        // all versions of Windows up to 10.
         OSVERSIONINFO ver = { sizeof(ver) };
         if (GetVersionEx(&ver))
         {

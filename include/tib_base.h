@@ -64,15 +64,15 @@ public:
     void                clear();
     void                free();
 
-    bool                empty() const { return !m_len; }
-    size_t              length() const { return m_len; }
+    bool                empty() const { return !length(); }
+    size_t              length() const;
     size_t              capacity() const { return m_capacity; }
     const T*            c_str() const;
 
 private:
     bool                raw_set(const T* s, size_t len);
     size_t              m_capacity = 0;
-    size_t              m_len = 0;
+    mutable size_t      m_len = 0;
     T*                  m_text = nullptr;
 
     static const T* const c_spaces;
@@ -257,9 +257,12 @@ void cstring_t<T>::set_length(size_t len)
     {
         clear();
     }
+    else if (len == c_auto_length)
+    {
+        m_len = len;
+    }
     else
     {
-        // assert(len <= m_len);
         assert(len < m_capacity);
         m_len = len;
         m_text[m_len] = 0;
@@ -284,6 +287,14 @@ void cstring_t<T>::free()
 }
 
 template<class T>
+size_t cstring_t<T>::length() const
+{
+    if (m_len == c_auto_length)
+        m_len = m_text ? str_len(m_text) : 0;
+    return m_len;
+}
+
+template<class T>
 bool cstring_t<T>::raw_set(const T* s, size_t len)
 {
     len = resolve_auto_length(len, s);
@@ -304,5 +315,6 @@ bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
 #endif
 
 double clock();
+bool getenv(const char* name, cstring& out);
 
 } // namespace tib

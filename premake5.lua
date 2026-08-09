@@ -108,4 +108,5 @@ project("example")
 
     includedirs("include")
     files("example/*.cpp")
+    files("example/example.rc")
 

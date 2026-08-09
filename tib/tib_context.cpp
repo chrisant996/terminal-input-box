@@ -404,6 +404,9 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
             return func(*this, uint8_t(c), target->get_text());
         }
         break;
+    case tib::binding_type::macro:
+        term_push_macro_text(target->get_text(), target->get_length());
+        break;
     default:
         assert(false);
         break;
@@ -609,7 +612,7 @@ void editor_context::end_of_input(bool select)
     else
         m_selection.set_selection(m_selection.get_anchor(), textpos_t(m_text.length()));
 
-    // TODO: messy; this seems too early, since effective width can change asynchronously.
+    // REVIEW: messy; this seems too early, since effective width can change asynchronously.
     const uint32_t max_width = max<uint32_t>(2, m_display.get_effective_max_width());
     m_left = back_up_by_amount(m_selection.get_caret(), m_text.c_str(), m_selection.get_caret(), max_width - 1);
 

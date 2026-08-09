@@ -14,11 +14,33 @@ namespace tib {
 
 int32_t (*hook_term_in)() = nullptr;
 
+struct macro_playback
+{
+    cstring             m_text;
+    size_t              m_index = 0;
+    macro_playback*     m_next = nullptr;
+};
+
+static macro_playback* s_macro_playback = nullptr;
+
 int32_t term_in()
 {
     // TODO:  Assert/enforce single threaded.
     // TODO:  Pushed input.
-    // TODO:  Macro playback.
+
+    if (s_macro_playback)
+    {
+        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
+        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index++];
+        if (s_macro_playback->m_index >= s_macro_playback->m_text.length())
+        {
+            macro_playback* d = s_macro_playback;
+            s_macro_playback = s_macro_playback->m_next;
+            delete d;
+        }
+        return uint8_t(c);
+    }
+
     // TODO:  Differentiate between EOF versus other failures.
 
     if (hook_term_in)
@@ -33,7 +55,7 @@ int32_t term_in()
         if (s_pending_head < s_pending_utf8.length())
         {
             const char c = s_pending_utf8.c_str()[++s_pending_head];
-            return c;
+            return uint8_t(c);
         }
         s_pending_utf8.clear();
         s_pending_head = 0;
@@ -87,6 +109,23 @@ int32_t term_in()
     // TODO:  Use fgetc?
     // TODO:  What to do upon EOF?
 #endif
+}
+
+bool term_push_macro_text(const char* text, size_t len)
+{
+    macro_playback* m = new macro_playback;
+    if (!m)
+        return false;
+
+    if (!m->m_text.set(text, len))
+    {
+        delete m;
+        return false;
+    }
+
+    m->m_next = s_macro_playback;
+    s_macro_playback = m;
+    return true;
 }
 
 } // namespace tib

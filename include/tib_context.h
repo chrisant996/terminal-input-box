@@ -44,7 +44,7 @@ public:
     void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
 #endif
-    void                set_origin(int16_t x=-1, int16_t y=-1) { m_layout.origin = { x, y }; }
+    void                set_origin(int16_t x=-1, int16_t y=-1) { m_display.set_origin(x, y); }
     void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
 
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);

@@ -184,4 +184,33 @@ double clock()
     return s_clock.elapsed();
 }
 
+bool getenv(const char* name, cstring& out)
+{
+#ifdef _WIN32
+    cstring_t<WCHAR> wname;
+    cstring_t<WCHAR> wout;
+
+    out.clear();
+
+    if (!to_utf16(name, -1, wname))
+        return false;
+
+    const DWORD needed = GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
+    if (!needed)
+        return false;
+
+    if (!wout.reserve(needed))
+        return false;
+
+    const DWORD used = GetEnvironmentVariableW(wname.c_str(), wout.reserve(0), DWORD(wout.capacity()));
+    if (!used)
+        return false;
+
+    wout.set_length(used);
+    return to_utf8(wout.c_str(), wout.length(), out);
+#else
+    // TODO:  Alternative Linux implementation.
+#endif
+}
+
 } // namespace tib

@@ -8,6 +8,7 @@
 #include "maybe_windows.h"
 #include "tib.h"
 #include "tib_host.h"
+#include <wcwidth.h>
 #include <assert.h>
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
@@ -104,23 +105,108 @@ static int32_t undo(tib::editor_context& ctx, int32_t key, const char* name)
     return 0;
 }
 
+static int32_t select_all(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.set_selection(0, uint16_t(ctx.get_text().length()));
+    return 0;
+}
+
+static int32_t cua_begin_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.begin_of_input(true/*select*/);
+    return 0;
+}
+
+static int32_t cua_end_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.end_of_input(true/*select*/);
+    return 0;
+}
+
+static int32_t cua_backward_char(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.move_left(false/*word*/, true/*select*/);
+    return 0;
+}
+
+static int32_t cua_forward_char(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.move_right(false/*word*/, true/*select*/);
+    return 0;
+}
+
+static int32_t cua_backward_word(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.move_left(true/*word*/, true/*select*/);
+    return 0;
+}
+
+static int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.move_right(true/*word*/, true/*select*/);
+    return 0;
+}
+
+static int32_t cut(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.cut_to_clipboard();
+    return 0;
+}
+
+static int32_t copy(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.copy_to_clipboard();
+    return 0;
+}
+
+static int32_t paste(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.paste_from_clipboard();
+    return 0;
+}
+
+static int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.insert_text(
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
+        "eiusmod tempor incididunt ut labore et dolore magna aliqua.  Ut enim "
+        "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
+        "aliquip ex ea commodo consequat.  Duis aute irure dolor in "
+        "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
+        "pariatur.  Excepteur sint occaecat cupidatat non proident, sunt in "
+        "culpa qui officia deserunt mollit anim id est laborum.");
+    return 0;
+}
+
 std::shared_ptr<tib::key_table_list> make_basic_key_table()
 {
     auto t = std::make_shared<tib::key_table>();
 
     t->add({ "\177", tib::binding_target(backspace) });     // VT sends 0x7F for Backspace.
+    t->add({ "\001", tib::binding_target(select_all) });
+    t->add({ "\003", tib::binding_target(copy) });
     t->add({ "\010", tib::binding_target(del_word_left) }); // VT sends 0x08 for Ctrl-Backspace.
     t->add({ "\r", tib::binding_target(accept_line) });
+    t->add({ "\022", tib::binding_target(lorem_ipsum) });
+    t->add({ "\024", tib::binding_target("Macro Text") });
+    t->add({ "\026", tib::binding_target(paste) });
+    t->add({ "\030", tib::binding_target(cut) });
+    t->add({ "\031", tib::binding_target(redo) });
+    t->add({ "\032", tib::binding_target(undo) });
     t->add({ "\033[H", tib::binding_target(begin_of_line) });
     t->add({ "\033[F", tib::binding_target(end_of_line) });
     t->add({ "\033[D", tib::binding_target(backward_char) });
     t->add({ "\033[C", tib::binding_target(forward_char) });
     t->add({ "\033[1;5D", tib::binding_target(backward_word) });
     t->add({ "\033[1;5C", tib::binding_target(forward_word) });
+    t->add({ "\033[1;2H", tib::binding_target(cua_begin_of_line) });
+    t->add({ "\033[1;2F", tib::binding_target(cua_end_of_line) });
+    t->add({ "\033[1;2D", tib::binding_target(cua_backward_char) });
+    t->add({ "\033[1;2C", tib::binding_target(cua_forward_char) });
+    t->add({ "\033[1;6D", tib::binding_target(cua_backward_word) });
+    t->add({ "\033[1;6C", tib::binding_target(cua_forward_word) });
     t->add({ "\033[3~", tib::binding_target(del_char_right) });
     t->add({ "\033[3;5~", tib::binding_target(del_word_right) });
-    t->add({ "\031", tib::binding_target(redo) });
-    t->add({ "\032", tib::binding_target(undo) });
 
     auto tables = std::make_shared<tib::key_table_list>();
     tables->emplace_back(std::move(t));
@@ -131,8 +217,15 @@ int main(int argc, const char** argv)
 {
     --argc, ++argv;
 
+    {
+        tib::cstring v;
+        if (tib::getenv("TIB_NO_COALESCE_OUTPUT", v) && !v.empty())
+            tib::g_coalesce_output = !(atoi(v.c_str()) > 0);
+    }
+
     tib_host::set_crt_locale_utf8();
     tib_host::set_console_vt_input();
+    reset_wcwidths();
 
     const tib::border_definition* border = nullptr;
     // border = &tib::c_light_border;
@@ -225,6 +318,7 @@ int main(int argc, const char** argv)
             if (!(c & 0xffffff00))
             {
                 // Insert the char into the input_box.
+// TODO: optimize for typeahead insertion (with undo group).
                 tib.insert_char(char(c));
                 if (sequence.length() == 1/*c*/ + 1/*space*/)
                     sequence.clear();

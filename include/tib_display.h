@@ -15,6 +15,8 @@
 
 namespace tib {
 
+extern bool g_coalesce_output;
+
 struct border_definition
 {
     bool                has_top() const { return top && *top; }
@@ -41,14 +43,9 @@ typedef std::map<char, const char*> face_definitions;
 
 struct layout_info
 {
-    coord               origin = { -1, -1 };
-    coord               inner_offset = { 0, 0 };
-    // coord               extent = { 0, 0 };
     uint16_t            max_width = INT16_MAX;
     uint16_t            max_height = 1;
     bool                variable_height = false;
-
-    coord               cursor = { -1, -1 };
 };
 
 struct style_info
@@ -81,6 +78,9 @@ struct display_lines
 
     std::vector<display_line> m_lines;
     coord               m_cursor = { -1, -1 };
+
+    coord               m_inner_offset = { 0, 0 };
+    coord               m_extent = { 0, 0 };
 };
 
 class input_buffer;
@@ -91,10 +91,12 @@ public:
                         ~display_manager() = default;
                         display_manager() = default;
 
-    void                init_layout(layout_info* layout);
+    void                init_layout(const layout_info* layout);
     void                init_buffer(const input_buffer* buffer);
     void                init_style(const style_info* style);
     void                init_faces(const face_definitions* face_defs);
+    void                set_origin(int16_t x=-1, int16_t y=-1);
+
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
 
@@ -105,19 +107,30 @@ public:
     bool                display();
 
 private:
-    void                move_to_row(cstring& out, coord& cursor, uint16_t y, bool inner=true);
-    void                move_to_column(cstring& out, coord& cursor, uint16_t x, bool inner=true);
+    void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
+    void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
     const char*         get_face_def(char face) const;
     bool                build(display_lines& out);
-    void                append_border(cstring& out, uint16_t inner_lines);
+    void                append_border(uint16_t inner_lines);
 
-    layout_info*        m_layout = nullptr;         // Borrowed.
+    void                output(const char* s, size_t len=-1);
+    void                outputf(const char* format, ...);
+    void                output_color(const char* color);
+    void                output_spaces(size_t n);
+    void                maybe_flush();
+
+    const layout_info*  m_layout = nullptr;         // Borrowed.
     const input_buffer* m_buffer = nullptr;         // Borrowed.
     const style_info*   m_style = nullptr;          // Borrowed.
     const face_definitions* m_face_defs = nullptr;  // Borrowed.
+    coord               m_origin = { -1, -1 };
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
     bool                m_border_dirty = false;
+    coord               m_relative_cursor = { -1, -1 };
+
+    cstring             m_accumulator;
+    bool                m_coalesce_output = false;
 };
 
 } // namespace tib
