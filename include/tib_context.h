@@ -52,6 +52,8 @@ public:
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
+    void                set_face_defs(const face_definitions* face_defs);
+    void                set_empty_face(char face);
 
 #if 0
     int32_t             go(void* cookie=nullptr);

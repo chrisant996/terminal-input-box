@@ -36,21 +36,26 @@ extern const border_definition c_light_border;
 
 constexpr char FACE_DEFAULT     = ' ';
 constexpr char FACE_SELECTION   = '|';
+constexpr char FACE_EMPTY       = 0;
 typedef std::map<char, const char*> face_definitions;
 
 struct layout_info
 {
     coord               origin = { -1, -1 };
-    coord               extent = { 0, 0 };
+    coord               inner_offset = { 0, 0 };
+    // coord               extent = { 0, 0 };
     uint16_t            max_width = INT16_MAX;
     uint16_t            max_height = 1;
     bool                variable_height = false;
+
+    coord               cursor = { -1, -1 };
 };
 
 struct style_info
 {
     bool                horiz_scroll_markers = true;
     const border_definition* border = nullptr;
+    char                empty_face = FACE_EMPTY;
 };
 
 struct display_line
@@ -59,6 +64,7 @@ struct display_line
     uint16_t            m_x2;
     const char*         m_faces;
     const char*         m_text;
+    uint16_t            m_width;
     size_t              m_length;
 };
 
@@ -70,6 +76,7 @@ struct display_lines
     cstring             m_text;
     textpos_t           m_pos = 0;
     textpos_t           m_left = 0;
+    size_t              m_selection_length = 0;
     uint32_t            m_change_counter = 0;
 
     std::vector<display_line> m_lines;
@@ -98,8 +105,11 @@ public:
     bool                display();
 
 private:
+    void                move_to_row(cstring& out, coord& cursor, uint16_t y, bool inner=true);
+    void                move_to_column(cstring& out, coord& cursor, uint16_t x, bool inner=true);
+    const char*         get_face_def(char face) const;
     bool                build(display_lines& out);
-    void                append_border(const coord& origin, cstring& out);
+    void                append_border(cstring& out, uint16_t inner_lines);
 
     layout_info*        m_layout = nullptr;         // Borrowed.
     const input_buffer* m_buffer = nullptr;         // Borrowed.

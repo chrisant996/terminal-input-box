@@ -142,20 +142,30 @@ int main(int argc, const char** argv)
     colors->set_color(tib::color_element::base, "0;48;2;33;33;33");
     colors->set_color(tib::color_element::border, "0;38;2;33;33;33");
 
+    tib::face_definitions face_defs;
+    face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));
+    face_defs.emplace(tib::FACE_SELECTION, "0;48;2;33;33;33;93;7");
+    if (border == &c_padding_border)
+        face_defs.emplace(tib::FACE_EMPTY, colors->get_color(tib::color_element::border));
+
     tib::input_box tib;
     tib.set_bindings(make_basic_key_table());
     tib.set_border(border);
+    if (border == &c_padding_border)
+        tib.set_empty_face(tib::FACE_DEFAULT);
     tib.set_color_table(colors);
+    tib.set_face_defs(&face_defs);
 
 #ifdef _WIN32
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    tib.set_origin(csbi.dwCursorPosition.X + 1);
+    // CONSOLE_SCREEN_BUFFER_INFO csbi;
+    // GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    // tib.set_origin(csbi.dwCursorPosition.X + 1);
 #else
     // TODO:  Query the terminal for the current position.
 #endif
 
     tib.initialize_text("hello world");
+    tib.set_selection(0, uint16_t(tib.get_text().length()));
 
     tib::dispatcher dispatcher;
     dispatcher.init(tib.get_bindings());

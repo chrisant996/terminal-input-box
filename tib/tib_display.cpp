@@ -33,6 +33,7 @@ void display_lines::clear()
     m_text.clear();
     m_pos = 0;
     m_left = 0;
+    m_selection_length = 0;
     m_change_counter = 0;
 
     m_lines.clear();
@@ -84,14 +85,10 @@ uint32_t display_manager::get_effective_max_width() const
     if (!m_layout)
         return 0;
 
-// TODO:  Abstract behind a terminal object.
-#ifdef _WIN32
-    const HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    const uint16_t term_width = (GetConsoleScreenBufferInfo(hout, &csbi) ? csbi.dwSize.X : 80);
+    const uint16_t term_width = get_terminal_width();
 
     const border_definition* b = m_style ? m_style->border : nullptr;
+    // TODO: cache border cell_count metrics.
     const uint16_t b_left_width = (b && b->has_left()) ? cell_count(b->left, -1) : 0;
     const uint16_t b_right_width = (b && b->has_right()) ? cell_count(b->right, -1) : 0;
     const uint16_t extra_border_width = b_left_width + b_right_width;
@@ -106,9 +103,178 @@ uint32_t display_manager::get_effective_max_width() const
             return 0;
     }
     return max_width;
-#else
-    // TODO:  Alternative Linux implementation.
-#endif
+}
+
+bool display_manager::display()
+{
+    assert(m_layout);
+    assert(m_buffer);
+    if (!m_layout || !m_buffer || !m_buffer->get_change_counter())
+        return false;   // Nothing to display.
+
+    // Format content into display structures.
+// TODO: allow host to add their own display_line rows; that will simplify
+// showing/clearing their extra rows (something Clink still struggles with).
+    display_lines tmp;
+    if (!build(tmp))
+        return false;   // Nothing changed since list display (or OOM error).
+
+    if (m_style && m_style->border)
+    {
+        if (tmp.m_lines.size() != m_displayed.m_lines.size())
+            m_border_dirty = true;
+
+        // TODO: cache border metrics.
+        const border_definition& b = *m_style->border;
+        m_layout->inner_offset.y = b.has_top() ? 1 : 0;
+        m_layout->inner_offset.x = b.has_left() ? cell_count(b.left, -1) : 0;
+    }
+
+    // If origin not set yet, then pin it "here".
+    if (m_layout->origin.x <= 0)
+    {
+        m_layout->origin.x = 1;
+        m_layout->cursor = { 0, 0 };    // Cursor is relative to origin.
+        term_out("\r", 1);
+    }
+
+    cstring out;
+    coord cursor = m_layout->cursor;
+    const uint16_t term_width = get_terminal_width();
+    const uint32_t max_width = get_effective_max_width();
+
+    if (cursor.x < 0 && cursor.y < 0)
+        cursor = { -1, 0 };             // -1 forces move_to_column.
+// BUGBUG: cursor location initialization isn't thorough or fully correct yet.
+
+    // TODO:  Encapsulate terminal codes behind some termcap layer.
+
+    out.set(c_hide_cursor);
+
+    // Draw border if needed.
+    if (m_style && m_style->border && m_border_dirty)
+    {
+        move_to_row(out, cursor, 0, false/*inner*/);
+        append_border(out, uint16_t(tmp.m_lines.size()));
+        m_border_dirty = false;
+    }
+
+    // TODO: differential update of what's different between m_displayed and tmp.
+    // TODO: handle variable height input_box.
+
+    for (uint16_t i = 0; i < tmp.m_lines.size(); ++i)
+    {
+        auto const& line = tmp.m_lines[i];
+
+        move_to_row(out, cursor, i);
+        move_to_column(out, cursor, 0);
+
+        char face = 0;
+        const char* t = line.m_text;
+        const char* f = line.m_faces;
+        for (size_t len = line.m_length; len > 0;)
+        {
+            if (*f != face)
+            {
+                out.append_color(get_face_def(*f));
+                face = *f;
+            }
+
+            wcwidth_iter iter(t, len);
+            if (!iter.more())
+                break;
+
+            // BUGGBUG: does not handle invalid UTF8 correctly.
+            const char32_t c = iter.next();
+            const uint32_t clen = iter.character_length();
+            assert(clen <= len);
+
+            if (c >= 0 && c < ' ')
+            {
+                const char ctrl = c + '@';
+                out.append("^", 1);
+                out.append(&ctrl, 1);
+            }
+            else
+            {
+                out.append(iter.character_pointer(), clen);
+            }
+
+            t += clen;
+            f += clen;
+            len -= clen;
+            cursor.x += iter.character_wcwidth_twoctrl();
+        }
+
+        // Fill remaining width.
+        if (line.m_width < max_width)
+        {
+            out.append_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
+            if (max_width == term_width)
+            {
+                out.append("\x1b[K");
+            }
+            else
+            {
+                out.append_spaces(max_width - line.m_width);
+                cursor.x += max_width - line.m_width;
+            }
+        }
+    }
+
+    // TODO: erase rows in m_displayed but not in tmp (also account for border).
+
+    // Position cursor at the caret position.
+    move_to_row(out, cursor, tmp.m_cursor.y);
+    move_to_column(out, cursor, tmp.m_cursor.x);
+
+    out.append(c_show_cursor);
+    term_out(out.c_str(), out.length());
+
+    m_displayed = std::move(tmp);
+    m_layout->cursor = cursor;
+    return false;
+}
+
+void display_manager::move_to_row(cstring& out, coord& cursor, uint16_t y, bool inner)
+{
+    y += (inner ? m_layout->inner_offset.y : 0);
+    if (m_layout->origin.y > 0)
+        out.printf("\x1b[%uH", m_layout->origin.y + y);
+    else if (y < cursor.y)
+        out.printf("\x1b[%uA", cursor.y - y);
+    else if (y > cursor.y)
+        out.printf("\x1b[%uB", y - cursor.y);
+    else
+        return;
+    cursor.y = y;
+}
+
+void display_manager::move_to_column(cstring& out, coord& cursor, uint16_t x, bool inner)
+{
+    x += (inner ? m_layout->inner_offset.x : 0);
+    const uint16_t term_x = m_layout->origin.x + x;
+    if (term_x > 0)
+        out.printf("\x1b[%uG", term_x);
+    else
+        out.append("\r");
+    cursor.x = x;
+}
+
+const char* display_manager::get_face_def(char face) const
+{
+    if (!m_face_defs)
+        return (face == FACE_SELECTION) ? "0;7" : "";
+
+    const auto def = m_face_defs->find(face);
+    if (def == m_face_defs->end())
+    {
+        if (face == FACE_EMPTY)
+            return get_face_def(FACE_DEFAULT);
+        return "";
+    }
+
+    return def->second;
 }
 
 bool display_manager::build(display_lines& out)
@@ -118,11 +284,19 @@ bool display_manager::build(display_lines& out)
     if (!m_layout || !m_buffer)
         return false;
 
+    // TODO: redisplay when border changes.
+    // TODO: redisplay when layout extents change.
     const uint32_t change_counter = m_buffer->get_change_counter();
-    const textpos_t pos = m_buffer->get_selection_state().get_caret();
+    const selection_state& sel_state = m_buffer->get_selection_state();
+    const textpos_t sel_begin = sel_state.get_sel_begin();
+    const textpos_t sel_end = sel_state.get_sel_end();
+    const textpos_t pos = sel_state.get_caret();
     const textpos_t left = m_buffer->get_left();
 
-    if (change_counter == m_displayed.m_change_counter && pos == m_displayed.m_pos && left == m_displayed.m_left)
+    if (change_counter == m_displayed.m_change_counter &&
+        pos == m_displayed.m_pos &&
+        left == m_displayed.m_left &&
+        sel_end - sel_begin == m_displayed.m_selection_length)
         return false;
 
     // TODO: callback to provide faces.
@@ -133,31 +307,90 @@ bool display_manager::build(display_lines& out)
     tmp.m_pos = pos;
     tmp.m_left = left;
     tmp.m_change_counter = change_counter;
+    tmp.m_selection_length = sel_end - sel_begin;
 
-    tmp.m_text = m_buffer->get_text();
-    const cstring& text = tmp.m_text.c_str();
+    const cstring& text = tmp.m_text;
     tmp.m_faces.append_spaces(text.length());   // FACE_DEFAULT == space.
 
     // Overlay selection color into faces.
-    const selection_state& sel_state = m_buffer->get_selection_state();
-    const textpos_t sel_begin = sel_state.get_sel_begin();
-    const textpos_t sel_end = sel_state.get_sel_end();
     memset(tmp.m_faces.reserve(0) + sel_begin, FACE_SELECTION, sel_end - sel_begin);
 
-    // TODO: parse text into rows (lines).
+    // Parse text into rows (lines).
+    wcwidth_iter iter(text.c_str(), text.length());
+    const char* const cursor_ptr = text.c_str() + pos;
+    const char* row_text = text.c_str();
+    const char* row_faces = tmp.m_faces.c_str();
+    size_t row_len = 0;
+    uint16_t row_width = 0;
+    const uint32_t max_width = get_effective_max_width();
+// TODO: handle single line input_box.
+// TODO: handle fixed-height input_box.
+    while (iter.more())
+    {
+        // BUGBUG: does not handle invalid UTF8 correctly.
+        const char32_t c = iter.next();
+        const uint32_t clen = iter.character_length();
+        const uint32_t cwidth = iter.character_wcwidth_twoctrl();
 
-    // TODO: build display_line structs for each parsed row.
+        const bool update_cursor = (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen);
+
+        if (row_width + cwidth > max_width)
+        {
+            display_line line;
+            line.m_text = row_text;
+            line.m_faces = row_faces;
+            line.m_width = row_width;
+            line.m_length = row_len;
+            line.m_x1 = m_layout->origin.x;
+            line.m_x2 = m_layout->origin.x + max_width - 1;
+            tmp.m_lines.emplace_back(std::move(line));
+
+            row_text += row_len;
+            row_faces += row_len;
+            row_len = 0;
+            row_width = 0;
+        }
+
+        if (update_cursor)
+        {
+            tmp.m_cursor.x = row_width;
+            tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
+        }
+
+        row_len += clen;
+        row_width += cwidth;
+    }
+
+    // Add last line.
     display_line line;
-    line.m_text = text.c_str();
-    line.m_faces = tmp.m_faces.c_str();
-    line.m_length = text.length();
+    line.m_text = row_text;
+    line.m_faces = row_faces;
+    line.m_width = row_width;
+    line.m_length = row_len;
     line.m_x1 = m_layout->origin.x;
     line.m_x2 = m_layout->origin.x + get_effective_max_width() - 1;
     tmp.m_lines.emplace_back(std::move(line));
 
-    // TODO: calculate m_cursor.
-    tmp.m_cursor.x = pos + 1; // BUGBUG: m_cursor is in COLUMNS not CHARS.
-    tmp.m_cursor.y = 0;
+    if (tmp.m_cursor.x < 0)
+    {
+        assert(tmp.m_lines.size() > 0);
+        tmp.m_cursor.x = row_width;
+        tmp.m_cursor.y = uint16_t(tmp.m_lines.size()) - 1;
+    }
+    if (uint32_t(tmp.m_cursor.x) >= max_width)
+    {
+        display_line line;
+        line.m_text = "";
+        line.m_faces = "";
+        line.m_width = 0;
+        line.m_length = 0;
+        line.m_x1 = m_layout->origin.x;
+        line.m_x2 = m_layout->origin.x + get_effective_max_width() - 1;
+        tmp.m_lines.emplace_back(std::move(line));
+
+        tmp.m_cursor.x = 0;
+        ++tmp.m_cursor.y;
+    }
 
 #if 0
     m_colors->append_color(out, tib::color_element::base);
@@ -224,99 +457,7 @@ bool display_manager::build(display_lines& out)
     return true;
 }
 
-bool display_manager::display()
-{
-    assert(m_layout);
-    assert(m_buffer);
-    if (!m_layout || !m_buffer || !m_buffer->get_change_counter())
-        return false;   // Nothing to display.
-
-    const uint32_t change_counter = m_buffer->get_change_counter();
-    const textpos_t pos = m_buffer->get_selection_state().get_caret();
-    const textpos_t left = m_buffer->get_left();
-    if (change_counter == m_displayed.m_change_counter &&
-        pos == m_displayed.m_pos &&
-        left == m_displayed.m_left)
-        return false;   // Nothing changed since last display.
-
-    // Format content into display structures.
-    display_lines tmp;
-    if (!build(tmp))
-        return false;
-
-    cstring out;
-
-    // TODO:  Encapsulate terminal codes behind some termcap layer.
-
-    out.set(c_hide_cursor);
-
-    // TODO:  This is a temporary hack for borders with single line tib.
-    if (m_style && m_style->border && m_style->border->has_top())
-        out.append("\x1b[A");
-
-    auto goto_origin = [&](bool inner, coord& origin)
-    {
-        origin = m_layout->origin;
-        if (inner && m_style && m_style->border)
-        {
-            if (m_layout->origin.y > 0)
-                origin.y += m_style->border->has_top();
-            origin.x += m_style->border->has_left() ? cell_count(m_style->border->left, -1) : 0;
-        }
-        if (m_layout->origin.y > 0)
-        {
-            out.printf("\x1b[%u;%uH", origin.y, origin.x);
-        }
-        else
-        {
-            // TODO:  Move up to the origin row using relative positioning.
-            // That's crucial for supporting an input box with variable height.
-            if (inner && m_style && m_style->border && m_style->border->has_top())
-                out.append("\r\n");
-            out.printf("\x1b[%uG", origin.x);
-        }
-    };
-
-    // Draw border if needed.
-    coord origin;
-    if (m_style && m_style->border)
-    {
-        goto_origin(false/*inner*/, origin);
-        if (m_border_dirty)
-        {
-            append_border(origin, out);
-            m_border_dirty = false;
-        }
-    }
-
-    // Position cursor to draw the input text.
-    // TODO: avoid unless actually needs to display updated content.
-    goto_origin(true/*inner*/, origin);
-
-    // TODO: differential update of what's different between m_displayed and tmp.
-    m_colors->append_color(out, tib::color_element::base);
-    out.append(tmp.m_text.c_str());
-
-    // Position cursor at the caret position.
-    if (origin.y > 0)
-    {
-        out.printf("\x1b[%u;%uH", origin.y + tmp.m_cursor.y - 1, tmp.m_cursor.x);
-    }
-    else
-    {
-        // TODO:  Move up to the origin row using relative positioning.
-        // That's crucial for supporting an input box with variable height.
-        out.printf("\x1b[%uG", tmp.m_cursor.x);
-    }
-
-    out.append(c_show_cursor);
-    term_out(out.c_str(), out.length());
-
-    m_displayed = std::move(tmp);
-    return false;
-}
-
-void display_manager::append_border(const coord& origin, cstring& out)
+void display_manager::append_border(cstring& out, uint16_t inner_lines)
 {
     assert(m_layout);
     assert(m_buffer);
@@ -331,14 +472,15 @@ void display_manager::append_border(const coord& origin, cstring& out)
     if (!_width)
         return;
     const uint16_t width = _width + extra_border_width;
-    // TODO:  Multi-line, and variable height.
-    const uint16_t height = m_layout->max_height + extra_border_height;
+    // TODO: fixed height.
+    // TODO: variable height not exceeding max_height.
+    const uint16_t height = inner_lines + extra_border_height;
 
     out.append_color(m_colors->get_color(tib::color_element::border));
 
     if (b.top)
     {
-        out.printf("\x1b[%uG", origin.x);
+        out.printf("\x1b[%uG", m_layout->origin.x);
         if (b.top_left)
             out.append(b.top_left);
         for (uint16_t i = width - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
@@ -352,19 +494,19 @@ void display_manager::append_border(const coord& origin, cstring& out)
         out.append("\r\n");
         if (b_left_width)
         {
-            out.printf("\x1b[%uG", origin.x);
+            out.printf("\x1b[%uG", m_layout->origin.x);
             out.append(b.left);
         }
         if (b_right_width)
         {
-            out.printf("\x1b[%uG", origin.x + width - b_right_width);
+            out.printf("\x1b[%uG", m_layout->origin.x + width - b_right_width);
             out.append(b.right);
         }
     }
 
     if (b.bottom)
     {
-        out.printf("\r\n\x1b[%uG", origin.x);
+        out.printf("\r\n\x1b[%uG", m_layout->origin.x);
         if (b.bottom_left)
             out.append(b.bottom_left);
         for (uint16_t i = width - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)

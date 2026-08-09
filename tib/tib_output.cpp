@@ -64,6 +64,21 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
     return length_fits;
 }
 
+uint16_t get_terminal_width()
+{
+// TODO:  Abstract behind a terminal object.
+#ifdef _WIN32
+    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    uint16_t term_width = (GetConsoleScreenBufferInfo(hout, &csbi) ? csbi.dwSize.X : 80);
+
+    return term_width;
+#else
+    // TODO:  Alternative Linux implementation.
+#endif
+}
+
 void term_out(const char* s, size_t len)
 {
     len = resolve_auto_length(len, s);
