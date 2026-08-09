@@ -95,12 +95,16 @@ public:
     void                init_buffer(const input_buffer* buffer);
     void                init_style(const style_info* style);
     void                init_faces(const face_definitions* face_defs);
+
+    coord               get_origin() const { return m_origin; }
     void                set_origin(int16_t x=-1, int16_t y=-1);
 
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
 
     uint32_t            get_effective_max_width() const;
+    coord               get_relative_cursor() const { return m_relative_cursor; }
+    coord               get_extent() const;
 
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }

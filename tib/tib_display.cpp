@@ -118,6 +118,11 @@ uint32_t display_manager::get_effective_max_width() const
     return max_width;
 }
 
+coord display_manager::get_extent() const
+{
+    return m_displayed.m_extent;
+}
+
 bool display_manager::display()
 {
     assert(m_layout);

@@ -40,12 +40,15 @@ public:
     void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
     void                set_variable_height(bool v) { m_layout.variable_height = v; }
     void                set_border(const border_definition* border);
+    void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
 #if 0
     void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
 #endif
+    coord               get_origin() const { return m_display.get_origin(); }
     void                set_origin(int16_t x=-1, int16_t y=-1) { m_display.set_origin(x, y); }
-    void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
+    coord               get_relative_cursor() const { return m_display.get_relative_cursor(); }
+    coord               get_extent() const { return m_display.get_extent(); }
 
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
     std::shared_ptr<const key_table_list> get_bindings() const;

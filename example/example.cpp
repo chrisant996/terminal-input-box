@@ -277,7 +277,15 @@ int main(int argc, const char** argv)
 
         if (!show_sequence.empty())
         {
-            tmp.set("\033[s\n");
+            const tib::coord origin = tib.get_origin();
+            const tib::coord cursor = tib.get_relative_cursor();
+            const tib::coord extent = tib.get_extent();
+
+            tmp.set("\033[s");
+            if (cursor.y < extent.y - 1)
+                tmp.printf("\x1b[%uB", (extent.y - 1) - cursor.y);
+            else if (cursor.y > extent.y - 1)
+                tmp.printf("\x1b[%uA", cursor.y - (extent.y - 1));
             tmp.append_color(colors->get_color(tib::color_element::border));
             tmp.append_color("7;46");
             tmp.append("\x1b[4G keys:  ");
