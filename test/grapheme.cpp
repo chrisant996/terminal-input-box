@@ -27,13 +27,13 @@ static void check_back_one_grapheme(const grapheme_sample* samples, size_t count
     {
         --count;
         uint16_t width = 0;
-        caret = back_one_grapheme(text.c_str(), text.length(), caret, width);
+        caret = backward_one_grapheme(text.c_str(), text.length(), caret, &width);
         REQUIRE(caret == positions[count]);
         REQUIRE(width == samples[count].width);
     }
 
     uint16_t width = 1;
-    REQUIRE(back_one_grapheme(text.c_str(), text.length(), caret, width) == 0);
+    REQUIRE(backward_one_grapheme(text.c_str(), text.length(), caret, &width) == 0);
     REQUIRE(width == 0);
 }
 

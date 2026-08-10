@@ -66,6 +66,7 @@ private:
     bool            m_emoji = false;
 };
 
-uint32_t back_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t& width);
+uint32_t backward_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t* width=nullptr);
+uint32_t forward_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t* width=nullptr);
 
 #endif // __cplusplus

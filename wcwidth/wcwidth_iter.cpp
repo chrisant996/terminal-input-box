@@ -38,16 +38,16 @@ extern "C" uint32_t cell_count(const char* s, size_t len)
     return __wcswidth(s, len);
 }
 
-uint32_t back_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t& width)
+uint32_t backward_one_grapheme(const char* const s, const size_t len, const uint32_t pos, uint16_t* width)
 {
     assert(pos <= len);
-    (void)len;
 
-    width = 0;
+    if (width)
+        *width = 0;
     if (pos <= 0)
         return 0;
 
-    uint32_t parse_from = 0;
+    uint32_t backward = 0;
     uint32_t previous_nonzero = 0;
     bool have_nonzero = false;
     uint32_t walk = pos;
@@ -87,7 +87,7 @@ uint32_t back_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t& wi
             have_nonzero = false;
         else if (have_nonzero)
         {
-            parse_from = previous_nonzero;
+            backward = previous_nonzero;
             break;
         }
         else
@@ -97,22 +97,43 @@ uint32_t back_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t& wi
         }
     }
 
-    walk = parse_from;
-    bool have_grapheme = false;
-    wcwidth_iter iter(s + walk, pos - walk);
+    assert(backward < pos);
+    assert(!width || !*width);
+    walk = backward;
+
+    wcwidth_iter iter(s + walk, len - walk);
     while (iter.next())
     {
-        const char* const character = iter.character_pointer();
-        str_iter codepoint_iter(character, iter.character_length());
-        if (!have_grapheme || wcwidth(codepoint_iter.next()) != 0)
+        assert(s + walk == iter.character_pointer());
+        const uint32_t clen = iter.character_length();
+        if (walk + clen >= pos)
         {
-            walk = uint32_t(character - s);
-            width = uint16_t(iter.character_wcwidth_twoctrl());
-            have_grapheme = true;
+            if (width)
+                *width = iter.character_wcwidth_twoctrl();
+            break;
         }
+        walk += clen;
     }
 
     return walk;
+}
+
+uint32_t forward_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t* width)
+{
+    assert(pos <= len);
+
+    if (width)
+        *width = 0;
+    if (pos >= len)
+        return uint32_t(len);
+
+    wcwidth_iter iter(s + pos, len - pos);
+    if (!iter.next())
+        return pos;
+
+    if (width)
+        *width = uint16_t(iter.character_wcwidth_twoctrl());
+    return pos + iter.character_length();
 }
 
 wcwidth_iter::wcwidth_iter(const char* s, size_t len)
@@ -159,10 +180,15 @@ char32_t wcwidth_iter::next()
     m_chr_end = m_iter.get_pointer();
     m_next = m_iter.next();
 
+    // REVIEW:  This had tried to handle standalone combining mark codepoints,
+    // but it broke properly constructed use of combining marks.  I'm not sure
+    // how to differentiate standalone or malformed use of combining marks...
+#if 0
     // In the Windows console subsystem, combining marks actually have a
     // column width of 1, not 0 as the original wcwidth implementation
     // expected.
     combining_mark_width_scope cmwidth(1);
+#endif
 
     m_chr_wcwidth = wcwidth(c);
     if (m_chr_wcwidth < 0)

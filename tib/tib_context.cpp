@@ -83,7 +83,7 @@ static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, siz
     while (pos > 0 && backup)
     {
         uint16_t width;
-        const textpos_t prev = back_one_grapheme(s, len, pos, width);
+        const textpos_t prev = backward_one_grapheme(s, len, pos, &width);
         if (backup < width)
             break;
         pos = prev;
