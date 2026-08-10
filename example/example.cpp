@@ -237,7 +237,8 @@ int main(int argc, const char** argv)
 
     tib::face_definitions face_defs;
     face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));
-    face_defs.emplace(tib::FACE_SELECTION, "0;48;2;33;33;33;93;7");
+    face_defs.emplace(tib::FACE_SELECTION, "0;7");
+    face_defs.emplace(tib::FACE_SCROLLER, "0;48;2;33;33;33;36");
     if (border == &c_padding_border)
         face_defs.emplace(tib::FACE_EMPTY, colors->get_color(tib::color_element::border));
 
@@ -249,6 +250,7 @@ int main(int argc, const char** argv)
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
     // tib.set_max_height(2);
+    tib.set_max_width(40);
 
 #ifdef _WIN32
     // CONSOLE_SCREEN_BUFFER_INFO csbi;

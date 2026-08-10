@@ -38,8 +38,9 @@ struct border_definition
 
 extern const border_definition c_light_border;
 
-constexpr char FACE_DEFAULT     = ' ';
-constexpr char FACE_SELECTION   = '|';
+constexpr char FACE_DEFAULT     = 0x20;
+constexpr char FACE_SELECTION   = 0x1f;
+constexpr char FACE_SCROLLER    = 0x1e;
 constexpr char FACE_EMPTY       = 0;
 typedef std::map<char, const char*> face_definitions;
 
@@ -70,7 +71,6 @@ struct display_line
     uint16_t            m_x2 = 0;       // Last column in the line (1-based, EXCLUSIVE).
     uint16_t            m_lead = 0;     // Number of leading columns (e.g. wrapped part of ^X).
     uint16_t            m_trail = 0;    // Number of trailing columns of spaces past m_lastcol.
-    uint16_t            m_width = 0;    // Width of the line in cells.
 };
 
 struct display_lines
@@ -108,7 +108,7 @@ public:
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
 
-    uint32_t            get_effective_max_width() const;
+    uint32_t            get_effective_max_width(bool omit_scroll_markers=false) const;
     coord               get_relative_cursor() const { return m_relative_cursor; }
     coord               get_extent() const;
 

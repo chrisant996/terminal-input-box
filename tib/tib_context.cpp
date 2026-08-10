@@ -430,7 +430,7 @@ void editor_context::ensure_left()
     m_left = min(m_left, m_selection.get_caret());
 
     // Auto-scroll horizontally forward.
-    const uint32_t max_width = m_display.get_effective_max_width();
+    const uint32_t max_width = m_display.get_effective_max_width(true/*omit_scroll_markers*/);
     while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= max_width)
     {
         wcwidth_iter iter(m_text.c_str() + m_left, m_text.length() - m_left);
@@ -443,6 +443,10 @@ void editor_context::ensure_left()
     assert(m_selection.get_caret() >= m_left);
     {
         textpos_t backup_left = m_selection.get_caret();
+        // REVIEW: this doesn't seem to be backing up by 4, but the actual
+        // result seems to be a nice user experience (if caret is out of view
+        // then the text scrolls until the caret is either at the beginning or
+        // end of the input box).  But what is going on here?
         back_up_by_amount(backup_left, m_text.c_str(), m_selection.get_caret(), 4);
         if (m_left > backup_left)
             m_left = backup_left;
@@ -611,10 +615,6 @@ void editor_context::end_of_input(bool select)
         m_selection.set_selection(m_selection.get_caret(), textpos_t(m_text.length()));
     else
         m_selection.set_selection(m_selection.get_anchor(), textpos_t(m_text.length()));
-
-    // REVIEW: messy; this seems too early, since effective width can change asynchronously.
-    const uint32_t max_width = max<uint32_t>(2, m_display.get_effective_max_width());
-    m_left = back_up_by_amount(m_selection.get_caret(), m_text.c_str(), m_selection.get_caret(), max_width - 1);
 
     if (!select)
         m_selection.reset_word_anchor();

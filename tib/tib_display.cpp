@@ -29,6 +29,12 @@ const border_definition c_light_border =
     "┘",
 };
 
+#ifdef WIDE_HORZ_SCROLL_MARKERS
+const uint16_t c_horz_scroll_indicator_chars = 2;
+#else
+const uint16_t c_horz_scroll_indicator_chars = 1;
+#endif
+
 display_line::display_line(uint16_t x1)
 : m_x1(x1)
 , m_x2(x1)
@@ -107,7 +113,7 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     invalidate_border();
 }
 
-uint32_t display_manager::get_effective_max_width() const
+uint32_t display_manager::get_effective_max_width(bool omit_scroll_markers) const
 {
     assert(m_layout);
     if (!m_layout)
@@ -130,6 +136,10 @@ uint32_t display_manager::get_effective_max_width() const
         if (int32_t(max_width) < 8)
             return 0;
     }
+
+    if (omit_scroll_markers && m_layout->max_height == 1 && m_style->horiz_scroll_markers)
+        max_width = (max_width > c_horz_scroll_indicator_chars + 1) ? max_width - (c_horz_scroll_indicator_chars + 1) : 0;
+
     return max_width;
 }
 
@@ -367,17 +377,30 @@ bool display_manager::build(display_lines& out)
         tmp.m_extent.y += !!b.has_top() + !!b.has_bottom();
     }
 
-    // Parse text into rows (lines).
-    wcwidth_iter iter(text.c_str(), text.length());
+    wcwidth_iter iter(text.c_str() + left, text.length() - left);
     const char* const cursor_ptr = text.c_str() + pos;
     // const char* row_text = text.c_str();
     const char* face = faces.c_str();
     char pending = 0;
     bool expanding = false;
     const uint32_t max_width = get_effective_max_width();
+    const uint32_t max_width_omit_scroll_markers = get_effective_max_width(true/*omit_scroll_markers*/);
     std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
 // TODO: handle single line input_box.
 // TODO: handle fixed-height input_box.
+
+    assert(!left || m_layout->max_height == 1);
+    if (left && m_style->horiz_scroll_markers)
+    {
+        line->append("<", 1, 1, FACE_SCROLLER);
+        if (c_horz_scroll_indicator_chars > 0)
+        {
+            for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
+                line->append("<", 1, 1, FACE_SCROLLER);
+        }
+    }
+
+    // Parse text into rows (lines).
     while (iter.more())
     {
         // BUGBUG: does not handle invalid UTF8 correctly.
@@ -411,7 +434,12 @@ bool display_manager::build(display_lines& out)
         }
 
 again:
-        if (line->width() + cwidth > max_width)
+        if (m_layout->max_height == 1)
+        {
+            if (line->width() + cwidth > max_width_omit_scroll_markers)
+                break;
+        }
+        else if (line->width() + cwidth > max_width)
         {
             tmp.m_lines.emplace_back(std::move(line));
             line = std::make_unique<display_line>(m_origin.x);
@@ -439,7 +467,26 @@ next:
         tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
     }
     tmp.m_lines.emplace_back(std::move(line));
-    if (uint32_t(tmp.m_cursor.x) >= max_width)
+    if (m_layout->max_height == 1)
+    {
+        assert(tmp.m_lines.size() == 1);
+        assert(tmp.m_cursor.x >= 0);
+        assert(uint16_t(tmp.m_cursor.x) <= max_width);
+        if (iter.more())
+        {
+            auto& back = tmp.m_lines.back();
+            assert(back->width() < max_width);
+            while (uint16_t(back->width() + 1) < max_width)
+                back->append(" ", 1, 1, FACE_DEFAULT);
+            back->append(">", 1, 1, FACE_SCROLLER);
+            if (c_horz_scroll_indicator_chars > 0)
+            {
+                for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
+                    back->append(">", 1, 1, FACE_SCROLLER);
+            }
+        }
+    }
+    else if (uint32_t(tmp.m_cursor.x) >= max_width)
     {
         tmp.m_cursor.x = 0;
         ++tmp.m_cursor.y;
