@@ -386,12 +386,12 @@ bool display_manager::build(display_lines& out)
     const uint32_t max_width = get_effective_max_width();
     const uint32_t max_width_omit_scroll_markers = get_effective_max_width(true/*omit_scroll_markers*/);
     std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
-// TODO: handle single line input_box.
 // TODO: handle fixed-height input_box.
 
     assert(!left || m_layout->max_height == 1);
     if (left && m_style->horiz_scroll_markers)
     {
+        iter.next(); // Skip the grapheme that the scroller replaces.
         line->append("<", 1, 1, FACE_SCROLLER);
         if (c_horz_scroll_indicator_chars > 0)
         {
