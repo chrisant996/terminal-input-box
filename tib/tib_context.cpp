@@ -657,7 +657,7 @@ void editor_context::move_right(bool word, bool select)
 void editor_context::backspace(bool word)
 {
     m_selection.reset_word_anchor();
-    if (m_selection.get_caret() <= 0)
+    if (!m_selection.has_selection() && m_selection.get_caret() <= 0)
         return;
 
     begin_undo_group();
@@ -680,7 +680,7 @@ void editor_context::backspace(bool word)
 void editor_context::del(bool word)
 {
     m_selection.reset_word_anchor();
-    if (m_selection.get_caret() >= m_text.length())
+    if (!m_selection.has_selection() && m_selection.get_caret() >= m_text.length())
         return;
 
     begin_undo_group();
