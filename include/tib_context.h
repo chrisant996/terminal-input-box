@@ -14,6 +14,8 @@
 
 namespace tib {
 
+textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word);
+
 struct undo_entry
 {
                         undo_entry() = default;

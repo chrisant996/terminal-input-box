@@ -43,18 +43,13 @@ void undo_entry::unlink(undo_entry*& head, undo_entry*& tail)
     m_next = nullptr;
 }
 
+#if 0
 struct grapheme_info
 {
     uint16_t            index;
     uint16_t            length;
     uint16_t            width;
 };
-
-static bool is_space(char c)
-{
-    // TODO:  And various other appropriate Unicode blank space codepoints.
-    return (c == ' ' || c == '\t' || c == '\r' || c == '\n');
-}
 
 // TODO:  Too slow; building a vector of the entire content every single time does not scale.
 static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t len, const textpos_t pos, size_t& index_pos)
@@ -77,6 +72,7 @@ static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t le
     index_pos = i_p;
     return characters;
 }
+#endif
 
 static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
 {
@@ -92,20 +88,38 @@ static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, siz
     return pos;
 }
 
-static textpos_t pos_mover(const char* s, const size_t len, textpos_t& pos, const bool forward, const bool word)
+static bool is_space(char c)
 {
-    size_t index_pos = 0;
-    std::vector<grapheme_info> characters = parse_graphemes(s, len, pos, index_pos);
+    // FUTURE:  Various other appropriate Unicode blank space codepoints?
+    return (c == ' ' || c == '\t' || c == '\r' || c == '\n');
+}
 
-    if (pos && index_pos < characters.size() && pos != characters[index_pos].index)
+textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word)
+{
+    assert(pos >= 0);
+    const textpos_t len = textpos_t(_len);
+    assert(len >= 0);
+    assert(pos <= len);
+
+    // Try to make sure pos is at a valid codepoint boundary.
+    // BUGBUG: this does not handle invalid UTF8 well.
+    if (pos > 0 && pos < len)
     {
+        const textpos_t prev = backward_one_grapheme(s, _len, pos);
+        const textpos_t next = forward_one_grapheme(s, _len, prev);
         if (forward)
-            --index_pos;
+        {
+            if (next > pos)
+                pos = prev;
+        }
         else
-            ++index_pos;
+        {
+            if (next > pos)
+                pos = next;
+        }
     }
 
-    const size_t orig_index_pos = index_pos;
+    const textpos_t orig_pos = pos;
 
     if (forward)
     {
@@ -113,31 +127,28 @@ static textpos_t pos_mover(const char* s, const size_t len, textpos_t& pos, cons
         {
             if (!word)
             {
-                if (index_pos < characters.size())
-                    ++index_pos;
+                pos = forward_one_grapheme(s, _len, pos);
             }
             else
             {
-                while (index_pos < characters.size())
+                while (pos < len)
                 {
-                    const auto& g = characters[index_pos];
-                    if (!(g.length == 1 && is_space(s[g.index])))
+                    const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
+                    if ( ! (test_pos - pos == 1 && is_space(s[pos])))
                         break;
-                    ++index_pos;
+                    pos = test_pos;
                 }
-                while (index_pos < characters.size())
+                while (pos < len)
                 {
-                    const auto& g = characters[index_pos];
-                    if (g.length == 1 && is_space(s[g.index]))
+                    const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
+                    if (   (test_pos - pos == 1 && is_space(s[pos])))
                         break;
-                    ++index_pos;
+                    pos = test_pos;
                 }
             }
 
-            if (index_pos < characters.size())
-                pos = characters[index_pos].index;
-            else
-                pos = textpos_t(len);
+            if (pos > len)
+                pos = len;
         }
     }
     else
@@ -146,42 +157,34 @@ static textpos_t pos_mover(const char* s, const size_t len, textpos_t& pos, cons
         {
             if (!word)
             {
-                if (index_pos)
-                    --index_pos;
+                pos = backward_one_grapheme(s, _len, pos);
             }
             else
             {
-                assert(index_pos);
-                while (index_pos)
+                while (pos > 0)
                 {
-                    const size_t test_index = index_pos - 1;
-                    const auto& g = characters[test_index];
-                    if (!(g.length == 1 && is_space(s[g.index])))
+                    const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
+                    if ( ! (pos - test_pos == 1 && is_space(s[test_pos])))
                         break;
-                    index_pos = test_index;
+                    pos = test_pos;
                 }
-                while (index_pos)
+                while (pos > 0)
                 {
-                    const size_t test_index = index_pos - 1;
-                    const auto& g = characters[test_index];
-                    if (g.length == 1 && is_space(s[g.index]))
+                    const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
+                    if (   (pos - test_pos == 1 && is_space(s[test_pos])))
                         break;
-                    index_pos = test_index;
+                    pos = test_pos;
                 }
             }
 
-            if (index_pos < characters.size())
-                pos = characters[index_pos].index;
-            else
+            if (pos >= len)
                 pos = 0;
         }
     }
 
-    textpos_t moved = 0;
-    const size_t begin = min(index_pos, orig_index_pos);
-    const size_t end = max(index_pos, orig_index_pos);
-    for (size_t i = begin; i < end; ++i)
-        moved += characters[i].length;
+    const textpos_t begin = min(pos, orig_pos);
+    const textpos_t end = max(pos, orig_pos);
+    const textpos_t moved = end - begin;
     return moved;
 }
 
