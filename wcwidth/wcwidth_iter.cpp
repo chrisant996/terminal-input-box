@@ -38,6 +38,83 @@ extern "C" uint32_t cell_count(const char* s, size_t len)
     return __wcswidth(s, len);
 }
 
+uint32_t back_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t& width)
+{
+    assert(pos <= len);
+    (void)len;
+
+    width = 0;
+    if (pos <= 0)
+        return 0;
+
+    uint32_t parse_from = 0;
+    uint32_t previous_nonzero = 0;
+    bool have_nonzero = false;
+    uint32_t walk = pos;
+    while (walk)
+    {
+        // Find beginning of preceding UTF8 codepoint.
+        do
+            --walk;
+        while (walk > 0 && (uint8_t(s[walk]) & 0xc0) == 0x80);
+
+        // Decode the codepoint.
+        // BUGBUG: this does not handle invalid UTF8 correctly.
+        const uint8_t lead = uint8_t(s[walk]);
+        char32_t codepoint;
+        if (lead < 0x80)
+            codepoint = lead;
+        else if (lead < 0xe0)
+            codepoint = ((lead & 0x1f) << 6) |
+                        (uint8_t(s[walk + 1]) & 0x3f);
+        else if (lead < 0xf0)
+            codepoint = ((lead & 0x0f) << 12) |
+                        ((uint8_t(s[walk + 1]) & 0x3f) << 6) |
+                        (uint8_t(s[walk + 2]) & 0x3f);
+        else
+            codepoint = ((lead & 0x07) << 18) |
+                        ((uint8_t(s[walk + 1]) & 0x3f) << 12) |
+                        ((uint8_t(s[walk + 2]) & 0x3f) << 6) |
+                        (uint8_t(s[walk + 3]) & 0x3f);
+
+        // Keep backing up until two adjacent, independent non-zero width
+        // codepoints, and then switch to parsing forward.  Continuations and
+        // regional indicators require parsing from farther back.
+        const bool continuation = ((wcwidth(codepoint) == 0) ||
+                                   (codepoint >= 0x1f1e6 && codepoint <= 0x1f1ff) || // Regional indicator.
+                                   (tib::g_color_emoji && is_variant_selector(codepoint)));
+        if (continuation)
+            have_nonzero = false;
+        else if (have_nonzero)
+        {
+            parse_from = previous_nonzero;
+            break;
+        }
+        else
+        {
+            previous_nonzero = walk;
+            have_nonzero = true;
+        }
+    }
+
+    walk = parse_from;
+    bool have_grapheme = false;
+    wcwidth_iter iter(s + walk, pos - walk);
+    while (iter.next())
+    {
+        const char* const character = iter.character_pointer();
+        str_iter codepoint_iter(character, iter.character_length());
+        if (!have_grapheme || wcwidth(codepoint_iter.next()) != 0)
+        {
+            walk = uint32_t(character - s);
+            width = uint16_t(iter.character_wcwidth_twoctrl());
+            have_grapheme = true;
+        }
+    }
+
+    return walk;
+}
+
 wcwidth_iter::wcwidth_iter(const char* s, size_t len)
 : m_iter(s, len)
 {
