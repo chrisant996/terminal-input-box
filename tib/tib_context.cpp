@@ -80,29 +80,14 @@ static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t le
 
 static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
 {
-    if (pos)
+    while (pos > 0 && backup)
     {
-        size_t index_pos = 0;
-        std::vector<grapheme_info> characters = parse_graphemes(s, len, pos, index_pos);
-        if (!characters.size())
-            return pos;
-
-        if (!index_pos)
-            return 0;
-
-        if (index_pos >= characters.size() || characters[index_pos].index == pos)
-            --index_pos;
-
-        bool at_least_one = true;
-        while (at_least_one || characters[index_pos].width <= backup)
-        {
-            at_least_one = false;
-            pos = characters[index_pos].index;
-            backup -= characters[index_pos].width;
-            if (!index_pos)
-                break;
-            --index_pos;
-        }
+        uint16_t width;
+        const textpos_t prev = back_one_grapheme(s, len, pos, width);
+        if (backup < width)
+            break;
+        pos = prev;
+        backup -= width;
     }
     return pos;
 }
@@ -442,12 +427,7 @@ void editor_context::ensure_left()
     // Auto-scroll horizontally backward.
     assert(m_selection.get_caret() >= m_left);
     {
-        textpos_t backup_left = m_selection.get_caret();
-        // REVIEW: this doesn't seem to be backing up by 4, but the actual
-        // result seems to be a nice user experience (if caret is out of view
-        // then the text scrolls until the caret is either at the beginning or
-        // end of the input box).  But what is going on here?
-        back_up_by_amount(backup_left, m_text.c_str(), m_selection.get_caret(), 4);
+        textpos_t backup_left = back_up_by_amount(m_selection.get_caret(), m_text.c_str(), m_selection.get_caret(), 4);
         if (m_left > backup_left)
             m_left = backup_left;
     }
