@@ -138,7 +138,7 @@ uint32_t display_manager::get_effective_max_width(bool omit_scroll_markers) cons
     }
 
     if (omit_scroll_markers && m_layout->max_height == 1 && m_style->horiz_scroll_markers)
-        max_width = (max_width > c_horz_scroll_indicator_chars + 1) ? max_width - (c_horz_scroll_indicator_chars + 1) : 0;
+        max_width = (max_width > c_horz_scroll_indicator_chars) ? max_width - c_horz_scroll_indicator_chars : 0;
 
     return max_width;
 }
@@ -401,6 +401,7 @@ bool display_manager::build(display_lines& out)
     }
 
     // Parse text into rows (lines).
+    bool short_circuited = false;
     while (iter.more())
     {
         // BUGBUG: does not handle invalid UTF8 correctly.
@@ -436,8 +437,14 @@ bool display_manager::build(display_lines& out)
 again:
         if (m_layout->max_height == 1)
         {
-            if (line->width() + cwidth > max_width_omit_scroll_markers)
+            if (line->width() + cwidth > max_width_omit_scroll_markers &&
+                !(!expanding &&
+                  !iter.more() &&
+                  line->width() + cwidth <= max_width_omit_scroll_markers + c_horz_scroll_indicator_chars))
+            {
+                short_circuited = true;
                 break;
+            }
         }
         else if (line->width() + cwidth > max_width)
         {
@@ -472,7 +479,7 @@ next:
         assert(tmp.m_lines.size() == 1);
         assert(tmp.m_cursor.x >= 0);
         assert(uint16_t(tmp.m_cursor.x) <= max_width);
-        if (iter.more())
+        if (short_circuited || iter.more())
         {
             auto& back = tmp.m_lines.back();
             assert(back->width() < max_width);
