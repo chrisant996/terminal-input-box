@@ -65,6 +65,9 @@ public:
 #endif
     int32_t             do_binding_target(const binding_target* target, int32_t c);
     void                display();
+    void                erase_display();
+    void                move_to_end_of_display();
+    void                move_to_caret_position();
 
     void                begin_of_input(bool select=false);
     void                end_of_input(bool select=false);

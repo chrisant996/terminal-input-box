@@ -64,7 +64,7 @@
 #ifdef _WIN32
 #include <wchar.h>
 #else
-// TODO:  ?
+// TODO: ?
 #endif
 
 #include "tib_base.h"

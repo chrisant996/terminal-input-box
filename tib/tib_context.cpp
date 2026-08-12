@@ -51,7 +51,9 @@ struct grapheme_info
     uint16_t            width;
 };
 
-// TODO:  Too slow; building a vector of the entire content every single time does not scale.
+// NOTE: Generally use backward_one_grapheme and forward_one_grapheme instead,
+// but there could be cases where mapping the grapheme boundaries of an entire
+// text string is still appropriate.
 static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t len, const textpos_t pos, size_t& index_pos)
 {
     std::vector<grapheme_info> characters;
@@ -413,13 +415,34 @@ void editor_context::display()
     m_display.display();
 }
 
+void editor_context::erase_display()
+{
+    m_display.erase_display();
+}
+
+void editor_context::move_to_end_of_display()
+{
+    m_display.move_to_end_of_display();
+}
+
+void editor_context::move_to_caret_position()
+{
+    m_display.move_to_caret_position();
+}
+
 void editor_context::ensure_left()
 {
+    const coord max_size = m_display.get_effective_max_size(true/*omit_scroll_markers*/);
+    if (max_size.y != 1)
+    {
+        m_left = 0;
+        return;
+    }
+
     m_left = min(m_left, m_selection.get_caret());
 
     // Auto-scroll horizontally forward.
-    const uint32_t max_width = m_display.get_effective_max_width(true/*omit_scroll_markers*/);
-    while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= max_width)
+    while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= uint32_t(max_size.x))
     {
         wcwidth_iter iter(m_text.c_str() + m_left, m_text.length() - m_left);
         if (!iter.next())
@@ -435,145 +458,6 @@ void editor_context::ensure_left()
             m_left = backup_left;
     }
 }
-
-#if 0
-void editor_context::print_visible()
-{
-    cstring out;
-
-    // TODO:  Encapsulate terminal codes behind some termcap layer.
-
-    out.set(c_hide_cursor);
-
-    // TODO:  This is a temporary hack for borders with single line tib.
-    if (m_border && m_border->has_top())
-        out.append("\x1b[A");
-
-    auto goto_origin = [&](bool inner, coord& origin)
-    {
-        origin = m_layout.origin;
-        if (inner && m_border)
-        {
-            if (m_layout.origin.y > 0)
-                origin.y += m_border->has_top();
-            origin.x += m_border->has_left() ? cell_count(m_border->left, -1) : 0;
-        }
-        if (m_layout.origin.y > 0)
-        {
-            out.printf("\x1b[%u;%uH", origin.y, origin.x);
-        }
-        else
-        {
-            // TODO:  Move up to the origin row using relative positioning.
-            // That's crucial for supporting an input box with variable height.
-            if (inner && m_border && m_border->has_top())
-                out.append("\r\n");
-            out.printf("\x1b[%uG", origin.x);
-        }
-    };
-
-    coord origin;
-    if (m_border)
-    {
-        goto_origin(false/*inner*/, origin);
-        if (m_border_dirty)
-        {
-            append_border(origin, out);
-            m_border_dirty = false;
-        }
-    }
-    goto_origin(true/*inner*/, origin);
-    m_colors->append_color(out, tib::color_element::base);
-
-    uint16_t max_width = get_effective_max_width();
-    bool left_marker = m_horiz_scroll_markers && (m_left > 0);
-    bool right_marker = false;
-    size_t lo_limit = m_left;
-    size_t hi_limit = 0;
-
-    if (left_marker)
-    {
-        wcwidth_iter wi(m_text.c_str() + m_left);
-        if (wi.next())
-        {
-            lo_limit += wi.character_length();
-            max_width -= 1; // Width of left marker, not the iter character.
-        }
-    }
-
-    uint16_t width = 0;
-    const size_t len = fits_in_wcwidth(m_text.c_str() + lo_limit, m_text.length() - lo_limit, max_width - m_horiz_scroll_markers, &width);
-    hi_limit = lo_limit + len;
-
-    if (m_horiz_scroll_markers && width > 0)
-    {
-        wcwidth_iter wi(m_text.c_str() + lo_limit + len);
-        if (wi.next())
-        {
-            if (hi_limit + wi.character_length() == m_text.length() &&
-                width + wi.character_wcwidth_onectrl() <= max_width)
-            {
-                hi_limit = m_text.length();
-                width += wi.character_wcwidth_onectrl();
-            }
-            else
-            {
-                right_marker = true;
-                --max_width;
-            }
-        }
-    }
-
-    if (left_marker)
-    {
-        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
-        out.append("<", 1);
-    }
-    m_colors->append_color(out, color_element::base, color_element::input);
-
-    if (m_selection.get_anchor() <= m_text.length())
-    {
-        const textpos_t begin = clamp<textpos_t>(m_selection.get_sel_begin(), textpos_t(lo_limit), textpos_t(hi_limit));
-        const textpos_t end = clamp<textpos_t>(m_selection.get_sel_end(), textpos_t(lo_limit), textpos_t(hi_limit));
-        out.append(m_text.c_str() + lo_limit, begin - lo_limit);
-        if (begin < end)
-        {
-            m_colors->append_color(out, color_element::base, color_element::input_selection);
-            out.append(m_text.c_str() + begin, end - begin);
-            // REVIEW:  Should this append a space here if the selection isn't fully drawn due to character width clipping?
-            m_colors->append_color(out, color_element::base, color_element::input);
-        }
-        if (hi_limit > end)
-            out.append(m_text.c_str() + end, hi_limit - end);
-    }
-    else
-    {
-        out.append(m_text.c_str() + lo_limit, len);
-    }
-
-    out.append_spaces(max_width - width);
-    if (right_marker)
-    {
-        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
-        out.append(">", 1);
-    }
-    const int16_t cursor_x = origin.x + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit);
-    if (origin.y > 0)
-    {
-        out.printf("\x1b[%u;%uH", origin.y, cursor_x);
-    }
-    else
-    {
-        // TODO:  Move up to the origin row using relative positioning.
-        // That's crucial for supporting an input box with variable height.
-        out.printf("\x1b[%uG", cursor_x);
-    }
-
-    out.append(c_show_cursor);
-
-    term_out(out.c_str(), out.length());
-}
-#endif
 
 void editor_context::begin_of_input(bool select)
 {
@@ -796,8 +680,9 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
     m_selection.set_caret(m_text.Length());
     m_defer_init_undo = !keep_undo;
 
-    const uint32_t max_width = max<uint32_t>(2, get_effective_max_width());
-    m_left = back_up_by_amount(get_caret(), m_text.c_str(), m_left, max_width - 1);
+    coord max_size = get_effective_max_size();
+    max_size.x = max<int16_t>(2, max_size.x);
+    m_left = back_up_by_amount(get_caret(), m_text.c_str(), m_left, max_size.x - 1);
 }
 #endif
 

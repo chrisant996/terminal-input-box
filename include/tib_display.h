@@ -76,7 +76,9 @@ struct display_line
 struct display_lines
 {
     void                clear();
+    void                apply_scroll_markers(int16_t rows);
 
+    int32_t             m_top = 0;
     textpos_t           m_pos = 0;
     textpos_t           m_left = 0;
     size_t              m_selection_length = 0;
@@ -87,6 +89,8 @@ struct display_lines
 
     coord               m_inner_offset = { 0, 0 };
     coord               m_extent = { 0, 0 };
+
+    bool                m_erase = false;
 };
 
 class input_buffer;
@@ -103,25 +107,29 @@ public:
     void                init_faces(const face_definitions* face_defs);
 
     coord               get_origin() const { return m_origin; }
-    void                set_origin(int16_t x=-1, int16_t y=-1);
+    void                set_origin(int32_t x=-1, int32_t y=-1);
 
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
 
-    uint32_t            get_effective_max_width(bool omit_scroll_markers=false) const;
+    coord               get_effective_max_size(bool omit_scroll_markers=false) const;
     coord               get_relative_cursor() const { return m_relative_cursor; }
     coord               get_extent() const;
 
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }
     bool                display();
+    void                erase_display();
+    void                move_to_end_of_display();
+    void                move_to_caret_position();
 
 private:
     void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
     void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
     const char*         get_face_def(char face) const;
+    bool                display_internal(display_lines& lines);
     bool                build(display_lines& out);
-    void                append_border(uint16_t inner_lines);
+    void                append_border(coord extent);
 
     void                output(const char* s, size_t len=-1);
     void                outputf(const char* format, ...);
@@ -136,6 +144,7 @@ private:
     coord               m_origin = { -1, -1 };
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
+    uint32_t            m_top = 0;
     bool                m_border_dirty = false;
     coord               m_relative_cursor = { -1, -1 };
 

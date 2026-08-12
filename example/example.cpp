@@ -249,7 +249,8 @@ int main(int argc, const char** argv)
         tib.set_empty_face(tib::FACE_DEFAULT);
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
-    // tib.set_max_height(2);
+    tib.set_max_height(3);
+    // tib.set_variable_height(true);
     tib.set_max_width(40);
 
 #ifdef _WIN32
@@ -347,6 +348,8 @@ int main(int argc, const char** argv)
             break;
         }
     }
+
+    tib.erase_display();
 
     tib::term_out("\r\n", 2);
 

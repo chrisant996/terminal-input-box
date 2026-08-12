@@ -34,8 +34,8 @@ typedef int32_t textpos_t;
 
 struct coord
 {
-    int16_t             x;
-    int16_t             y;
+    int32_t             x;
+    int32_t             y;
 };
 
 // A counted string that can optionally contain embedded NUL characters.

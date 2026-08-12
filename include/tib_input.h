@@ -9,7 +9,7 @@
 
 namespace tib {
 
-// TODO:  Input driver abstraction.
+// TODO: Input driver abstraction.
 
 int32_t term_in();
 // TODO: int32_t term_in_peek();

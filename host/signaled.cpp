@@ -97,7 +97,7 @@ BOOL auto_terminal_init::BreakHandler(DWORD CtrlType)
     return false;
 }
 #else
-// TODO:  POSIX sigaction alternative.
+    // TODO:  POSIX sigaction alternative.
 #endif
 
 } // namespace tib_host

@@ -14,7 +14,7 @@ namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
 
-// TODO:  Initialize appropriately.
+// TODO: Initialize appropriately.
 bool g_color_emoji = true;
 
 const char c_hide_cursor[] = "\x1b[?25l";
@@ -64,19 +64,22 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
     return length_fits;
 }
 
-uint16_t get_terminal_width()
+// TODO: Abstract behind a terminal object.
+coord get_terminal_size()
 {
-// TODO:  Abstract behind a terminal object.
+    coord size = { 80, 25 };
 #ifdef _WIN32
-    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    uint16_t term_width = (GetConsoleScreenBufferInfo(hout, &csbi) ? csbi.dwSize.X : 80);
-
-    return term_width;
+    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (GetConsoleScreenBufferInfo(hout, &csbi))
+    {
+        size.x = csbi.dwSize.X;
+        size.y = csbi.dwSize.Y;
+    }
 #else
     // TODO:  Alternative Linux implementation.
 #endif
+    return size;
 }
 
 void term_out(const char* s, size_t len)

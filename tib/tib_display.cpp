@@ -54,6 +54,7 @@ void display_line::append(const char* p, uint32_t len, uint32_t width, char face
 
 void display_lines::clear()
 {
+    m_top = 0;
     m_pos = 0;
     m_left = 0;
     m_selection_length = 0;
@@ -61,12 +62,44 @@ void display_lines::clear()
 
     m_lines.clear();
     m_cursor = { -1, -1 };
+
+    m_inner_offset = { 0, 0 };
+    m_extent = { 0, 0 };
+}
+
+void display_lines::apply_scroll_markers(int16_t rows)
+{
+    assert(rows > 0);
+    if (m_lines.size() < size_t(rows))
+    {
+        m_top = 0;
+        return;
+    }
+
+    // Discard lines after the visible section.
+    if (m_lines.size() > size_t(m_top + rows))
+    {
+        m_lines.erase(m_lines.begin() + m_top + rows, m_lines.end());
+// TODO: apply scroll marker to last row.
+    }
+
+    // Discard lines before the visible section.
+    if (m_lines.size() > rows)
+    {
+        m_top = int32_t(m_lines.size() - size_t(rows));
+        m_lines.erase(m_lines.begin(), m_lines.begin() + m_top);
+        assert(m_lines.size() == rows);
+// TODO: apply scroll marker to first row.
+    }
+
+    m_cursor.y = max(0, m_cursor.y - m_top);
 }
 
 void display_manager::init_layout(const layout_info* layout)
 {
     m_layout = layout;
     m_displayed.clear();
+    m_top = 0;
     invalidate();
     invalidate_border();
 }
@@ -74,6 +107,7 @@ void display_manager::init_layout(const layout_info* layout)
 void display_manager::init_buffer(const input_buffer* buffer)
 {
     m_buffer = buffer;
+    m_top = 0;
     invalidate();
 }
 
@@ -90,11 +124,11 @@ void display_manager::init_faces(const face_definitions* face_defs)
     invalidate();
 }
 
-void display_manager::set_origin(int16_t x, int16_t y)
+void display_manager::set_origin(int32_t x, int32_t y)
 {
     assert(x != 0);
     assert(y != 0);
-    m_origin.x = (x == uint16_t(-1)) ? 1 : x;
+    m_origin.x = (x == uint32_t(-1)) ? 1 : x;
     m_origin.y = y;
     m_displayed.clear();
     invalidate();
@@ -113,34 +147,44 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     invalidate_border();
 }
 
-uint32_t display_manager::get_effective_max_width(bool omit_scroll_markers) const
+coord display_manager::get_effective_max_size(bool omit_scroll_markers) const
 {
     assert(m_layout);
     if (!m_layout)
-        return 0;
+    {
+nope:
+        return { 0, 0 };
+    }
 
-    const uint16_t term_width = get_terminal_width();
+    const coord term_size = get_terminal_size();
 
     const border_definition* b = m_style ? m_style->border : nullptr;
     // TODO: cache border cell_count metrics.
     const uint16_t b_left_width = (b && b->has_left()) ? cell_count(b->left, -1) : 0;
     const uint16_t b_right_width = (b && b->has_right()) ? cell_count(b->right, -1) : 0;
     const uint16_t extra_border_width = b_left_width + b_right_width;
+    const uint16_t b_height = !!b->has_top() + !!b->has_bottom();
 
-    uint32_t max_width = m_layout->max_width;
-    if (uint32_t(m_origin.x) + max_width + extra_border_width >= term_width)
+    coord max_size;
+    max_size.x = m_layout->max_width;
+    max_size.y = clamp<int16_t>(m_layout->max_height, 0, term_size.y - b_height);
+    if (m_origin.x + max_size.x + extra_border_width >= term_size.x)
     {
-        if (term_width <= m_origin.x + extra_border_width)
-            return 0;
-        max_width = uint32_t(term_width - (m_origin.x + extra_border_width - 1));
-        if (int32_t(max_width) < 8)
-            return 0;
+        if (term_size.x <= m_origin.x + extra_border_width)
+            goto nope;
+        max_size.x = term_size.x - (m_origin.x + extra_border_width - 1);
+        if (max_size.x < 8)
+            goto nope;
     }
+    if (max_size.y <= 0)
+        goto nope;
 
-    if (omit_scroll_markers && m_layout->max_height == 1 && m_style->horiz_scroll_markers)
-        max_width = (max_width > c_horz_scroll_indicator_chars) ? max_width - c_horz_scroll_indicator_chars : 0;
+    if (omit_scroll_markers && max_size.y == 1 && m_style->horiz_scroll_markers)
+        max_size.x = (max_size.x > c_horz_scroll_indicator_chars) ? max_size.x - c_horz_scroll_indicator_chars : 0;
 
-    return max_width;
+    assert(max_size.x >= 0);
+    assert(max_size.y >= 0);
+    return max_size;
 }
 
 coord display_manager::get_extent() const
@@ -164,33 +208,46 @@ bool display_manager::display()
     }
 
     // Format content into display structures.
-// TODO: allow host to add their own display_line rows; that will simplify
-// showing/clearing their extra rows (something Clink still struggles with).
+    // TODO: allow host to add their own display_line rows; that will simplify
+    // showing/clearing its extra rows (something Clink still struggles with).
     display_lines tmp;
     if (!build(tmp))
         return false;   // Nothing changed since list display (or OOM error).
 
-    if (!m_displayed.m_change_counter || memcmp(&tmp.m_extent, &m_displayed.m_extent, sizeof(tmp.m_extent)) != 0)
+    return display_internal(tmp);
+}
+
+bool display_manager::display_internal(display_lines& lines)
+{
+    if (lines.m_erase)
+    {
+        assert(lines.m_lines.empty());
+        lines.m_extent.x = m_displayed.m_extent.x;
+        lines.m_extent.y = 0;
+    }
+
+    if (!m_displayed.m_change_counter ||
+        memcmp(&lines.m_extent, &m_displayed.m_extent, sizeof(lines.m_extent)) != 0)
         m_border_dirty = true;
 
     m_accumulator.clear();
     m_coalesce_output = g_coalesce_output;
 
     coord cursor = m_relative_cursor;
-    const uint16_t term_width = get_terminal_width();
-    const uint32_t max_width = get_effective_max_width();
+    const coord term_size = get_terminal_size();
+    const coord max_size = get_effective_max_size();
 
     if (cursor.x < 0 && cursor.y < 0)
         cursor = { -1, 0 };             // -1 forces move_to_column.
 // BUGBUG: cursor location initialization isn't thorough or fully correct yet.
 
-    // TODO:  Encapsulate terminal codes behind some termcap layer.
+    // TODO: Encapsulate terminal codes behind some termcap layer.
 
     auto erase_row = [&](int16_t width)
     {
         if (width <= 0)
             return;
-        if (m_origin.x + max_width - 1 == term_width)
+        if (m_origin.x + max_size.x - 1 == term_size.x)
         {
             output("\x1b[K");
         }
@@ -204,23 +261,22 @@ bool display_manager::display()
     output(c_hide_cursor);
 
     // Draw border if needed.
-    if (m_style && m_style->border && m_border_dirty)
+    if (!lines.m_erase && m_style && m_style->border && m_border_dirty)
     {
         move_to_row(cursor, 0, 0);
         move_to_column(cursor, 0, 0);
-        append_border(uint16_t(tmp.m_lines.size()));
-        m_border_dirty = false;
+        append_border(lines.m_extent);
     }
+    m_border_dirty = false;
 
-    // TODO: differential update of what's different between m_displayed and tmp.
-    // TODO: handle variable height input_box.
+    // TODO: differential update of what's different between m_displayed and lines.
 
-    for (uint16_t i = 0; i < tmp.m_lines.size(); ++i)
+    for (uint16_t i = 0; i < lines.m_lines.size(); ++i)
     {
-        auto const& line = tmp.m_lines[i];
+        auto const& line = lines.m_lines[i];
 
-        move_to_row(cursor, i, tmp.m_inner_offset.y);
-        move_to_column(cursor, 0, tmp.m_inner_offset.x);
+        move_to_row(cursor, i, lines.m_inner_offset.y);
+        move_to_column(cursor, 0, lines.m_inner_offset.x);
 
         char face = 0;
         const char* t = line->m_text.c_str();
@@ -252,30 +308,32 @@ bool display_manager::display()
         }
 
         // Fill remaining width.
-        if (line->width() < max_width)
+        if (line->width() < max_size.x)
         {
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
-            erase_row(max_width - line->width());
+            erase_row(max_size.x - line->width());
         }
     }
 
-    // Erase rows in m_displayed but not in tmp.
-// BUGBUG: not erasing properly.
-    if (tmp.m_extent.y < m_displayed.m_extent.y)
+    // Erase rows in m_displayed but not in lines.
+    if (lines.m_extent.y < m_displayed.m_extent.y)
     {
         output_color("");
-        for (uint16_t i = tmp.m_extent.y; i < m_displayed.m_extent.y; ++i)
+        for (uint16_t i = lines.m_extent.y; i < m_displayed.m_extent.y; ++i)
         {
             move_to_row(cursor, i, 0);
             move_to_column(cursor, 0, 0);
-            erase_row(tmp.m_extent.x);
+            erase_row(lines.m_extent.x);
         }
     }
 
     // Position cursor at the caret position.
-    move_to_row(cursor, tmp.m_cursor.y, tmp.m_inner_offset.y);
-    move_to_column(cursor, tmp.m_cursor.x, tmp.m_inner_offset.x);
+    if (lines.m_erase)
+        lines.m_cursor = { 0, 0 };
+    move_to_row(cursor, lines.m_cursor.y, lines.m_inner_offset.y);
+    move_to_column(cursor, lines.m_cursor.x, lines.m_inner_offset.x);
 
+    output_color("");
     output(c_show_cursor);
 
     if (m_coalesce_output)
@@ -284,9 +342,41 @@ bool display_manager::display()
         maybe_flush();
     }
 
-    m_displayed = std::move(tmp);
+    m_top = lines.m_top;
+    m_displayed = std::move(lines);
     m_relative_cursor = cursor;
     return false;
+}
+
+void display_manager::erase_display()
+{
+    if (m_displayed.m_extent.y > 0)
+    {
+        display_lines tmp;
+        tmp.m_erase = true;
+        display_internal(tmp);
+    }
+}
+
+void display_manager::move_to_end_of_display()
+{
+    if (m_displayed.m_extent.y > 0)
+    {
+        move_to_row(m_relative_cursor, m_displayed.m_extent.y - 1, 0);
+
+        output("\r\n", 2);
+        m_relative_cursor.x = 0;
+        ++m_relative_cursor.y;
+    }
+}
+
+void display_manager::move_to_caret_position()
+{
+    if (m_displayed.m_extent.y > 0)
+    {
+        move_to_row(m_relative_cursor, m_displayed.m_cursor.y, m_displayed.m_inner_offset.y);
+        move_to_column(m_relative_cursor, m_displayed.m_cursor.x, m_displayed.m_inner_offset.x);
+    }
 }
 
 void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset)
@@ -367,28 +457,34 @@ bool display_manager::build(display_lines& out)
     tmp.m_selection_length = sel_end - sel_begin;
 
     // Set up border.
+    coord term_size = get_terminal_size();
     if (m_style && m_style->border)
     {
         // TODO: cache border metrics.
         const border_definition& b = *m_style->border;
+        const uint16_t b_height = !!b.has_top() + !!b.has_bottom();
         tmp.m_inner_offset.y = b.has_top() ? 1 : 0;
         tmp.m_inner_offset.x = b.has_left() ? cell_count(b.left, -1) : 0;
         tmp.m_extent.x += (b.has_left() ? cell_count(b.left, -1) : 0) + (b.has_right() ? cell_count(b.right, -1) : 0);
-        tmp.m_extent.y += !!b.has_top() + !!b.has_bottom();
+        tmp.m_extent.y += b_height;
+        term_size.y -= b_height;
     }
+
+    // Set up max height.
+    const coord max_size = get_effective_max_size();
+    const coord max_size_omit_scroll_markers = get_effective_max_size(true/*omit_scroll_markers*/);
+    if (max_size.y < 1)
+        return false;
+    const bool multiline = (max_size.y > 1);
 
     wcwidth_iter iter(text.c_str() + left, text.length() - left);
     const char* const cursor_ptr = text.c_str() + pos;
-    // const char* row_text = text.c_str();
     const char* face = faces.c_str();
     char pending = 0;
     bool expanding = false;
-    const uint32_t max_width = get_effective_max_width();
-    const uint32_t max_width_omit_scroll_markers = get_effective_max_width(true/*omit_scroll_markers*/);
     std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
-// TODO: handle fixed-height input_box.
 
-    assert(!left || m_layout->max_height == 1);
+    assert(!(left && multiline));
     if (left && m_style->horiz_scroll_markers)
     {
         iter.next(); // Skip the grapheme that the scroller replaces.
@@ -401,6 +497,10 @@ bool display_manager::build(display_lines& out)
     }
 
     // Parse text into rows (lines).
+    // FUTURE: Performance could be improved by first parsing to find row
+    // start offsets, then calculating which rows will actually be visible,
+    // and finally constructing only display_line instances for the visible
+    // rows.
     bool short_circuited = false;
     while (iter.more())
     {
@@ -413,12 +513,12 @@ bool display_manager::build(display_lines& out)
         if (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen)
         {
             tmp.m_cursor.x = line->width();
-            tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
+            tmp.m_cursor.y = uint32_t(tmp.m_lines.size());
         }
 
         if (iter.character_wcwidth_signed() < 0)
         {
-            if (*p == '\n' && m_layout->max_height > 1)
+            if (*p == '\n' && multiline)
             {
                 tmp.m_lines.emplace_back(std::move(line));
                 line = std::make_unique<display_line>(m_origin.x);
@@ -435,18 +535,18 @@ bool display_manager::build(display_lines& out)
         }
 
 again:
-        if (m_layout->max_height == 1)
+        if (!multiline)
         {
-            if (line->width() + cwidth > max_width_omit_scroll_markers &&
+            if (line->width() + cwidth > uint32_t(max_size_omit_scroll_markers.x) &&
                 !(!expanding &&
                   !iter.more() &&
-                  line->width() + cwidth <= max_width_omit_scroll_markers + c_horz_scroll_indicator_chars))
+                  line->width() + cwidth <= uint32_t(max_size_omit_scroll_markers.x + c_horz_scroll_indicator_chars)))
             {
                 short_circuited = true;
                 break;
             }
         }
-        else if (line->width() + cwidth > max_width)
+        else if (line->width() + cwidth > uint32_t(max_size.x))
         {
             tmp.m_lines.emplace_back(std::move(line));
             line = std::make_unique<display_line>(m_origin.x);
@@ -471,19 +571,19 @@ next:
     if (tmp.m_cursor.x < 0)
     {
         tmp.m_cursor.x = line->width();
-        tmp.m_cursor.y = uint16_t(tmp.m_lines.size());
+        tmp.m_cursor.y = uint32_t(tmp.m_lines.size());
     }
     tmp.m_lines.emplace_back(std::move(line));
-    if (m_layout->max_height == 1)
+    if (!multiline)
     {
         assert(tmp.m_lines.size() == 1);
         assert(tmp.m_cursor.x >= 0);
-        assert(uint16_t(tmp.m_cursor.x) <= max_width);
+        assert(tmp.m_cursor.x <= max_size.x);
         if (short_circuited || iter.more())
         {
             auto& back = tmp.m_lines.back();
-            assert(back->width() < max_width);
-            while (uint16_t(back->width() + 1) < max_width)
+            assert(int32_t(back->width()) < max_size.x);
+            while (int32_t(back->width() + 1) < max_size.x)
                 back->append(" ", 1, 1, FACE_DEFAULT);
             back->append(">", 1, 1, FACE_SCROLLER);
             if (c_horz_scroll_indicator_chars > 0)
@@ -493,7 +593,7 @@ next:
             }
         }
     }
-    else if (uint32_t(tmp.m_cursor.x) >= max_width)
+    else if (tmp.m_cursor.x >= max_size.x)
     {
         tmp.m_cursor.x = 0;
         ++tmp.m_cursor.y;
@@ -504,75 +604,54 @@ next:
         }
     }
 
-    tmp.m_extent.x += max_width;
-    tmp.m_extent.y += uint16_t(tmp.m_lines.size());
+    // Handle variable height mode.
+    int32_t y_extent = max_size.y;
+    if (m_layout->variable_height && size_t(y_extent) > tmp.m_lines.size())
+        y_extent = int32_t(tmp.m_lines.size());
+    assert(y_extent > 0);
 
+    // Record the actual extents.
+    tmp.m_extent.x += max_size.x;
+    tmp.m_extent.y += y_extent;
+
+    // Scroll to keep cursor in view.
+    tmp.m_top = m_top;
+    tmp.m_top = clamp<int32_t>(tmp.m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
+    tmp.m_top = max<int32_t>(tmp.m_top, 0);
+
+    // Scroll when cursor is on a scroll marker.
+// TODO: scroll when cursor is on a scroll marker.
 #if 0
-    m_colors->append_color(out, tib::color_element::base);
-
-    uint16_t max_width = get_effective_max_width();
-    bool left_marker = m_style->horiz_scroll_markers && (m_left > 0);
-    bool right_marker = false;
-    size_t lo_limit = m_left;
-    size_t hi_limit = 0;
-
-    if (left_marker)
+    if (m_top > m_last_prompt_line_botlin && m_top == m_last_prompt_line_botlin + next->vpos())
     {
-        wcwidth_iter wi(m_text.c_str() + m_left);
-        if (wi.next())
-        {
-            lo_limit += wi.character_length();
-            max_width -= 1; // Width of left marker, not the iter character.
-        }
+        const display_line* d = next->get(m_top);
+        if (next->cpos() >= d->m_x && next->cpos() < d->m_x + c_horz_scroll_indicator_chars)
+            m_top--;
     }
-
-    uint16_t width = 0;
-    const size_t len = fits_in_wcwidth(m_text.c_str() + lo_limit, m_text.length() - lo_limit, max_width - m_style->horiz_scroll_markers, &width);
-    hi_limit = lo_limit + len;
-
-    if (m_style->horiz_scroll_markers && width > 0)
+    else if (m_top + input_botlin_offset < next->count() - 1 && m_top + input_botlin_offset == next->vpos())
     {
-        wcwidth_iter wi(m_text.c_str() + lo_limit + len);
-        if (wi.next())
-        {
-            if (hi_limit + wi.character_length() == m_text.length() &&
-                width + wi.character_wcwidth_onectrl() <= max_width)
-            {
-                hi_limit = m_text.length();
-                width += wi.character_wcwidth_onectrl();
-            }
-            else
-            {
-                right_marker = true;
-                --max_width;
-            }
-        }
+        if (next->cpos() + c_horz_scroll_indicator_chars >= _rl_screenwidth && next->cpos() < _rl_screenwidth)
+            m_top++;
     }
-
-    if (left_marker)
-    {
-        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
-        out.append("<", 1);
-    }
-    m_colors->append_color(out, color_element::base, color_element::input);
-
-    out.append(m_text.c_str() + lo_limit, len);
-
-    out.append_spaces(max_width - width);
-    if (right_marker)
-    {
-        m_colors->append_color(out, color_element::base, color_element::input_horiz_scroll);
-        out.append(">", 1);
-    }
-
-    const int16_t cursor_x = origin.x + left_marker + __wcswidth(m_text.c_str() + lo_limit, m_selection.get_caret() - lo_limit);
+    assert(m_top >= m_last_prompt_line_botlin);
 #endif
+
+    // Handle fixed height mode.
+    while (tmp.m_lines.size() < y_extent)
+        tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+
+    // Apply scroll markers.
+    if (y_extent > 1 && y_extent < tmp.m_lines.size())
+        tmp.apply_scroll_markers(y_extent);
+
+    assert(tmp.m_cursor.y >= 0);
+    assert(size_t(tmp.m_cursor.y) < tmp.m_lines.size());
 
     out = std::move(tmp);
     return true;
 }
 
-void display_manager::append_border(uint16_t inner_lines)
+void display_manager::append_border(coord extent)
 {
     assert(m_layout);
     assert(m_buffer);
@@ -583,13 +662,11 @@ void display_manager::append_border(uint16_t inner_lines)
     const uint16_t b_right_width = b.has_right() ? cell_count(b.right, -1) : 0;
     const uint16_t extra_border_width = b_left_width + b_right_width;
     const uint16_t extra_border_height = b.has_top() + b.has_bottom();
-    const uint16_t _width = get_effective_max_width();
-    if (!_width)
+    const coord max_size = get_effective_max_size();
+    if (max_size.x <= 0 || max_size.y <= 0)
         return;
-    const uint16_t width = _width + extra_border_width;
-    // TODO: fixed height.
-    // TODO: variable height not exceeding max_height.
-    const uint16_t height = inner_lines + extra_border_height;
+    assert(extent.x == max_size.x + extra_border_width);
+    assert(max_size.y == extent.y - extra_border_height);
 
     output_color(m_colors->get_color(tib::color_element::border));
 
@@ -598,13 +675,13 @@ void display_manager::append_border(uint16_t inner_lines)
         outputf("\x1b[%uG", m_origin.x);
         if (b.top_left)
             output(b.top_left);
-        for (uint16_t i = width - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
+        for (uint32_t i = extent.x - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
             output(b.top);
         if (b.top_right)
             output(b.top_right);
     }
 
-    for (uint16_t i = height - extra_border_height; i--;)
+    for (uint32_t i = max_size.y; i--;)
     {
         output("\r\n");
         if (b_left_width)
@@ -614,7 +691,7 @@ void display_manager::append_border(uint16_t inner_lines)
         }
         if (b_right_width)
         {
-            outputf("\x1b[%uG", m_origin.x + width - b_right_width);
+            outputf("\x1b[%uG", m_origin.x + extent.x - b_right_width);
             output(b.right);
         }
     }
@@ -624,14 +701,14 @@ void display_manager::append_border(uint16_t inner_lines)
         outputf("\r\n\x1b[%uG", m_origin.x);
         if (b.bottom_left)
             output(b.bottom_left);
-        for (uint16_t i = width - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)
+        for (uint32_t i = extent.x - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)
             output(b.bottom);
         if (b.bottom_right)
             output(b.bottom_right);
     }
 
-    if (height > 1)
-        outputf("\x1b[%uA", height - 1);
+    if (extent.y > 1)
+        outputf("\x1b[%uA", extent.y - 1);
 }
 
 void display_manager::output(const char* s, size_t len)
