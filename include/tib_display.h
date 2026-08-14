@@ -64,13 +64,18 @@ struct display_line
                         display_line(uint16_t x1);
     void                append(const char* p, uint32_t len, uint32_t width, char face);
     uint16_t            width() const { return m_x2 - m_x1; }
+    void                calculate_multiline_scroll_marker();
 
     cstring             m_text;
     cstring             m_faces;
     uint16_t            m_x1 = 0;       // First column in the line (1-based, inclusive).
     uint16_t            m_x2 = 0;       // Last column in the line (1-based, EXCLUSIVE).
+#if 0
     uint16_t            m_lead = 0;     // Number of leading columns (e.g. wrapped part of ^X).
     uint16_t            m_trail = 0;    // Number of trailing columns of spaces past m_lastcol.
+#endif
+    uint8_t             m_trail_scroller_width_displaced = 0;
+    uint8_t             m_trail_scroller_len_displayed = 0;
 };
 
 struct display_lines

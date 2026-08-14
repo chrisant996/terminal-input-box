@@ -52,6 +52,33 @@ void display_line::append(const char* p, uint32_t len, uint32_t width, char face
     this->m_x2 += width;
 }
 
+void display_line::calculate_multiline_scroll_marker()
+{
+    assert(!m_trail_scroller_width_displaced);
+    assert(!m_trail_scroller_len_displayed);
+
+    // NOTE: build() should always pad to max width, except on last line, and
+    // max width should always be at least 8.
+    if (width() > c_horz_scroll_indicator_chars)
+    {
+        const uint32_t num = c_horz_scroll_indicator_chars;
+        uint32_t width_displaced = 0;
+        uint32_t len_displaced = 0;
+        uint32_t pos = uint32_t(m_text.length());
+        while (pos > 0 && width_displaced < num)
+        {
+            uint16_t wc;
+            const uint32_t new_pos = backward_one_grapheme(m_text.c_str(), m_text.length(), pos, &wc);
+            width_displaced += wc;
+            len_displaced += (pos - new_pos);
+            pos = new_pos;
+        }
+
+        m_trail_scroller_width_displaced = width_displaced;
+        m_trail_scroller_len_displayed = len_displaced;
+    }
+}
+
 void display_lines::clear()
 {
     m_top = 0;
@@ -69,6 +96,8 @@ void display_lines::clear()
 
 void display_lines::apply_scroll_markers(int16_t rows)
 {
+    // NOTE:  Horizontal scroll markers work differently and are applied
+    // directly in build().
     assert(rows > 0);
     if (m_lines.size() < size_t(rows))
     {
@@ -80,7 +109,33 @@ void display_lines::apply_scroll_markers(int16_t rows)
     if (m_lines.size() > size_t(m_top + rows))
     {
         m_lines.erase(m_lines.begin() + m_top + rows, m_lines.end());
-// TODO: apply scroll marker to last row.
+
+        // Apply scroll marker to last row.
+        display_line& d = *m_lines[m_top + rows - 1];
+        assert(d.m_trail_scroller_width_displaced);
+        assert(d.m_trail_scroller_len_displayed);
+
+        // NOTE: build() should always pad to max width, except on last
+        // line, and max width should always be at least 8.
+        assert(d.width() > c_horz_scroll_indicator_chars);
+        // if (d.width() > 2)
+        if (d.m_trail_scroller_width_displaced && d.m_trail_scroller_len_displayed)
+        {
+            const uint32_t num = c_horz_scroll_indicator_chars;
+            uint32_t width_displaced = d.m_trail_scroller_width_displaced;
+            const uint32_t len_displaced = d.m_trail_scroller_len_displayed;
+
+            d.m_text.set_length(d.m_text.length() - len_displaced);
+            d.m_faces.set_length(d.m_faces.length() - len_displaced);
+
+            for (uint32_t i = num; i--;)
+            {
+                d.append(">", 1, 1, FACE_SCROLLER);
+                --width_displaced;
+            }
+            while (width_displaced--)
+                d.append(" ", 1, 1, FACE_DEFAULT);
+        }
     }
 
     // Discard lines before the visible section.
@@ -89,7 +144,56 @@ void display_lines::apply_scroll_markers(int16_t rows)
         m_top = int32_t(m_lines.size() - size_t(rows));
         m_lines.erase(m_lines.begin(), m_lines.begin() + m_top);
         assert(m_lines.size() == rows);
-// TODO: apply scroll marker to first row.
+
+        // Apply scroll marker to first row.
+        display_line& d = *m_lines[0].get();
+
+        // NOTE: build() should always pad to max width, except on last line.
+        assert(d.m_text.length());
+        // if (!d.m_text.length())
+        // {
+        //     for (uint32_t num = c_horz_scroll_indicator_chars; num--;)
+        //         d.append("<", 1, 1, FACE_SCROLLER);
+        // }
+        // else
+        {
+            const uint32_t num = c_horz_scroll_indicator_chars;
+            uint32_t width_displaced = 0;
+            uint32_t len_displaced = 0;
+            wcwidth_iter iter_top(d.m_text.c_str(), d.m_text.length());
+            while (iter_top.next())
+            {
+                auto wc = iter_top.character_wcwidth_onectrl();
+                auto bytes = iter_top.character_length();
+
+                width_displaced += wc;
+                len_displaced += bytes;
+
+                if (width_displaced >= num && len_displaced >= num)
+                    break;
+            }
+
+            // d.m_lead_scroller_width = c_horz_scroll_indicator_chars;
+
+            for (uint32_t i = 0; i < num && i < d.m_text.length(); ++i)
+            {
+                assert(width_displaced);
+                assert(len_displaced);
+
+                d.m_text.set_at(i, '<');
+                d.m_faces.set_at(i, FACE_SCROLLER);
+                --width_displaced;
+                --len_displaced;
+            }
+
+            if (len_displaced > 0)
+            {
+                d.m_text.delete_range(num, len_displaced);
+                d.m_faces.delete_range(num, len_displaced);
+            }
+            while (width_displaced-- > 0)
+                d.append(" ", 1, 1, FACE_DEFAULT);
+        }
     }
 
     m_cursor.y = max(0, m_cursor.y - m_top);
@@ -576,6 +680,7 @@ next:
     tmp.m_lines.emplace_back(std::move(line));
     if (!multiline)
     {
+        // Add horizontal scroll marker if needed.
         assert(tmp.m_lines.size() == 1);
         assert(tmp.m_cursor.x >= 0);
         assert(tmp.m_cursor.x <= max_size.x);
@@ -603,6 +708,12 @@ next:
             tmp.m_lines.emplace_back(std::move(line));
         }
     }
+    else if (tmp.m_lines.back()->width() == max_size.x)
+    {
+        // In multiline mode, if the last line takes up the full width, then
+        // there's a phantom blank line at the end.
+        tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+    }
 
     // Handle variable height mode.
     int32_t y_extent = max_size.y;
@@ -619,30 +730,51 @@ next:
     tmp.m_top = clamp<int32_t>(tmp.m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
     tmp.m_top = max<int32_t>(tmp.m_top, 0);
 
-    // Scroll when cursor is on a scroll marker.
-// TODO: scroll when cursor is on a scroll marker.
-#if 0
-    if (m_top > m_last_prompt_line_botlin && m_top == m_last_prompt_line_botlin + next->vpos())
+    if (multiline)
     {
-        const display_line* d = next->get(m_top);
-        if (next->cpos() >= d->m_x && next->cpos() < d->m_x + c_horz_scroll_indicator_chars)
-            m_top--;
-    }
-    else if (m_top + input_botlin_offset < next->count() - 1 && m_top + input_botlin_offset == next->vpos())
-    {
-        if (next->cpos() + c_horz_scroll_indicator_chars >= _rl_screenwidth && next->cpos() < _rl_screenwidth)
-            m_top++;
-    }
-    assert(m_top >= m_last_prompt_line_botlin);
-#endif
+        // Scroll vertically when cursor is on a multiline scroll marker.
+        if (y_extent < tmp.m_lines.size())
+        {
+            for (size_t i = 0; i <= 2; ++i)
+            {
+                size_t bottom = tmp.m_top + y_extent;
+                if (bottom >= i && bottom - i < tmp.m_lines.size())
+                    tmp.m_lines[bottom - i]->calculate_multiline_scroll_marker();
+            }
 
-    // Handle fixed height mode.
-    while (tmp.m_lines.size() < y_extent)
-        tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+            if (tmp.m_top == tmp.m_cursor.y)
+            {
+                if (tmp.m_top > 0)
+                {
+                    const display_line& d = *tmp.m_lines[tmp.m_top];
+                    if (tmp.m_cursor.x < c_horz_scroll_indicator_chars)
+                        --tmp.m_top;
+                }
+            }
+            else if (tmp.m_top + y_extent - 1 == tmp.m_cursor.y)
+            {
+                if (tmp.m_top + y_extent < tmp.m_lines.size())
+                {
+                    const display_line& d = *tmp.m_lines[tmp.m_top + y_extent - 1];
+                    if (d.m_trail_scroller_width_displaced &&
+                        tmp.m_cursor.x >= d.width() - d.m_trail_scroller_width_displaced)
+                        ++tmp.m_top;
+                }
+            }
+        }
+        else
+        {
+            tmp.m_top = 0;
+        }
 
-    // Apply scroll markers.
-    if (y_extent > 1 && y_extent < tmp.m_lines.size())
-        tmp.apply_scroll_markers(y_extent);
+        // Apply scroll markers.
+        if (y_extent > 1 && y_extent < tmp.m_lines.size())
+            tmp.apply_scroll_markers(y_extent);
+
+        // Handle fixed height mode.
+        while (tmp.m_lines.size() < y_extent)
+            tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+    }
 
     assert(tmp.m_cursor.y >= 0);
     assert(size_t(tmp.m_cursor.y) < tmp.m_lines.size());

@@ -54,9 +54,11 @@ public:
 
     bool                set(const T* s, size_t len=c_auto_length);
     bool                set(const cstring_t<T>& s);
+    bool                set_at(size_t index, char c);
     bool                append(const T* s, size_t len=c_auto_length);
     bool                append_spaces(size_t n);
     bool                append_color(const T* sgr_params);
+    bool                delete_range(size_t index, size_t len);
     bool                printf(const T* format, ...);
     bool                printfv(const T* format, va_list args);
     T*                  reserve(size_t len);
@@ -117,6 +119,16 @@ bool cstring_t<T>::set(const cstring_t<T>& s)
 }
 
 template<class T>
+bool cstring_t<T>::set_at(size_t index, char c)
+{
+    assert(index < length());
+    if (index >= length())
+        return false;
+    m_text[index] = c;
+    return true;
+}
+
+template<class T>
 bool cstring_t<T>::append(const T* s, size_t len)
 {
     len = resolve_auto_length(len, s);
@@ -168,6 +180,26 @@ nope:
     if (!append("m"))
         goto nope;
 
+    return true;
+}
+
+template<class T>
+bool cstring_t<T>::delete_range(size_t index, size_t len)
+{
+    assert(index <= length());
+    if (index > length())
+        return false;
+    if (index + len >= length())
+    {
+        set_length(index);
+    }
+    else
+    {
+        len = min(len, length() - index);
+        memmove(m_text + index, m_text + (index + len), length() - (index + len));
+        assert(m_len >= len);
+        m_len -= len;
+    }
     return true;
 }
 
