@@ -6,6 +6,8 @@
 #include "tib.h"
 #include "wcwidth.h"
 
+constexpr uint32_t c_display_line_comparison_passes = 100000;
+
 struct grapheme_sample
 {
     const char*         text;
@@ -93,4 +95,183 @@ TEST_CASE("Back one grapheme")
         };
         check_back_one_grapheme(samples, std::size(samples));
     }
+}
+
+class display_test_buffer : public tib::input_buffer
+{
+public:
+    void set_text(const char* text, tib::textpos_t caret)
+    {
+        m_text.set(text);
+        m_selection.set_caret(caret);
+        ++m_change_counter;
+    }
+
+    void set_selection(tib::textpos_t anchor, tib::textpos_t caret)
+    {
+        m_selection.set_selection(anchor, caret);
+    }
+};
+
+static tib::cstring s_display_output;
+
+static void capture_display_output(const char* text, size_t length)
+{
+    s_display_output.append(text, length);
+}
+
+class display_test_fixture
+{
+public:
+    display_test_fixture()
+    {
+        m_old_hook = tib::hook_term_out;
+        m_old_coalesce = tib::g_coalesce_output;
+        tib::hook_term_out = capture_display_output;
+        tib::g_coalesce_output = true;
+
+        m_layout.max_width = 10;
+        m_style.border = &m_border;
+        m_style.horiz_scroll_markers = false;
+        m_display.init_layout(&m_layout);
+        m_display.init_buffer(&m_buffer);
+        m_display.init_style(&m_style);
+        m_display.set_origin(1, 1);
+    }
+
+    ~display_test_fixture()
+    {
+        tib::hook_term_out = m_old_hook;
+        tib::g_coalesce_output = m_old_coalesce;
+        s_display_output.clear();
+    }
+
+    void display_initial(const char* text, tib::textpos_t caret)
+    {
+        m_buffer.set_text(text, caret);
+        REQUIRE(m_display.display() == false);
+        s_display_output.clear();
+    }
+
+    display_test_buffer m_buffer;
+    tib::display_manager m_display;
+
+private:
+    tib::layout_info m_layout;
+    tib::border_definition m_border;
+    tib::style_info m_style;
+    void (*m_old_hook)(const char*, size_t) = nullptr;
+    bool m_old_coalesce = false;
+};
+
+TEST_CASE("Display differential updates")
+{
+    SECTION("Skips matching leading and trailing text")
+    {
+        display_test_fixture fixture;
+        fixture.display_initial("abcde", 5);
+
+        fixture.m_buffer.set_text("abXde", 5);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "ab") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "de") == nullptr);
+    }
+
+    SECTION("Compares faces along with text")
+    {
+        display_test_fixture fixture;
+        fixture.display_initial("abc", 0);
+
+        fixture.m_buffer.set_selection(1, 2);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "b") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "a") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "c") == nullptr);
+    }
+
+    SECTION("Does not split matching grapheme prefixes")
+    {
+        display_test_fixture fixture;
+        fixture.display_initial("a\xcc\x81x", 4);
+
+        fixture.m_buffer.set_text("a\xcc\x88x", 4);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "a\xcc\x88") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
+    }
+
+    SECTION("Does not split matching grapheme suffixes")
+    {
+        display_test_fixture fixture;
+        fixture.display_initial("xa\xcc\x81", 4);
+
+        fixture.m_buffer.set_text("xb\xcc\x81", 4);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "b\xcc\x81") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
+    }
+}
+
+static void make_matching_display_line_data(tib::cstring& text, tib::cstring& matching_text,
+                                            tib::cstring& faces, tib::cstring& matching_faces)
+{
+    text.set("The quick brown fox jumps over the lazy dog. "
+             "The quick brown fox jumps over the lazy dog.");
+    matching_text = text;
+    faces.append_spaces(text.length());
+    matching_faces = faces;
+}
+
+PERF_CASE("Perf, compare matching display line with memcmp")
+{
+    tib::cstring text;
+    tib::cstring matching_text;
+    tib::cstring faces;
+    tib::cstring matching_faces;
+    make_matching_display_line_data(text, matching_text, faces, matching_faces);
+
+    uint32_t matches = 0;
+    for (uint32_t pass = 0; pass < c_display_line_comparison_passes; ++pass)
+    {
+        if (text == matching_text && faces == matching_faces)
+            ++matches;
+    }
+
+    REQUIRE(matches == c_display_line_comparison_passes);
+}
+
+PERF_CASE("Perf, compare matching display line by grapheme")
+{
+    tib::cstring text;
+    tib::cstring matching_text;
+    tib::cstring faces;
+    tib::cstring matching_faces;
+    make_matching_display_line_data(text, matching_text, faces, matching_faces);
+
+    uint32_t matches = 0;
+    for (uint32_t pass = 0; pass < c_display_line_comparison_passes; ++pass)
+    {
+        size_t pos = 0;
+        size_t matching_pos = 0;
+        while (pos < text.length() && matching_pos < matching_text.length())
+        {
+            const size_t next = forward_one_grapheme(text.c_str(), text.length(), uint32_t(pos));
+            const size_t matching_next = forward_one_grapheme(matching_text.c_str(), matching_text.length(), uint32_t(matching_pos));
+            const size_t length = next - pos;
+            const size_t matching_length = matching_next - matching_pos;
+            if (length != matching_length ||
+                memcmp(text.c_str() + pos, matching_text.c_str() + matching_pos, length) != 0 ||
+                memcmp(faces.c_str() + pos, matching_faces.c_str() + matching_pos, length) != 0)
+                break;
+
+            pos = next;
+            matching_pos = matching_next;
+        }
+
+        if (pos == text.length() && matching_pos == matching_text.length())
+            ++matches;
+    }
+
+    REQUIRE(matches == c_display_line_comparison_passes);
 }
