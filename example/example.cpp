@@ -15,6 +15,9 @@ static tib_host::auto_terminal_init s_auto_terminal_init;
 
 static bool s_done = false;
 
+static const char* const c_bar_text_color = "0;38;2;180;140;33";
+static const char* const c_border_text_color = "0;38;2;33;33;33";
+
 static const tib::border_definition c_padding_border =
 {
     nullptr,
@@ -26,6 +29,44 @@ static const tib::border_definition c_padding_border =
     "▀",
     nullptr,
 };
+
+struct bar_padding_border_definition : public tib::border_definition
+{
+    bar_padding_border_definition()
+    {
+        make_bar("▗▄", custom_top_left, top_left, top_left_width);
+        make_bar("▐█", custom_left, left, left_width);
+        make_bar("▝▀", custom_bottom_left, bottom_left, bottom_left_width);
+
+        top_right = "▖"; top_right_width = 1;
+        right = "█▌"; right_width = 2;
+        bottom_right = "▘"; bottom_right_width = 1;
+
+        top = "▄"; top_width = 1;
+        bottom = "▀"; bottom_width = 1;
+    };
+
+protected:
+    static void make_bar(const char* in, tib::cstring& out, const char*& dst, int8_t& dst_width)
+    {
+        wcwidth_iter iter(in);
+        iter.next();
+        out.printf("\x1b[%sm", c_bar_text_color);
+        out.append(iter.character_pointer(), iter.character_length());
+        iter.next();
+        out.printf("\x1b[%sm", c_border_text_color);
+        out.append(iter.character_pointer(), iter.character_length());
+        dst = out.c_str();
+        dst_width = 2;
+    }
+
+private:
+    tib::cstring custom_top_left;
+    tib::cstring custom_left;
+    tib::cstring custom_bottom_left;
+};
+
+static const bar_padding_border_definition c_bar_padding_border;
 
 static int32_t backspace(tib::editor_context& ctx, int32_t key, const char* name)
 {
@@ -229,7 +270,8 @@ int main(int argc, const char** argv)
 
     const tib::border_definition* border = nullptr;
     // border = &tib::c_light_border;
-    border = &c_padding_border;
+    // border = &c_padding_border;
+    border = &c_bar_padding_border;
 
     std::shared_ptr<tib::color_table> colors = std::make_shared<tib::color_table>();
     colors->set_color(tib::color_element::base, "0;48;2;33;33;33");

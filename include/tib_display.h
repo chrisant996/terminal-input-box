@@ -26,14 +26,38 @@ struct border_definition
     bool                has_left() const { return left && *left; }
     bool                has_right() const { return right && *right; }
 
-    const char*         top_left;
-    const char*         top;
-    const char*         top_right;
-    const char*         left;
-    const char*         right;
-    const char*         bottom_left;
-    const char*         bottom;
-    const char*         bottom_right;
+    // These allow a border_definition to include embedded ANSI escape
+    // sequences without requiring terminal-input-box to include an ECMA-48
+    // compliant escape sequence parser.
+    int8_t              get_top_left_width() const { return get_width(top_left, top_left_width); }
+    int8_t              get_top_width() const { return get_width(top, top_width); }
+    int8_t              get_top_right_width() const { return get_width(top_right, top_right_width); }
+    int8_t              get_left_width() const { return get_width(left, left_width); }
+    int8_t              get_right_width() const { return get_width(right, right_width); }
+    int8_t              get_bottom_left_width() const { return get_width(bottom_left, bottom_left_width); }
+    int8_t              get_bottom_width() const { return get_width(bottom, bottom_width); }
+    int8_t              get_bottom_right_width() const { return get_width(bottom_right, bottom_right_width); }
+
+    const char*         top_left = nullptr;
+    const char*         top = nullptr;
+    const char*         top_right = nullptr;
+    const char*         left = nullptr;
+    const char*         right = nullptr;
+    const char*         bottom_left = nullptr;
+    const char*         bottom = nullptr;
+    const char*         bottom_right = nullptr;
+
+    int8_t              top_left_width = -1;
+    int8_t              top_width = -1;
+    int8_t              top_right_width = -1;
+    int8_t              left_width = -1;
+    int8_t              right_width = -1;
+    int8_t              bottom_left_width = -1;
+    int8_t              bottom_width = -1;
+    int8_t              bottom_right_width = -1;
+
+private:
+    int8_t              get_width(const char* s, int8_t width) const;
 };
 
 extern const border_definition c_light_border;

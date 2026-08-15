@@ -29,6 +29,11 @@ const border_definition c_light_border =
     "┘",
 };
 
+int8_t border_definition::get_width(const char* s, int8_t width) const
+{
+    return (!s || !*s) ? 0 : (width < 0) ? __wcswidth(s, -1) : width;
+}
+
 #ifdef WIDE_HORZ_SCROLL_MARKERS
 const uint16_t c_horz_scroll_indicator_chars = 2;
 #else
@@ -264,8 +269,8 @@ nope:
 
     const border_definition* b = m_style ? m_style->border : nullptr;
     // TODO: cache border cell_count metrics.
-    const uint16_t b_left_width = (b && b->has_left()) ? cell_count(b->left, -1) : 0;
-    const uint16_t b_right_width = (b && b->has_right()) ? cell_count(b->right, -1) : 0;
+    const uint16_t b_left_width = b->get_left_width();
+    const uint16_t b_right_width = b->get_right_width();
     const uint16_t extra_border_width = b_left_width + b_right_width;
     const uint16_t b_height = !!b->has_top() + !!b->has_bottom();
 
@@ -568,8 +573,8 @@ bool display_manager::build(display_lines& out)
         const border_definition& b = *m_style->border;
         const uint16_t b_height = !!b.has_top() + !!b.has_bottom();
         tmp.m_inner_offset.y = b.has_top() ? 1 : 0;
-        tmp.m_inner_offset.x = b.has_left() ? cell_count(b.left, -1) : 0;
-        tmp.m_extent.x += (b.has_left() ? cell_count(b.left, -1) : 0) + (b.has_right() ? cell_count(b.right, -1) : 0);
+        tmp.m_inner_offset.x = b.get_left_width();
+        tmp.m_extent.x += b.get_left_width() + b.get_right_width();
         tmp.m_extent.y += b_height;
         term_size.y -= b_height;
     }
@@ -790,8 +795,8 @@ void display_manager::append_border(coord extent)
     assert(m_style);
 
     const border_definition& b = *m_style->border;
-    const uint16_t b_left_width = b.has_left() ? cell_count(b.left, -1) : 0;
-    const uint16_t b_right_width = b.has_right() ? cell_count(b.right, -1) : 0;
+    const uint16_t b_left_width = b.get_left_width();
+    const uint16_t b_right_width = b.get_right_width();
     const uint16_t extra_border_width = b_left_width + b_right_width;
     const uint16_t extra_border_height = b.has_top() + b.has_bottom();
     const coord max_size = get_effective_max_size();
@@ -802,12 +807,13 @@ void display_manager::append_border(coord extent)
 
     output_color(m_colors->get_color(tib::color_element::border));
 
-    if (b.top)
+    if (b.has_top())
     {
         outputf("\x1b[%uG", m_origin.x);
         if (b.top_left)
             output(b.top_left);
-        for (uint32_t i = extent.x - ((b.top_left ? cell_count(b.top_left, -1) : 0) + (b.top_right ? cell_count(b.top_right, -1) : 0)); i--;)
+        const int16_t top_width = b.get_top_width();
+        for (int32_t i = extent.x - (b.get_top_left_width() + b.get_top_right_width()); i - top_width >= 0; i -= top_width)
             output(b.top);
         if (b.top_right)
             output(b.top_right);
@@ -828,12 +834,13 @@ void display_manager::append_border(coord extent)
         }
     }
 
-    if (b.bottom)
+    if (b.has_bottom())
     {
         outputf("\r\n\x1b[%uG", m_origin.x);
         if (b.bottom_left)
             output(b.bottom_left);
-        for (uint32_t i = extent.x - ((b.bottom_left ? cell_count(b.bottom_left, -1) : 0) + (b.bottom_right ? cell_count(b.bottom_right, -1) : 0)); i--;)
+        const int16_t bottom_width = b.get_bottom_width();
+        for (int32_t i = extent.x - (b.get_bottom_left_width() + b.get_bottom_right_width()); i - bottom_width >= 0; i -= bottom_width)
             output(b.bottom);
         if (b.bottom_right)
             output(b.bottom_right);
