@@ -292,7 +292,7 @@ int main(int argc, const char** argv)
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
     tib.set_max_height(3);
-    // tib.set_variable_height(true);
+    tib.set_variable_height(true);
     tib.set_max_width(40);
 
 #ifdef _WIN32

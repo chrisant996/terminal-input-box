@@ -803,7 +803,7 @@ void display_manager::append_border(coord extent)
     if (max_size.x <= 0 || max_size.y <= 0)
         return;
     assert(extent.x == max_size.x + extra_border_width);
-    assert(max_size.y == extent.y - extra_border_height);
+    assert(max_size.y >= extent.y - extra_border_height);
 
     output_color(m_colors->get_color(tib::color_element::border));
 
@@ -819,7 +819,7 @@ void display_manager::append_border(coord extent)
             output(b.top_right);
     }
 
-    for (uint32_t i = max_size.y; i--;)
+    for (uint32_t i = extent.y - extra_border_height; i--;)
     {
         output("\r\n");
         if (b_left_width)
