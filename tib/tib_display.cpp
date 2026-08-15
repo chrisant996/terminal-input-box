@@ -398,7 +398,7 @@ bool display_manager::display_internal(display_lines& lines)
                 // line exactly matches the previously displayed line.  The
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
-                if (line->m_text == displayed->m_text && line->m_faces == displayed->m_faces)
+                if (line->m_text.equals(displayed->m_text) && line->m_faces.equals(displayed->m_faces))
                     continue;
 
                 // Walk forward past a leading portion that exactly matches.

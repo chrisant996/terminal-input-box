@@ -70,6 +70,7 @@ public:
     size_t              length() const;
     size_t              capacity() const { return m_capacity; }
     const T*            c_str() const;
+    bool                equals(const cstring_t<T>& s) const;
 
 private:
     bool                raw_set(const T* s, size_t len);
@@ -103,7 +104,13 @@ cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s)
 template<class T>
 bool cstring_t<T>::operator==(const cstring_t<T>& s) const
 {
-    return (m_len == s.m_len) && (memcmp(m_text, s.m_text, m_len) == 0);
+    return this->equals(s);
+}
+
+template<class T>
+bool cstring_t<T>::equals(const cstring_t<T>& s) const
+{
+    return (length() == s.length()) && (memcmp(m_text, s.m_text, m_len) == 0);
 }
 
 template<class T>
@@ -132,7 +139,7 @@ template<class T>
 bool cstring_t<T>::append(const T* s, size_t len)
 {
     len = resolve_auto_length(len, s);
-    const size_t needed = m_len + len + 1;
+    const size_t needed = length() + len + 1;
     if (needed >= m_capacity)
     {
         size_t grow = max<size_t>(64, m_capacity * 2);
@@ -272,11 +279,12 @@ T* cstring_t<T>::reserve(size_t len)
     ++len;
     if (len >= m_capacity)
     {
+        const auto old_len = length();
         T* tmp = static_cast<T*>(realloc(m_text, len * sizeof(T)));
         if (!tmp)
             return nullptr;
         m_text = tmp;
-        m_text[m_len] = 0;
+        m_text[old_len] = 0;
         m_capacity = len;
     }
     return m_text;
