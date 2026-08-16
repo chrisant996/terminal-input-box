@@ -25,9 +25,9 @@ template <class A> A max(A a, A b) { return (a > b) ? a : b; }
 #undef clamp
 template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
 
-size_t resolve_auto_length(size_t len, const char* s);
+size_t resolve_auto_length(size_t len, const char* s) noexcept;
 #ifdef _WIN32
-size_t resolve_auto_length(size_t len, const WCHAR* s);
+size_t resolve_auto_length(size_t len, const WCHAR* s) noexcept;
 #endif
 
 typedef int32_t textpos_t;
@@ -43,34 +43,34 @@ template<class T>
 class cstring_t
 {
 public:
-                        ~cstring_t() { ::free(m_text); }
-                        cstring_t() = default;
+                        ~cstring_t() noexcept { ::free(m_text); }
+                        cstring_t() noexcept = default;
                         cstring_t(const T* s, size_t len=c_auto_length) { raw_set(s, len); }
                         cstring_t(const cstring_t<T>& s) { raw_set(s.m_text, s.m_len); }
-                        cstring_t(cstring_t<T>&& s) { *this = std::move(s); }
+                        cstring_t(cstring_t<T>&& s) noexcept { *this = std::move(s); }
     cstring_t<T>&       operator=(const cstring_t<T>& s);
-    cstring_t<T>&       operator=(cstring_t<T>&& s);
-    bool                operator==(const cstring_t<T>& s) const;
+    cstring_t<T>&       operator=(cstring_t<T>&& s) noexcept;
+    bool                operator==(const cstring_t<T>& s) const noexcept;
 
     bool                set(const T* s, size_t len=c_auto_length);
     bool                set(const cstring_t<T>& s);
-    bool                set_at(size_t index, char c);
+    bool                set_at(size_t index, char c) noexcept;
     bool                append(const T* s, size_t len=c_auto_length);
     bool                append_spaces(size_t n);
     bool                append_color(const T* sgr_params);
-    bool                delete_range(size_t index, size_t len);
+    bool                delete_range(size_t index, size_t len) noexcept;
     bool                printf(const T* format, ...);
     bool                printfv(const T* format, va_list args);
     T*                  reserve(size_t len);
-    void                set_length(size_t len);
-    void                clear();
-    void                free();
+    void                set_length(size_t len) noexcept;
+    void                clear() noexcept;
+    void                free() noexcept;
 
-    bool                empty() const { return !length(); }
-    size_t              length() const;
-    size_t              capacity() const { return m_capacity; }
-    const T*            c_str() const;
-    bool                equals(const cstring_t<T>& s) const;
+    bool                empty() const noexcept { return !length(); }
+    size_t              length() const noexcept;
+    size_t              capacity() const noexcept { return m_capacity; }
+    const T*            c_str() const noexcept;
+    bool                equals(const cstring_t<T>& s) const noexcept;
 
 private:
     bool                raw_set(const T* s, size_t len);
@@ -89,7 +89,7 @@ cstring_t<T>& cstring_t<T>::operator=(const cstring_t<T>& s)
 }
 
 template<class T>
-cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s)
+cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s) noexcept
 {
     ::free(m_text);
     m_capacity = s.m_capacity;
@@ -102,13 +102,13 @@ cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s)
 }
 
 template<class T>
-bool cstring_t<T>::operator==(const cstring_t<T>& s) const
+bool cstring_t<T>::operator==(const cstring_t<T>& s) const noexcept
 {
     return this->equals(s);
 }
 
 template<class T>
-bool cstring_t<T>::equals(const cstring_t<T>& s) const
+bool cstring_t<T>::equals(const cstring_t<T>& s) const noexcept
 {
     return (length() == s.length()) && (memcmp(m_text, s.m_text, m_len) == 0);
 }
@@ -126,7 +126,7 @@ bool cstring_t<T>::set(const cstring_t<T>& s)
 }
 
 template<class T>
-bool cstring_t<T>::set_at(size_t index, char c)
+bool cstring_t<T>::set_at(size_t index, char c) noexcept
 {
     assert(index < length());
     if (index >= length())
@@ -191,7 +191,7 @@ nope:
 }
 
 template<class T>
-bool cstring_t<T>::delete_range(size_t index, size_t len)
+bool cstring_t<T>::delete_range(size_t index, size_t len) noexcept
 {
     assert(index <= length());
     if (index > length())
@@ -210,11 +210,11 @@ bool cstring_t<T>::delete_range(size_t index, size_t len)
     return true;
 }
 
-inline size_t str_len(const char* s) { return strlen(s); }
+inline size_t str_len(const char* s) noexcept { return strlen(s); }
 int __vsnprintf(char* buffer, size_t len, const char* format, va_list args);
 
 #ifdef _WIN32
-inline size_t str_len(const WCHAR* s) { return wcslen(s); }
+inline size_t str_len(const WCHAR* s) noexcept { return wcslen(s); }
 int __vsnprintf(WCHAR* buffer, size_t len, const WCHAR* format, va_list args);
 #endif
 
@@ -285,13 +285,14 @@ T* cstring_t<T>::reserve(size_t len)
             return nullptr;
         m_text = tmp;
         m_text[old_len] = 0;
+        m_text[len - 1] = 0;
         m_capacity = len;
     }
     return m_text;
 }
 
 template<class T>
-void cstring_t<T>::set_length(size_t len)
+void cstring_t<T>::set_length(size_t len) noexcept
 {
     if (!len)
     {
@@ -310,7 +311,7 @@ void cstring_t<T>::set_length(size_t len)
 }
 
 template<class T>
-void cstring_t<T>::clear()
+void cstring_t<T>::clear() noexcept
 {
     m_len = 0;
     if (m_text && m_capacity)
@@ -318,7 +319,7 @@ void cstring_t<T>::clear()
 }
 
 template<class T>
-void cstring_t<T>::free()
+void cstring_t<T>::free() noexcept
 {
     ::free(m_text);
     m_capacity = 0;
@@ -327,7 +328,7 @@ void cstring_t<T>::free()
 }
 
 template<class T>
-size_t cstring_t<T>::length() const
+size_t cstring_t<T>::length() const noexcept
 {
     if (m_len == c_auto_length)
         m_len = m_text ? str_len(m_text) : 0;

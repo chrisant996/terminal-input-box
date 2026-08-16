@@ -14,13 +14,13 @@
 
 namespace tib {
 
-size_t resolve_auto_length(size_t len, const char* s)
+size_t resolve_auto_length(size_t len, const char* s) noexcept
 {
     return !s ? 0 : (len == c_auto_length) ? strlen(s) : len;
 }
 
 #ifdef _WIN32
-size_t resolve_auto_length(size_t len, const WCHAR* s)
+size_t resolve_auto_length(size_t len, const WCHAR* s) noexcept
 {
     return !s ? 0 : (len == c_auto_length) ? wcslen(s) : len;
 }
@@ -47,14 +47,14 @@ const WCHAR* const cstring_t<WCHAR>::c_spaces = L"                              
 #endif
 
 template<>
-const char* cstring_t<char>::c_str() const
+const char* cstring_t<char>::c_str() const noexcept
 {
     return m_text ? m_text : "";
 }
 
 #ifdef _WIN32
 template<>
-const WCHAR* cstring_t<WCHAR>::c_str() const
+const WCHAR* cstring_t<WCHAR>::c_str() const noexcept
 {
     return m_text ? m_text : L"";
 }
