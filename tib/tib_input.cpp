@@ -23,9 +23,20 @@ struct macro_playback
 
 static macro_playback* s_macro_playback = nullptr;
 
+#ifdef _WIN32
+#ifdef DEBUG
+static const DWORD c_idMainThread = GetCurrentThreadId();
+#endif
+#endif
+
 int32_t term_in()
 {
-    // TODO:  Assert/enforce single threaded.
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
     // TODO: Pushed input.
 
     if (s_macro_playback)
