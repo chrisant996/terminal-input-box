@@ -642,7 +642,13 @@ bool display_manager::build(display_lines& out)
     cstring faces;
     faces.append_spaces(text.length());     // FACE_DEFAULT == space.
     if (m_callbacks)
+    {
         m_callbacks->provide_faces(*m_buffer, faces);
+
+        assert(text.length() == faces.length());
+        if (faces.length() < text.length())
+            faces.append_spaces(text.length() - faces.length());
+    }
 
     // Overlay selection color into faces.
     memset(faces.reserve(0) + sel_begin, FACE_SELECTION, sel_end - sel_begin);
