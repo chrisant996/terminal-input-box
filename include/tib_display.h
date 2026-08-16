@@ -21,22 +21,22 @@ extern bool g_coalesce_output;
 
 struct border_definition
 {
-    bool                has_top() const { return top && *top; }
-    bool                has_bottom() const { return bottom && *bottom; }
-    bool                has_left() const { return left && *left; }
-    bool                has_right() const { return right && *right; }
+    bool                has_top() const { return this && top && *top; }
+    bool                has_bottom() const { return this && bottom && *bottom; }
+    bool                has_left() const { return this && left && *left; }
+    bool                has_right() const { return this && right && *right; }
 
     // These allow a border_definition to include embedded ANSI escape
     // sequences without requiring terminal-input-box to include an ECMA-48
     // compliant escape sequence parser.
-    int8_t              get_top_left_width() const { return get_width(top_left, top_left_width); }
-    int8_t              get_top_width() const { return get_width(top, top_width); }
-    int8_t              get_top_right_width() const { return get_width(top_right, top_right_width); }
-    int8_t              get_left_width() const { return get_width(left, left_width); }
-    int8_t              get_right_width() const { return get_width(right, right_width); }
-    int8_t              get_bottom_left_width() const { return get_width(bottom_left, bottom_left_width); }
-    int8_t              get_bottom_width() const { return get_width(bottom, bottom_width); }
-    int8_t              get_bottom_right_width() const { return get_width(bottom_right, bottom_right_width); }
+    int8_t              get_top_left_width() const { return !this ? 0 : get_width(top_left, top_left_width); }
+    int8_t              get_top_width() const { return !this ? 0 : get_width(top, top_width); }
+    int8_t              get_top_right_width() const { return !this ? 0 : get_width(top_right, top_right_width); }
+    int8_t              get_left_width() const { return !this ? 0 : get_width(left, left_width); }
+    int8_t              get_right_width() const { return !this ? 0 : get_width(right, right_width); }
+    int8_t              get_bottom_left_width() const { return !this ? 0 : get_width(bottom_left, bottom_left_width); }
+    int8_t              get_bottom_width() const { return !this ? 0 : get_width(bottom, bottom_width); }
+    int8_t              get_bottom_right_width() const { return !this ? 0 : get_width(bottom_right, bottom_right_width); }
 
     const char*         top_left = nullptr;
     const char*         top = nullptr;

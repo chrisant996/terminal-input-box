@@ -48,6 +48,7 @@ public:
     void                set_max_width(uint16_t m) { m_layout.max_width = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
     void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
     void                set_variable_height(bool v) { m_layout.variable_height = v; }
+    const border_definition* get_border() const { return m_style.border; }
     void                set_border(const border_definition* border);
     void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
 #if 0

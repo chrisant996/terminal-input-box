@@ -11,6 +11,17 @@
 #include <wcwidth.h>
 #include <assert.h>
 
+static const char c_long_usage[] =
+"Flags:\n"
+"  --single\n"
+"  --multiline\n"
+"  --fixed\n"
+"  --variable\n"
+"  --full-width\n"
+"  --no-border\n"
+"  --border STYLE    (light, padding, bar-padding, none)\n"
+;
+
 static tib_host::auto_terminal_init s_auto_terminal_init;
 
 static bool s_done = false;
@@ -50,10 +61,10 @@ protected:
     {
         wcwidth_iter iter(in);
         iter.next();
-        out.printf("\x1b[%sm", c_bar_text_color);
+        out.printf("\033[%sm", c_bar_text_color);
         out.append(iter.character_pointer(), iter.character_length());
         iter.next();
-        out.printf("\x1b[%sm", c_border_text_color);
+        out.printf("\033[%sm", c_border_text_color);
         out.append(iter.character_pointer(), iter.character_length());
         dst = out.c_str();
         dst_width = 2;
@@ -261,75 +272,52 @@ public:
 
 protected:
     void                provide_faces(const tib::input_buffer& buffer, tib::cstring& faces);
-
-private:
-    tib::cstring        m_prev_text;
-    tib::cstring        m_prev_faces;
-    char                m_curr_face;
 };
 
 custom_input_box::custom_input_box()
 {
-    m_curr_face = 'a';
     set_callbacks(this);
 }
 
 void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstring& faces)
 {
-#if 0
-    const char* old_ptr = m_prev_text.c_str();
-    uint32_t old_len = uint32_t(m_prev_text.length());
-    const char* new_ptr = buffer.get_text().c_str();
-    uint32_t new_len = uint32_t(buffer.get_text().length());
-    const char* old_begin_ptr = old_ptr;
-    const char* new_begin_ptr = new_ptr;
+}
 
-    wcwidth_iter iter_old(old_ptr, old_len);
-    wcwidth_iter iter_new(new_ptr, new_len);
-    while (iter_old.next() && iter_new.next())
+static void display_key_sequence(tib::cstring& tmp, const tib::input_box& tib, const tib::cstring& show_sequence)
+{
+    const tib::coord origin = tib.get_origin();
+    const tib::coord cursor = tib.get_relative_cursor();
+    const tib::coord extent = tib.get_extent();
+    const int32_t vert = extent.y - cursor.y;
+
+    tmp.set("\r", 1);
+    if (vert > 0)
     {
-        old_begin_ptr = iter_old.character_pointer();
-        new_begin_ptr = iter_new.character_pointer();
-        if (iter_old.character_length() != iter_new.character_length())
-            break;
-        if (memcmp(iter_old.character_pointer(), iter_new.character_pointer(), iter_new.character_length()))
-            break;
+        tmp.printf("\033[%uB", vert - 1);
+        if (vert > 1)
+            tmp.append("\n", 1);
+    }
+    else if (vert < 0)
+    {
+        tmp.printf("\033[%uA", 0 - vert);
     }
 
-    uint32_t old_end_pos = old_len;
-    uint32_t new_end_pos = new_len;
-    while (true)
+    if (show_sequence.length())
     {
-        uint32_t old_end_candidate = backward_one_grapheme(old_ptr, old_len, old_end_pos);
-        uint32_t new_end_candidate = backward_one_grapheme(new_ptr, new_len, new_end_pos);
-        if (old_end_pos - old_end_candidate != new_end_pos - new_end_candidate)
-            break;
-        if (memcmp(old_ptr + old_end_candidate, new_ptr + new_end_candidate, new_end_pos - new_end_candidate))
-            break;
-        old_end_pos = old_end_candidate;
-        new_end_pos = new_end_candidate;
-        if (old_end_pos == old_begin_ptr - old_ptr || new_end_pos == new_begin_ptr - new_ptr)
-            break;
+        tmp.append_color("36");
+        tmp.append("\033[4Gkeys:  ");
+        tmp.append(show_sequence.c_str(), show_sequence.length());
+        tmp.append_color("");
     }
 
-    const char* new_end_ptr = new_ptr + new_end_pos;
-    for (ptrdiff_t i = 0; i < new_begin_ptr - new_ptr; ++i)
-        faces.set_at(i, m_prev_faces.c_str()[i]);
-    for (ptrdiff_t i = new_begin_ptr - new_ptr; i < new_end_ptr - new_ptr; ++i)
-        faces.set_at(i, m_curr_face);
-    for (ptrdiff_t i = new_end_ptr - new_ptr; i < new_len; ++i)
-        faces.set_at(i, m_prev_faces.c_str()[i - new_len + old_len]);
+    tmp.append("\033[K");
+    if (vert > 0)
+        tmp.printf("\033[%uA", vert);
+    else if (vert < 0)
+        tmp.printf("\033[%uB", 0 - vert);
+    tmp.printf("\033[%uG", origin.x + cursor.x);
 
-    if (new_end_ptr > new_begin_ptr)
-    {
-        ++m_curr_face;
-        if (m_curr_face > 'g')
-            m_curr_face = 'a';
-    }
-
-    m_prev_text = buffer.get_text();
-    m_prev_faces = faces;
-#endif
+    tib::term_out(tmp.c_str(), tmp.length());
 }
 
 int main(int argc, const char** argv)
@@ -346,39 +334,117 @@ int main(int argc, const char** argv)
     tib_host::set_console_vt_input();
     reset_wcwidths();
 
-    const tib::border_definition* border = nullptr;
-    // border = &tib::c_light_border;
-    // border = &c_padding_border;
-    border = &c_bar_padding_border;
+    const char c_norm_base[] = "0";
+    const char c_padding_base[] = "0;48;2;33;33;33";
 
     std::shared_ptr<tib::color_table> colors = std::make_shared<tib::color_table>();
-    colors->set_color(tib::color_element::base, "0;48;2;33;33;33");
+    colors->set_color(tib::color_element::base, c_norm_base);
     colors->set_color(tib::color_element::border, "0;38;2;33;33;33");
 
     tib::face_definitions face_defs;
-    face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));
     face_defs.emplace(tib::FACE_SELECTION, "0;7");
-    face_defs.emplace(tib::FACE_SCROLLER, "0;48;2;33;33;33;36");
-    if (border == &c_padding_border)
-        face_defs.emplace(tib::FACE_EMPTY, colors->get_color(tib::color_element::border));
-    face_defs.emplace('a', "0;48;2;33;33;33;38;2;255;0;0");
-    face_defs.emplace('b', "0;48;2;33;33;33;38;2;255;128;0");
-    face_defs.emplace('c', "0;48;2;33;33;33;38;2;255;255;0");
-    face_defs.emplace('d', "0;48;2;33;33;33;38;2;0;255;0");
-    face_defs.emplace('e', "0;48;2;33;33;33;38;2;0;160;255");
-    face_defs.emplace('f', "0;48;2;33;33;33;38;2;0;96;255");
-    face_defs.emplace('g', "0;48;2;33;33;33;38;2;128;0;255");
+    face_defs.emplace(tib::FACE_SCROLLER, "0;7;36");
+    face_defs.emplace(tib::FACE_EMPTY, c_norm_base);
 
     custom_input_box tib;
     tib.set_bindings(make_basic_key_table());
-    tib.set_border(border);
-    if (border == &c_padding_border)
-        tib.set_empty_face(tib::FACE_DEFAULT);
+    tib.set_max_width(40);
+
+    const tib::border_definition* border = nullptr;
+    for (int i = 0; i < argc; ++i)
+    {
+        if (_stricmp(argv[i], "--single") == 0)
+        {
+            tib.set_max_height(1);
+        }
+        else if (_stricmp(argv[i], "--multiline") == 0)
+        {
+            tib.set_max_height(3);
+        }
+        else if (_stricmp(argv[i], "--fixed") == 0)
+        {
+            tib.set_variable_height(false);
+        }
+        else if (_stricmp(argv[i], "--variable") == 0)
+        {
+            tib.set_variable_height(true);
+        }
+        else if (_stricmp(argv[i], "--full-width") == 0)
+        {
+            tib.set_max_width(INT16_MAX);
+        }
+        else if (_stricmp(argv[i], "--no-border") == 0)
+        {
+no_border:
+            tib.set_empty_face(tib::FACE_EMPTY);
+            colors->set_color(tib::color_element::base, c_norm_base);
+            border = nullptr;
+        }
+        else if (_stricmp(argv[i], "--border") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                if (_stricmp(argv[i], "light") == 0)
+                {
+                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    colors->set_color(tib::color_element::base, c_norm_base);
+                    border = &tib::c_light_border;
+                }
+                else if (_stricmp(argv[i], "padding") == 0)
+                {
+                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    colors->set_color(tib::color_element::base, c_padding_base);
+                    border = &c_padding_border;
+                }
+                else if (_stricmp(argv[i], "bar-padding") == 0)
+                {
+                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    colors->set_color(tib::color_element::base, c_padding_base);
+                    border = &c_bar_padding_border;
+                }
+                else if (_stricmp(argv[i], "none") == 0)
+                {
+                    goto no_border;
+                }
+                else
+                {
+                    fputs("Unrecognized border style.\n", stderr);
+                    return 1;
+                }
+            }
+            else
+            {
+                fputs("Missing border style.\n", stderr);
+                return 1;
+            }
+        }
+        else if (_stricmp(argv[i], "-?") == 0 ||
+                 _stricmp(argv[i], "--help") == 0)
+        {
+            fprintf(stdout, "%s", c_long_usage);
+            return 0;
+        }
+        else
+        {
+            fprintf(stderr, "Unrecognized %s '%s'.\n", (argv[i][0] == '-') ? "flag" : "argument", argv[i]);
+            return 1;
+        }
+    }
+
+    face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));
+
+    tib::cstring border_face_scroller;
+    if (border)
+    {
+        border_face_scroller.set(colors->get_color(tib::color_element::base));
+        border_face_scroller.append_color("36");
+        face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
+    }
+
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
-    tib.set_max_height(3);
-    tib.set_variable_height(true);
-    tib.set_max_width(40);
+    tib.set_border(border);
 
 #ifdef _WIN32
     // CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -407,27 +473,7 @@ int main(int argc, const char** argv)
         tib.display();
 
         if (!show_sequence.empty())
-        {
-            const tib::coord origin = tib.get_origin();
-            const tib::coord cursor = tib.get_relative_cursor();
-            const tib::coord extent = tib.get_extent();
-
-            tmp.set("\033[s");
-            if (cursor.y < extent.y - 1)
-                tmp.printf("\x1b[%uB", (extent.y - 1) - cursor.y);
-            else if (cursor.y > extent.y - 1)
-                tmp.printf("\x1b[%uA", cursor.y - (extent.y - 1));
-            tmp.append_color(colors->get_color(tib::color_element::border));
-            tmp.append_color("7;46");
-            tmp.append("\x1b[4G keys:  ");
-            tmp.append(show_sequence.c_str(), show_sequence.length());
-            tmp.append_color(colors->get_color(tib::color_element::border));
-            for (size_t n = 25 - show_sequence.length(); n--;)
-                tmp.append(border ? border->bottom : " ");
-            tmp.append("\033[u");
-            tib::term_out(tmp.c_str(), tmp.length());
-            tib.set_border(border);
-        }
+            display_key_sequence(tmp, tib, show_sequence);
 
         const int32_t c = tib::term_in();
 
@@ -476,6 +522,8 @@ int main(int argc, const char** argv)
         }
     }
 
+    show_sequence.clear();
+    display_key_sequence(tmp, tib, show_sequence);
     tib.erase_display();
 
     tib::term_out("\r\n", 2);
