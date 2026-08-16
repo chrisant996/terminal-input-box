@@ -13,21 +13,26 @@
 
 static const char c_long_usage[] =
 "Flags:\n"
-"  --single\n"
-"  --multiline\n"
-"  --fixed\n"
-"  --variable\n"
-"  --full-width\n"
-"  --no-border\n"
-"  --border STYLE    (light, padding, bar-padding, none)\n"
+"  --single          Single line input mode (default).\n"
+"  --multiline       Multiple line input mode (max height 3 lines).\n"
+"  --fixed           Fixed height input mode (default).\n"
+"  --variable        Variable height input mode (implies --multiline).\n"
+"  --full-width      Use the full terminal width (default is 40).\n"
+"  --no-border       No border (default; same as '--border none').\n"
+"  --border STYLE    Use border style:  light, padding, bar-padding, none.\n"
+"  --rainbow         Apply rainbow colors to words.\n"
 ;
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
 
 static bool s_done = false;
 
+static bool s_use_rainbow_faces = false;
+
 static const char* const c_bar_text_color = "0;38;2;180;140;33";
 static const char* const c_border_text_color = "0;38;2;33;33;33";
+constexpr char FACE_CTRL = '^';
+constexpr char FACE_RAINBOW = '\x80';
 
 static const tib::border_definition c_padding_border =
 {
@@ -264,6 +269,24 @@ std::shared_ptr<tib::key_table_list> make_basic_key_table()
     return tables;
 }
 
+struct color_t
+{
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+};
+
+static const color_t c_colors[] =
+{
+    { 0xcc, 0x00, 0x00 },
+    { 0xcc, 0x99, 0x00 },
+    { 0xcc, 0xcc, 0x00 },
+    { 0x00, 0xcc, 0x00 },
+    { 0x00, 0xcc, 0xcc },
+    { 0x00, 0x66, 0xcc },
+    { 0xcc, 0x00, 0xcc },
+};
+
 class custom_input_box : public tib::input_box, protected tib::editor_callbacks
 {
 public:
@@ -281,6 +304,31 @@ custom_input_box::custom_input_box()
 
 void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstring& faces)
 {
+    if (s_use_rainbow_faces)
+    {
+        uint8_t c = 0;
+        bool space = true;
+        const tib::cstring& text = buffer.get_text();
+        const char* s = text.c_str();
+        const size_t len = text.length();
+        assert(len == faces.length());
+        for (size_t i = 0; i < text.length(); ++i)
+        {
+            if (s[i] < ' ')
+            {
+                faces.set_at(i, FACE_CTRL);
+            }
+            else
+            {
+                if (!space && s[i] == ' ')
+                    c = (c + 1) % std::size(c_colors);
+                space = (s[i] == ' ');
+
+                if (!space)
+                    faces.set_at(i, FACE_RAINBOW + c);
+            }
+        }
+    }
 }
 
 static void display_key_sequence(tib::cstring& tmp, const tib::input_box& tib, const tib::cstring& show_sequence)
@@ -345,6 +393,7 @@ int main(int argc, const char** argv)
     face_defs.emplace(tib::FACE_SELECTION, "0;7");
     face_defs.emplace(tib::FACE_SCROLLER, "0;7;36");
     face_defs.emplace(tib::FACE_EMPTY, c_norm_base);
+    face_defs.emplace(FACE_CTRL, "0;36;44");
 
     custom_input_box tib;
     tib.set_bindings(make_basic_key_table());
@@ -356,6 +405,7 @@ int main(int argc, const char** argv)
         if (_stricmp(argv[i], "--single") == 0)
         {
             tib.set_max_height(1);
+            tib.set_variable_height(false);
         }
         else if (_stricmp(argv[i], "--multiline") == 0)
         {
@@ -367,6 +417,7 @@ int main(int argc, const char** argv)
         }
         else if (_stricmp(argv[i], "--variable") == 0)
         {
+            tib.set_max_height(3);
             tib.set_variable_height(true);
         }
         else if (_stricmp(argv[i], "--full-width") == 0)
@@ -419,6 +470,10 @@ no_border:
                 return 1;
             }
         }
+        else if (_stricmp(argv[i], "--rainbow") == 0)
+        {
+            s_use_rainbow_faces = true;
+        }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
         {
@@ -440,6 +495,24 @@ no_border:
         border_face_scroller.set(colors->get_color(tib::color_element::base));
         border_face_scroller.append_color("36");
         face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
+    }
+
+    std::vector<tib::cstring> rainbow_colors;
+    if (s_use_rainbow_faces)
+    {
+        for (uint8_t i = 0; i < std::size(c_colors); ++i)
+        {
+            tib::cstring tmp;
+            tmp.set(colors->get_color(tib::color_element::base));
+            tmp.printf("\033[38;2;%u;%u;%um", c_colors[i].r, c_colors[i].g, c_colors[i].b);
+            static_assert(std::is_nothrow_move_constructible_v<tib::cstring>);
+            static_assert(std::is_nothrow_move_assignable_v<tib::cstring>);
+            rainbow_colors.emplace_back(std::move(tmp));
+        }
+        for (uint8_t i = 0; i < std::size(c_colors); ++i)
+        {
+            face_defs[FACE_RAINBOW + i] = rainbow_colors[i].c_str();
+        }
     }
 
     tib.set_color_table(colors);
