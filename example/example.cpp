@@ -331,25 +331,16 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
     }
 }
 
-static void display_key_sequence(tib::cstring& tmp, const tib::input_box& tib, const tib::cstring& show_sequence)
+static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& show_sequence)
 {
-    const tib::coord origin = tib.get_origin();
-    const tib::coord cursor = tib.get_relative_cursor();
-    const tib::coord extent = tib.get_extent();
+    const tib::coord origin = ctx.get_origin();
+    const tib::coord cursor = ctx.get_relative_cursor();
+    const tib::coord extent = ctx.get_extent();
     const int32_t vert = extent.y - cursor.y;
 
-    tmp.set("\r", 1);
-    if (vert > 0)
-    {
-        tmp.printf("\033[%uB", vert - 1);
-        if (vert > 1)
-            tmp.append("\n", 1);
-    }
-    else if (vert < 0)
-    {
-        tmp.printf("\033[%uA", 0 - vert);
-    }
+    ctx.move_to_end_of_display();
 
+    tib::cstring tmp;
     if (show_sequence.length())
     {
         tmp.append_color("36");
@@ -357,15 +348,10 @@ static void display_key_sequence(tib::cstring& tmp, const tib::input_box& tib, c
         tmp.append(show_sequence.c_str(), show_sequence.length());
         tmp.append_color("");
     }
-
     tmp.append("\033[K");
-    if (vert > 0)
-        tmp.printf("\033[%uA", vert);
-    else if (vert < 0)
-        tmp.printf("\033[%uB", 0 - vert);
-    tmp.printf("\033[%uG", origin.x + cursor.x);
-
     tib::term_out(tmp.c_str(), tmp.length());
+
+    ctx.move_to_caret_position();
 }
 
 int main(int argc, const char** argv)
@@ -546,7 +532,7 @@ no_border:
         tib.display();
 
         if (!show_sequence.empty())
-            display_key_sequence(tmp, tib, show_sequence);
+            display_key_sequence(tib, show_sequence);
 
         const int32_t c = tib::term_in();
 
@@ -583,7 +569,7 @@ no_border:
     }
 
     show_sequence.clear();
-    display_key_sequence(tmp, tib, show_sequence);
+    display_key_sequence(tib, show_sequence);
     tib.erase_display();
 
     tib::term_out("\r\n", 2);
