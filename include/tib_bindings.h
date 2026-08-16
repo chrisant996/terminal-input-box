@@ -91,7 +91,7 @@ private:
 
 typedef std::vector<std::shared_ptr<key_table>> key_table_list;
 
-enum dispatch_outcome { miss, more, match };
+enum dispatch_outcome { miss, self_insert, more, match };
 
 class dispatcher
 {
@@ -102,11 +102,14 @@ public:
     void                init(std::shared_ptr<const key_table_list> tables);
 
     void                reset();
-    dispatch_outcome    step(char c);
+    dispatch_outcome    step(char c, editor_context* ctx=nullptr);
 
     const cstring&      get_sequence() const { return m_sequence; }
     const binding_target* get_target() const { return m_target; }
     dispatch_outcome    get_outcome() const { return m_outcome; }
+
+private:
+    dispatch_outcome    step_internal(char c);
 
 private:
     std::shared_ptr<const key_table_list> m_tables;

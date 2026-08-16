@@ -570,27 +570,14 @@ no_border:
         }
         show_sequence.set(sequence.c_str(), sequence.length());
 
-        switch (dispatcher.step(c))
+        switch (dispatcher.step(c, &tib))
         {
-        case tib::dispatch_outcome::miss:
-            if (!(c & 0xffffff00))
-            {
-                // Insert the char into the input_box.
-// TODO: optimize for typeahead insertion (with undo group).
-                tib.insert_char(char(c));
-                if (sequence.length() == 1/*c*/ + 1/*space*/)
-                    sequence.clear();
-            }
-            break;
-        case tib::dispatch_outcome::more:
+        case tib::dispatch_outcome::self_insert:
+            if (sequence.length() == 1/*c*/ + 1/*space*/)
+                sequence.clear();
             break;
         case tib::dispatch_outcome::match:
-            {
-                const auto target = dispatcher.get_target();
-                assert(target);
-                tib.do_binding_target(target, c);
-                sequence.clear();
-            }
+            sequence.clear();
             break;
         }
     }

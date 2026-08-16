@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_context.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -94,7 +95,37 @@ void dispatcher::reset()
     m_outcome = dispatch_outcome::miss;
 }
 
-dispatch_outcome dispatcher::step(char c)
+dispatch_outcome dispatcher::step(char c, editor_context* ctx)
+{
+    dispatch_outcome outcome = step_internal(c);
+    if (outcome == dispatch_outcome::miss && !(c & 0xffffff00))
+        outcome = dispatch_outcome::self_insert;
+
+    if (ctx)
+    {
+        switch (outcome)
+        {
+        case dispatch_outcome::self_insert:
+            {
+                // Insert the char into the input_box.
+// TODO: optimize for typeahead insertion (with undo group).
+                ctx->insert_char(char(c));
+            }
+            break;
+        case dispatch_outcome::match:
+            {
+                const auto target = get_target();
+                assert(target);
+                ctx->do_binding_target(target, c);
+            }
+            break;
+        }
+    }
+
+    return outcome;
+}
+
+dispatch_outcome dispatcher::step_internal(char c)
 {
     if (m_outcome != dispatch_outcome::more)
         reset();
