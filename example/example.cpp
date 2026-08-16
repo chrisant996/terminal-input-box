@@ -20,14 +20,13 @@ static const char* const c_border_text_color = "0;38;2;33;33;33";
 
 static const tib::border_definition c_padding_border =
 {
-    nullptr,
-    "▄",
-    nullptr,
-    "██",
-    "██",
-    nullptr,
-    "▀",
-    nullptr,
+    nullptr,    "▄",    nullptr,
+    "██",               "██",
+    nullptr,    "▀",    nullptr,
+
+    0,          1,      0,
+    2,                  2,
+    0,          1,      0,
 };
 
 struct bar_padding_border_definition : public tib::border_definition
@@ -38,12 +37,12 @@ struct bar_padding_border_definition : public tib::border_definition
         make_bar("▐█", custom_left, left, left_width);
         make_bar("▝▀", custom_bottom_left, bottom_left, bottom_left_width);
 
-        top_right = "▖"; top_right_width = 1;
-        right = "█▌"; right_width = 2;
-        bottom_right = "▘"; bottom_right_width = 1;
+        top_right = "▖";        top_right_width = 1;
+        right = "█▌";           right_width = 2;
+        bottom_right = "▘";     bottom_right_width = 1;
 
-        top = "▄"; top_width = 1;
-        bottom = "▀"; bottom_width = 1;
+        top = "▄";              top_width = 1;
+        bottom = "▀";           bottom_width = 1;
     };
 
 protected:

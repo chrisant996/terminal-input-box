@@ -19,14 +19,13 @@ bool g_coalesce_output = true;
 
 const border_definition c_light_border =
 {
-    "┌",
-    "─",
-    "┐",
-    "│",
-    "│",
-    "└",
-    "─",
-    "┘",
+    "┌",    "─",    "┐",
+    "│",            "│",
+    "└",    "─",    "┘",
+
+    1,      1,      1,
+    1,              1,
+    1,      1,      1,
 };
 
 int8_t border_definition::get_width(const char* s, int8_t width) const
@@ -273,7 +272,6 @@ nope:
     const coord term_size = get_terminal_size();
 
     const border_definition* b = m_style ? m_style->border : nullptr;
-    // TODO: cache border cell_count metrics.
     const uint16_t b_left_width = b->get_left_width();
     const uint16_t b_right_width = b->get_right_width();
     const uint16_t extra_border_width = b_left_width + b_right_width;
@@ -659,7 +657,6 @@ bool display_manager::build(display_lines& out)
     coord term_size = get_terminal_size();
     if (m_style && m_style->border)
     {
-        // TODO: cache border metrics.
         const border_definition& b = *m_style->border;
         const uint16_t b_height = !!b.has_top() + !!b.has_bottom();
         tmp.m_inner_offset.y = b.has_top() ? 1 : 0;
