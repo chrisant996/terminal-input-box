@@ -168,6 +168,7 @@ private:
     void                output_spaces(size_t n);
     void                maybe_flush();
 
+private:
     const layout_info*  m_layout = nullptr;         // Borrowed.
     const input_buffer* m_buffer = nullptr;         // Borrowed.
     const style_info*   m_style = nullptr;          // Borrowed.

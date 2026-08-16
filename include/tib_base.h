@@ -74,6 +74,8 @@ public:
 
 private:
     bool                raw_set(const T* s, size_t len);
+
+private:
     size_t              m_capacity = 0;
     mutable size_t      m_len = 0;
     T*                  m_text = nullptr;
