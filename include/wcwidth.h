@@ -15,6 +15,8 @@ extern "C" void reset_cached_font();
 
 #ifdef __cplusplus
 
+extern bool g_color_emoji;      // Assume whether the terminal supports color emoji.
+
 #include "str_iter.h"
 
 bool is_variant_selector(char32_t ucs);

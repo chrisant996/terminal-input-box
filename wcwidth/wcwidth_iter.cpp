@@ -6,10 +6,6 @@
 #include "wcwidth.h"
 #include <assert.h>
 
-namespace tib {
-extern bool g_color_emoji;
-}
-
 extern "C" uint32_t __wcswidth(const char* s, size_t len)
 {
     uint32_t count = 0;
@@ -82,7 +78,7 @@ uint32_t backward_one_grapheme(const char* const s, const size_t len, const uint
         // regional indicators require parsing from farther back.
         const bool continuation = ((wcwidth(codepoint) == 0) ||
                                    (codepoint >= 0x1f1e6 && codepoint <= 0x1f1ff) || // Regional indicator.
-                                   (tib::g_color_emoji && is_variant_selector(codepoint)));
+                                   (g_color_emoji && is_variant_selector(codepoint)));
         if (continuation)
             have_nonzero = false;
         else if (have_nonzero)
@@ -215,7 +211,7 @@ char32_t wcwidth_iter::next()
         return c;
 
     // Try to parse emoji sequences.
-    if (tib::g_color_emoji && m_chr_wcwidth)
+    if (g_color_emoji && m_chr_wcwidth)
     {
         // Check for a country flag sequence.
         if (c >= 0x1f1e6 && c <= 0x1f1ff && m_next >= 0x1f1e6 && m_next <= 0x1f1ff)
@@ -271,7 +267,7 @@ emoji_sequence:
         {
             // Variant selectors affect non-emoji as well, so treat them as
             // zero width for continuation purposes, but make the width 2.
-            if (tib::g_color_emoji && is_variant_selector(m_next))
+            if (g_color_emoji && is_variant_selector(m_next))
             {
                 assert(m_chr_wcwidth == 1 || m_chr_wcwidth == 2);
                 m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);

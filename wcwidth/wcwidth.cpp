@@ -73,9 +73,7 @@
 // #include "terminal_helpers.h"
 #include <assert.h>
 
-namespace tib {
-extern bool g_color_emoji;
-}
+bool g_color_emoji = true;
 
 static int32_t s_combining_mark_width = 0;
 
@@ -225,7 +223,7 @@ static int32_t mk_wcwidth(char32_t ucs)
     return -1;
 
   /* special processing when color emoji support is enabled */
-  if (tib::g_color_emoji) {
+  if (g_color_emoji) {
     /* characters with unqualified forms are width 1 without FE0F/etc */
     if (bisearch(ucs, possible_unqualified_half_width, _countof(possible_unqualified_half_width) - 1))
       return 1;
@@ -516,7 +514,7 @@ void detect_ucs2_limitation(bool force)
  */
 bool is_variant_selector(char32_t ucs)
 {
-    assert(tib::g_color_emoji);
+    assert(g_color_emoji);
     return (ucs == 0xfe0f ||                            // color variant
             ucs >= 0x1f3fb && ucs <= 0x1f3ff);          // skin tone
 }
@@ -529,7 +527,7 @@ bool is_variant_selector(char32_t ucs)
  */
 bool is_possible_unqualified_half_width(char32_t ucs)
 {
-    assert(tib::g_color_emoji);
+    assert(g_color_emoji);
     return !!bisearch(ucs, possible_unqualified_half_width, _countof(possible_unqualified_half_width) - 1);
 }
 
@@ -538,7 +536,7 @@ bool is_possible_unqualified_half_width(char32_t ucs)
  */
 bool is_emoji(char32_t ucs)
 {
-    assert(tib::g_color_emoji);
+    assert(g_color_emoji);
     return !!bisearch(ucs, emojis, _countof(emojis) - 1);
 }
 

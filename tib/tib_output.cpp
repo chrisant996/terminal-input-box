@@ -14,9 +14,6 @@ namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
 
-// TODO: Initialize appropriately.
-bool g_color_emoji = true;
-
 const char c_hide_cursor[] = "\x1b[?25l";
 const char c_show_cursor[] = "\x1b[?25h";
 
