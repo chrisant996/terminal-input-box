@@ -80,10 +80,13 @@ public:
     bool                remove(const cstring& sequence);
     void                clear();
 
-    // TODO: Enumerate m_bindings to be able to report current available key
-    // bindings.
-    // TODO: Optionally filter the enumeration to only key bindings that match
-    // a prefix sequence.
+    auto                begin() const noexcept { return m_bindings.cbegin(); }
+    auto                end() const noexcept { return m_bindings.cend(); }
+    auto                cbegin() const noexcept { return m_bindings.cbegin(); }
+    auto                cend() const noexcept { return m_bindings.cend(); }
+
+    // FUTURE: provide an enumeration that filters to only key bindings that
+    // match a prefix sequence?
 
 private:
     std::vector<key_binding> m_bindings;
