@@ -35,7 +35,7 @@ private:
     DWORD               m_orig_modes[3];
     bool                m_restore_modes = false;
 #else
-    // TODO:  POSIX sigaction alternative.
+    // TODO-LINUX: POSIX sigaction alternative.
 #endif
     bool                m_exit_cleanup = true;
 };

@@ -36,7 +36,7 @@ int main(int argc, char** argv)
     install_crt_invalid_parameter_handler();
 #endif
 
-    // TODO:  Override ding preference, otherwise the tests may be vocal.
+    // TODO: Override ding preference, otherwise the tests may be vocal.
 
     bool list = false;
     bool times = false;
@@ -81,8 +81,6 @@ int main(int argc, char** argv)
         test::list();
         return 0;
     }
-
-    // TODO:  Initialize tib appropriately.
 
     DWORD start = GetTickCount();
 

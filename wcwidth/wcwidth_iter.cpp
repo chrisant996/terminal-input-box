@@ -30,7 +30,7 @@ extern "C" uint32_t __wcswidth_expandctrl(const char* s, size_t len)
 
 extern "C" uint32_t cell_count(const char* s, size_t len)
 {
-    // TODO:  Parse and ignore ECMA48 escape sequences.
+    // FUTURE: Parse and ignore ECMA48 escape sequences?
     return __wcswidth(s, len);
 }
 

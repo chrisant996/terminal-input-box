@@ -209,7 +209,7 @@ bool getenv(const char* name, cstring& out)
     wout.set_length(used);
     return to_utf8(wout.c_str(), wout.length(), out);
 #else
-    // TODO:  Alternative Linux implementation.
+    // TODO-LINUX: Alternative Linux implementation.
 #endif
 }
 

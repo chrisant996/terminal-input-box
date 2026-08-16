@@ -52,7 +52,7 @@ private:
     // the operation.  If runtime cost didn't matter, it could be cleaner to
     // store just a target string (`foo` for bindable command name "foo", and
     // `"text"` for macro text "text") and resolve the target on demand.
-    // TODO:  Analyze actual performance cost of resolving targets on demand.
+    // PERF: Analyze actual performance cost of resolving targets on demand.
     binding_type        m_type;
     bindable_func_t     m_func;
     const char*         m_text; // Borrowed, not owned.
@@ -75,15 +75,15 @@ public:
                         ~key_table();
                         key_table() = default;
 
-    // TODO:  Need some way to troubleshoot messed up bindings.
+    // FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
     bool                remove(const cstring& sequence);
     void                clear();
 
-    // TODO:  Enumerate m_bindings to be able to report current available key
+    // TODO: Enumerate m_bindings to be able to report current available key
     // bindings.
-    // TODO:  Optionally filter the enumeration to only key bindings that
-    // match a prefix sequence.
+    // TODO: Optionally filter the enumeration to only key bindings that match
+    // a prefix sequence.
 
 private:
     std::vector<key_binding> m_bindings;

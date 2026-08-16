@@ -74,7 +74,7 @@ coord get_terminal_size()
         size.y = csbi.dwSize.Y;
     }
 #else
-    // TODO:  Alternative Linux implementation.
+    // TODO-LINUX: Alternative Linux implementation.
 #endif
     return size;
 }

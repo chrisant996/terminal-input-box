@@ -26,7 +26,7 @@ static macro_playback* s_macro_playback = nullptr;
 int32_t term_in()
 {
     // TODO:  Assert/enforce single threaded.
-    // TODO:  Pushed input.
+    // TODO: Pushed input.
 
     if (s_macro_playback)
     {
@@ -41,7 +41,7 @@ int32_t term_in()
         return uint8_t(c);
     }
 
-    // TODO:  Differentiate between EOF versus other failures.
+    // TODO: Differentiate between EOF versus other failures.
 
     if (hook_term_in)
         return hook_term_in();
@@ -61,7 +61,7 @@ int32_t term_in()
         s_pending_head = 0;
     }
 
-    // TODO:  Cache for performance; maybe have an init_terminal() function?
+    // TODO: Cache for performance; maybe have an init_terminal() function?
     DWORD mode;
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     if (GetConsoleMode(h, &mode))
@@ -106,8 +106,8 @@ int32_t term_in()
         return uint8_t(c);
     }
 #else
-    // TODO:  Use fgetc?
-    // TODO:  What to do upon EOF?
+    // TODO-LINUX: Use fgetc?
+    // TODO-LINUX: What to do upon EOF?
 #endif
 }
 

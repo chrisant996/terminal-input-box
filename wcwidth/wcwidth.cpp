@@ -64,7 +64,7 @@
 #ifdef _WIN32
 #include <wchar.h>
 #else
-// TODO: ?
+// TODO-LINUX: ?
 #endif
 
 #include "tib_base.h"
@@ -807,7 +807,6 @@ void reset_wcwidths()
         use_cjk = is_CJK_codepage(s_cp);
     }
 #else
-    // TODO:  ?
     use_cjk = false;
 #endif
 

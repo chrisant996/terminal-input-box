@@ -492,7 +492,7 @@ bool display_manager::display_internal(display_lines& lines)
             const uint32_t clen = iter.character_length();
             assert(clen <= len);
 
-            // TODO: optimize to add a run instead of just a grapheme.
+            // PERF: optimize to add a run instead of just a grapheme?
             output(iter.character_pointer(), clen);
 
             t += clen;

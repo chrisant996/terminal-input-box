@@ -524,7 +524,7 @@ no_border:
     // GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
     // tib.set_origin(csbi.dwCursorPosition.X + 1);
 #else
-    // TODO:  Query the terminal for the current position.
+    // TODO-LINUX: Query the terminal for the current position.
 #endif
 
     tib.initialize_text("hello world");

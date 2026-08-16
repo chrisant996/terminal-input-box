@@ -350,8 +350,8 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
     if (!target)
         return -1;
 
-    // TODO:  m_can_drag.
-    // TODO:  Whether/when to reset history index.
+    // TODO: m_can_drag.
+    // TODO: Whether/when to reset history index.
 
     switch (target->get_type())
     {
@@ -377,7 +377,7 @@ void editor_context::display()
 {
     // TODO: terminal size changes should invalidate.
 
-    // TODO: optimize this away where possible.
+    // REVIEW: optimize this away as much as possible?
     ensure_left();
 
     m_display.display();

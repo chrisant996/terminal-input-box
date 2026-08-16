@@ -51,13 +51,13 @@ no_cleanup:
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
-    // TODO:  Eventually the input handle will also need ENABLE_WINDOW_INPUT
+    // TODO: Eventually the input handle will also need ENABLE_WINDOW_INPUT
     // and conditionally ENABLE_MOUSE_INPUT.
     SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT));
     SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
-    // TODO:  POSIX sigaction alternative.
+    // TODO-LINUX: POSIX sigaction alternative.
 #endif
 }
 
@@ -81,7 +81,7 @@ void auto_terminal_init::restore()
         }
     }
 #else
-        // TODO:  POSIX sigaction alternative.
+        // TODO-LINUX: POSIX sigaction alternative.
 #endif
 }
 
@@ -97,7 +97,7 @@ BOOL auto_terminal_init::BreakHandler(DWORD CtrlType)
     return false;
 }
 #else
-    // TODO:  POSIX sigaction alternative.
+    // TODO-LINUX: POSIX sigaction alternative.
 #endif
 
 } // namespace tib_host

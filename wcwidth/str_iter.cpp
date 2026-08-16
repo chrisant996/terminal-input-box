@@ -12,7 +12,7 @@ char32_t str_iter_impl<char>::next()
     if (!more())
         return 0;
 
-    // TODO:  Detect invalid UTF8 correctly.
+    // TODO: Detect invalid UTF8 correctly.
 
     int32_t ax = 0;
     int32_t encode_length = 0;
