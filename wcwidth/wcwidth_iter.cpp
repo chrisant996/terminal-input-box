@@ -136,6 +136,26 @@ uint32_t forward_one_grapheme(const char* s, size_t len, uint32_t pos, uint16_t*
     return pos + iter.character_length();
 }
 
+size_t parse_graphemes(const char* s, const size_t len, const uint32_t pos, std::vector<grapheme_info>& out)
+{
+    out.clear();
+
+    wcwidth_iter iter(s, len);
+    uint32_t char_index = 0;
+    size_t index_pos = 0;
+    while (iter.next())
+    {
+        if (char_index <= pos)
+            index_pos = out.size();
+        const uint32_t char_length = iter.character_length();
+        out.push_back(grapheme_info { char_index, char_length, uint16_t(iter.character_wcwidth_onectrl()) });
+        char_index += char_length;
+    }
+    assert(char_index == len);
+
+    return index_pos;
+}
+
 wcwidth_iter::wcwidth_iter(const char* s, size_t len)
 : m_iter(s, len)
 {

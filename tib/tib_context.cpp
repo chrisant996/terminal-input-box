@@ -43,39 +43,6 @@ void undo_entry::unlink(undo_entry*& head, undo_entry*& tail)
     m_next = nullptr;
 }
 
-#if 0
-struct grapheme_info
-{
-    uint16_t            index;
-    uint16_t            length;
-    uint16_t            width;
-};
-
-// NOTE: Generally use backward_one_grapheme and forward_one_grapheme instead,
-// but there could be cases where mapping the grapheme boundaries of an entire
-// text string is still appropriate.
-static std::vector<grapheme_info> parse_graphemes(const char* s, const size_t len, const textpos_t pos, size_t& index_pos)
-{
-    std::vector<grapheme_info> characters;
-
-    wcwidth_iter iter(s, len);
-    unsigned short char_index = 0;
-    size_t i_p = 0;
-    while (iter.next())
-    {
-        if (char_index <= pos)
-            i_p = characters.size();
-        const unsigned short char_length = iter.character_length();
-        characters.push_back(grapheme_info { char_index, char_length, (unsigned short)iter.character_wcwidth_onectrl() });
-        char_index += char_length;
-    }
-    assert(char_index == len);
-
-    index_pos = i_p;
-    return characters;
-}
-#endif
-
 static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
 {
     while (pos > 0 && backup)
@@ -443,12 +410,14 @@ void editor_context::ensure_left()
     m_left = min(m_left, m_selection.get_caret());
 
     // Auto-scroll horizontally forward.
-    while (__wcswidth(m_text.c_str() + m_left, m_selection.get_caret() - m_left) >= uint32_t(max_size.x))
+    parse_graphemes(m_text.c_str() + m_left, m_selection.get_caret() - m_left, 0, m_tmp_graphemes);
+    uint32_t width = 0;
+    for (const auto& g : m_tmp_graphemes)
+        width += g.width;
+    for (auto g = m_tmp_graphemes.cbegin(); width >= uint32_t(max_size.x); ++g)
     {
-        wcwidth_iter iter(m_text.c_str() + m_left, m_text.length() - m_left);
-        if (!iter.next())
-            break;
-        m_left += iter.character_length();
+        width -= g->width;
+        m_left += g->length;
     }
 
     // Auto-scroll horizontally backward.

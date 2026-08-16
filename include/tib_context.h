@@ -12,6 +12,8 @@
 #include "tib_display.h"
 #include <vector>
 
+struct grapheme_info;
+
 namespace tib {
 
 textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word);
@@ -137,6 +139,7 @@ private:
 
     // Display.
     display_manager     m_display;
+    std::vector<grapheme_info> m_tmp_graphemes;
 
     // Undo/redo queue.
     undo_entry*         m_undo_head = nullptr;
