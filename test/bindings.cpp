@@ -41,15 +41,17 @@ TEST_CASE("Key bindings")
             REQUIRE(dispatcher.get_target());
             REQUIRE(dispatcher.get_target()->get_func() == command_one);
 
-            REQUIRE(dispatcher.step('x') == tib::miss);
+            REQUIRE(dispatcher.step('x') == tib::self_insert);
             REQUIRE(!dispatcher.get_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
 
             REQUIRE(dispatcher.step('\x1b') == tib::more);
             REQUIRE(dispatcher.step('[') == tib::more);
-            REQUIRE(dispatcher.step('Z') == tib::miss);
+            REQUIRE(dispatcher.step('Z') == tib::self_insert);
             REQUIRE(!dispatcher.get_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
+
+            // TODO: need a test for tib::miss.
         }
 
         SECTION("Overlay table")
