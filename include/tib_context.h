@@ -16,6 +16,11 @@ namespace tib {
 
 textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word);
 
+struct editor_callbacks : public std::enable_shared_from_this<editor_callbacks>
+{
+    virtual void        provide_faces(const input_buffer& buffer, cstring& faces) {}
+};
+
 struct undo_entry
 {
                         undo_entry() = default;
@@ -44,7 +49,6 @@ public:
     void                set_border(const border_definition* border);
     void                set_horiz_scroll_markers(bool show) { m_style.horiz_scroll_markers = show; }
 #if 0
-    void                Set_Callback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback);
     void                set_history(std::vector<StrW>* history);
 #endif
     coord               get_origin() const { return m_display.get_origin(); }
@@ -55,6 +59,7 @@ public:
     void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
     std::shared_ptr<const key_table_list> get_bindings() const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
+    void                set_callbacks(editor_callbacks* callbacks);
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
     void                set_face_defs(const face_definitions* face_defs);
@@ -118,6 +123,7 @@ private:
 
     // Configuration.
     std::shared_ptr<const key_table_list> m_bindings;
+    editor_callbacks*   m_callbacks = nullptr;      // Borrowed.
     layout_info         m_layout;   // REVIEW: does tib_context actually need access to this?
     style_info          m_style;    // REVIEW: does tib_context actually need access to this?
     uint32_t            m_max_length = INT16_MAX;
@@ -144,11 +150,6 @@ private:
     std::vector<cstring>* m_history = nullptr;
     size_t              m_history_index = 0;
     cstring             m_curr_input_history;
-#endif
-
-    // Callback.
-#if 0
-    std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> m_callback;
 #endif
 };
 

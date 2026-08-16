@@ -233,6 +233,11 @@ void display_manager::init_faces(const face_definitions* face_defs)
     invalidate();
 }
 
+void display_manager::init_callbacks(editor_callbacks* callbacks)
+{
+    m_callbacks = callbacks;
+}
+
 void display_manager::set_origin(int32_t x, int32_t y)
 {
     assert(x != 0);
@@ -615,9 +620,10 @@ bool display_manager::build(display_lines& out)
 
     const cstring& text = m_buffer->get_text();
 
-    // TODO: callback to provide faces.
     cstring faces;
     faces.append_spaces(text.length());     // FACE_DEFAULT == space.
+    if (m_callbacks)
+        m_callbacks->provide_faces(*m_buffer, faces);
 
     // Overlay selection color into faces.
     memset(faces.reserve(0) + sel_begin, FACE_SELECTION, sel_end - sel_begin);

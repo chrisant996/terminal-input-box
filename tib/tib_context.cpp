@@ -213,11 +213,6 @@ void editor_context::set_border(const border_definition* border)
 }
 
 #if 0
-void editor_context::SetCallback(std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback)
-{
-    m_callback = input_callback;
-}
-
 void editor_context::set_history(std::vector<cstring>* history)
 {
     m_history = history;
@@ -263,6 +258,12 @@ std::shared_ptr<const key_table_list> editor_context::get_bindings() const
 void editor_context::set_bindings(std::shared_ptr<const key_table_list> bindings)
 {
     m_bindings = bindings;
+}
+
+void editor_context::set_callbacks(editor_callbacks* callbacks)
+{
+    m_callbacks = callbacks;
+    m_display.init_callbacks(m_callbacks);
 }
 
 std::shared_ptr<const color_table> editor_context::get_color_table() const
@@ -912,32 +913,6 @@ void editor_context::dump_undo_stack()
         printf("%s\tcaret %u/%u, anchor %u/%u, text '%s'\n", tag.c_str(), p->m_sel_before.get_caret(), p->m_sel_after.get_caret(), p->m_sel_before.get_anchor(), p->m_sel_after.get_anchor(), p->m_text.c_str());
     }
     printf("----\n");
-}
-#endif
-
-#if 0
-bool ReadInput(StrW& out, History hindex, DWORD max_length, DWORD max_width, std::optional<std::function<int32(const InputRecord&, const ReadInputBuffer&, void*)>> input_callback)
-{
-    static std::vector<StrW> s_histories[size_t(History::MAX)];
-
-    max_length = max<DWORD>(max_length, 1);
-    max_length = min<DWORD>(max_length, 1024);
-    out.Clear();
-
-    editor_context state;
-    state.SetMaxWidth(max_width);
-    state.SetMaxLength(max_length);
-    state.SetCallback(input_callback);
-    state.SetHistory((size_t(hindex) < _countof(s_histories)) ? &s_histories[size_t(hindex)] : nullptr);
-
-    const int32 result = state.Go();
-    if (result > 0)
-    {
-        state.transfer_text(out);
-        return true;
-    }
-
-    return false;
 }
 #endif
 

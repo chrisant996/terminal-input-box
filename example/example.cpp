@@ -254,6 +254,85 @@ std::shared_ptr<tib::key_table_list> make_basic_key_table()
     return tables;
 }
 
+class custom_input_box : public tib::input_box, protected tib::editor_callbacks
+{
+public:
+                        ~custom_input_box() = default;
+                        custom_input_box();
+
+protected:
+    void                provide_faces(const tib::input_buffer& buffer, tib::cstring& faces);
+
+private:
+    tib::cstring        m_prev_text;
+    tib::cstring        m_prev_faces;
+    char                m_curr_face;
+};
+
+custom_input_box::custom_input_box()
+{
+    m_curr_face = 'a';
+    set_callbacks(this);
+}
+
+void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstring& faces)
+{
+#if 0
+    const char* old_ptr = m_prev_text.c_str();
+    uint32_t old_len = uint32_t(m_prev_text.length());
+    const char* new_ptr = buffer.get_text().c_str();
+    uint32_t new_len = uint32_t(buffer.get_text().length());
+    const char* old_begin_ptr = old_ptr;
+    const char* new_begin_ptr = new_ptr;
+
+    wcwidth_iter iter_old(old_ptr, old_len);
+    wcwidth_iter iter_new(new_ptr, new_len);
+    while (iter_old.next() && iter_new.next())
+    {
+        old_begin_ptr = iter_old.character_pointer();
+        new_begin_ptr = iter_new.character_pointer();
+        if (iter_old.character_length() != iter_new.character_length())
+            break;
+        if (memcmp(iter_old.character_pointer(), iter_new.character_pointer(), iter_new.character_length()))
+            break;
+    }
+
+    uint32_t old_end_pos = old_len;
+    uint32_t new_end_pos = new_len;
+    while (true)
+    {
+        uint32_t old_end_candidate = backward_one_grapheme(old_ptr, old_len, old_end_pos);
+        uint32_t new_end_candidate = backward_one_grapheme(new_ptr, new_len, new_end_pos);
+        if (old_end_pos - old_end_candidate != new_end_pos - new_end_candidate)
+            break;
+        if (memcmp(old_ptr + old_end_candidate, new_ptr + new_end_candidate, new_end_pos - new_end_candidate))
+            break;
+        old_end_pos = old_end_candidate;
+        new_end_pos = new_end_candidate;
+        if (old_end_pos == old_begin_ptr - old_ptr || new_end_pos == new_begin_ptr - new_ptr)
+            break;
+    }
+
+    const char* new_end_ptr = new_ptr + new_end_pos;
+    for (ptrdiff_t i = 0; i < new_begin_ptr - new_ptr; ++i)
+        faces.set_at(i, m_prev_faces.c_str()[i]);
+    for (ptrdiff_t i = new_begin_ptr - new_ptr; i < new_end_ptr - new_ptr; ++i)
+        faces.set_at(i, m_curr_face);
+    for (ptrdiff_t i = new_end_ptr - new_ptr; i < new_len; ++i)
+        faces.set_at(i, m_prev_faces.c_str()[i - new_len + old_len]);
+
+    if (new_end_ptr > new_begin_ptr)
+    {
+        ++m_curr_face;
+        if (m_curr_face > 'g')
+            m_curr_face = 'a';
+    }
+
+    m_prev_text = buffer.get_text();
+    m_prev_faces = faces;
+#endif
+}
+
 int main(int argc, const char** argv)
 {
     --argc, ++argv;
@@ -283,8 +362,15 @@ int main(int argc, const char** argv)
     face_defs.emplace(tib::FACE_SCROLLER, "0;48;2;33;33;33;36");
     if (border == &c_padding_border)
         face_defs.emplace(tib::FACE_EMPTY, colors->get_color(tib::color_element::border));
+    face_defs.emplace('a', "0;48;2;33;33;33;38;2;255;0;0");
+    face_defs.emplace('b', "0;48;2;33;33;33;38;2;255;128;0");
+    face_defs.emplace('c', "0;48;2;33;33;33;38;2;255;255;0");
+    face_defs.emplace('d', "0;48;2;33;33;33;38;2;0;255;0");
+    face_defs.emplace('e', "0;48;2;33;33;33;38;2;0;160;255");
+    face_defs.emplace('f', "0;48;2;33;33;33;38;2;0;96;255");
+    face_defs.emplace('g', "0;48;2;33;33;33;38;2;128;0;255");
 
-    tib::input_box tib;
+    custom_input_box tib;
     tib.set_bindings(make_basic_key_table());
     tib.set_border(border);
     if (border == &c_padding_border)

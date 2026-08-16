@@ -66,6 +66,7 @@ constexpr char FACE_DEFAULT     = 0x20;
 constexpr char FACE_SELECTION   = 0x1f;
 constexpr char FACE_SCROLLER    = 0x1e;
 constexpr char FACE_EMPTY       = 0;
+struct editor_callbacks;
 typedef std::map<char, const char*> face_definitions;
 
 struct layout_info
@@ -134,6 +135,7 @@ public:
     void                init_buffer(const input_buffer* buffer);
     void                init_style(const style_info* style);
     void                init_faces(const face_definitions* face_defs);
+    void                init_callbacks(editor_callbacks* callbacks);
 
     coord               get_origin() const { return m_origin; }
     void                set_origin(int32_t x=-1, int32_t y=-1);
@@ -170,6 +172,7 @@ private:
     const input_buffer* m_buffer = nullptr;         // Borrowed.
     const style_info*   m_style = nullptr;          // Borrowed.
     const face_definitions* m_face_defs = nullptr;  // Borrowed.
+    editor_callbacks*   m_callbacks = nullptr;      // Borrowed.
     coord               m_origin = { -1, -1 };
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
