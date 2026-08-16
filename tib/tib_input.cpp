@@ -13,6 +13,7 @@
 namespace tib {
 
 int32_t (*hook_term_in)() = nullptr;
+bool (*hook_term_in_avail)() = nullptr;
 
 struct macro_playback
 {
@@ -29,6 +30,47 @@ static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 #endif
 
+struct pushed_input
+{
+    bool                empty() const { return !count; }
+    bool                push(uint8_t c);
+    uint8_t             peek() const;
+    uint8_t             read();
+
+    uint8_t             data[16];
+    uint16_t            head = 0;
+    uint16_t            count = 0;
+};
+
+static pushed_input s_pushed;
+
+bool pushed_input::push(uint8_t c)
+{
+    assert(count < std::size(data));
+    if (count >= std::size(data))
+        return false;
+
+    data[(head + count) % std::size(data)] = c;
+    ++count;
+    return true;
+}
+
+uint8_t pushed_input::peek() const
+{
+    assert(!empty());
+    return data[head];
+}
+
+uint8_t pushed_input::read()
+{
+    assert(!empty());
+    const char c = data[head];
+    ++head;
+    --count;
+    head %= std::size(data);
+    return c;
+}
+
 int32_t term_in()
 {
 #ifdef _WIN32
@@ -37,7 +79,8 @@ int32_t term_in()
 #endif
 #endif
 
-    // TODO: Pushed input.
+    if (!s_pushed.empty())
+        return s_pushed.read();
 
     if (s_macro_playback)
     {
@@ -55,22 +98,14 @@ int32_t term_in()
     // TODO: Differentiate between EOF versus other failures.
 
     if (hook_term_in)
-        return hook_term_in();
+    {
+        const int32_t c = hook_term_in();
+        assert(c < 0 || !(c & 0xffffff00));
+        return c;
+    }
 
 #ifdef _WIN32
-    static cstring s_pending_utf8;
-    static size_t s_pending_head = 0;
-
-    if (s_pending_utf8.length())
-    {
-        if (s_pending_head < s_pending_utf8.length())
-        {
-            const char c = s_pending_utf8.c_str()[++s_pending_head];
-            return uint8_t(c);
-        }
-        s_pending_utf8.clear();
-        s_pending_head = 0;
-    }
+    static cstring s_tmp_utf8;
 
     // TODO: Cache for performance; maybe have an init_terminal() function?
     DWORD mode;
@@ -88,24 +123,19 @@ int32_t term_in()
             assert(1 == available);
             if (!ReadConsoleW(h, tmp + available, 1, &num_read, nullptr) || 1 != num_read)
             {
-                s_pending_utf8.set("\xbf\xbd");
-                s_pending_head = 0;
+                // Return U+FFFD, the invalid character codepoint.
+                s_pushed.push(0xbf);
+                s_pushed.push(0xbd);
                 return uint8_t(0xef);
             }
             ++available;
         }
-        if (!to_utf8(tmp, available, s_pending_utf8) || s_pending_utf8.empty())
+        if (!to_utf8(tmp, available, s_tmp_utf8) || s_tmp_utf8.empty())
             return -1;
-        const char c = s_pending_utf8.c_str()[0];
-        if (s_pending_utf8.length() > 1)
-        {
-            s_pending_head = 1;
-        }
-        else
-        {
-            s_pending_utf8.clear();
-            s_pending_head = 0;
-        }
+        const char c = s_tmp_utf8.c_str()[0];
+        for (size_t i = 1; i < s_tmp_utf8.length(); ++i)
+            s_pushed.push(s_tmp_utf8.c_str()[i]);
+        s_tmp_utf8.clear();
         return uint8_t(c);
     }
     else
@@ -120,6 +150,49 @@ int32_t term_in()
     // TODO-LINUX: Use fgetc?
     // TODO-LINUX: What to do upon EOF?
 #endif
+}
+
+int32_t term_in_peek()
+{
+    if (!s_pushed.empty())
+        return s_pushed.peek();
+
+    if (s_macro_playback)
+    {
+        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
+        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index];
+        return uint8_t(c);
+    }
+
+    if (!term_in_avail())
+        return -1;
+
+    const int32_t c = term_in();
+    if (c < 0)
+        return c;
+    assert(!(c & 0xffffff00));
+
+    s_pushed.push(uint8_t(c));
+    return c;
+}
+
+bool term_in_avail()
+{
+    if (!s_pushed.empty())
+        return true;
+    if (s_macro_playback)
+        return true;
+
+    if (hook_term_in_avail)
+        return hook_term_in_avail();
+
+#ifdef _WIN32
+    // TODO: check for pending terminal input.
+    // TODO: surrogate pairs could be complicated...
+#else
+    // TODO-LINUX: Alternative Linux implementation.
+#endif
+    return false;
 }
 
 bool term_push_macro_text(const char* text, size_t len)

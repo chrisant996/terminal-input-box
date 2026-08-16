@@ -8,10 +8,13 @@
 #include "tib_base.h"
 #include "tib_bindings.h"
 #include "tib_context.h"
+#include "tib_input.h"
 #include <algorithm>
 #include <assert.h>
 
 namespace tib {
+
+bool g_optimize_self_insert = true;
 
 void binding_target::set_func(bindable_func_t func, const char* text)
 {
@@ -106,11 +109,23 @@ dispatch_outcome dispatcher::step(char c, editor_context* ctx)
         switch (outcome)
         {
         case dispatch_outcome::self_insert:
+            if (g_optimize_self_insert)
             {
-                // Insert the char into the input_box.
-// TODO: optimize for typeahead insertion (with undo group).
-                ctx->insert_char(char(c));
+                int32_t peek = term_in_peek();
+                if (peek && !(peek & 0xffffff00))
+                {
+                    ctx->begin_undo_group();
+                    ctx->insert_char(c);
+                    while (peek && !(peek & 0xffffff00))
+                    {
+                        assert(term_in() == peek);
+                        ctx->insert_char(c);
+                        peek = term_in_peek();
+                    }
+                    ctx->end_undo_group();
+                }
             }
+            ctx->insert_char(char(c));
             break;
         case dispatch_outcome::match:
             {
