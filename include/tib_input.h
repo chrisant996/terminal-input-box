@@ -9,15 +9,13 @@
 
 namespace tib {
 
-// TODO: Input driver abstraction.
-// TODO: How to represent failure?
-// TODO: How to represent EOF?
-
 int32_t term_in();
 int32_t term_in_peek();
 bool term_in_avail();
 bool term_push_macro_text(const char* text, size_t len=-1);
 
+// Hooks for custom terminal read behavior.
 extern int32_t (*hook_term_in)();
+extern bool (*hook_term_in_avail)();
 
 } // namespace tib

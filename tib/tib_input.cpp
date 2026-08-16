@@ -95,7 +95,8 @@ int32_t term_in()
         return uint8_t(c);
     }
 
-    // TODO: Differentiate between EOF versus other failures.
+    // TODO: How to represent EOF?
+    // TODO: How to represent failure?
 
     if (hook_term_in)
     {
@@ -107,7 +108,6 @@ int32_t term_in()
 #ifdef _WIN32
     static cstring s_tmp_utf8;
 
-    // TODO: Cache for performance; maybe have an init_terminal() function?
     DWORD mode;
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     if (GetConsoleMode(h, &mode))
@@ -187,8 +187,7 @@ bool term_in_avail()
         return hook_term_in_avail();
 
 #ifdef _WIN32
-    // TODO: check for pending terminal input.
-    // TODO: surrogate pairs could be complicated...
+    // TODO: check for pending terminal input; surrogate pairs may be complex.
 #else
     // TODO-LINUX: Alternative Linux implementation.
 #endif
