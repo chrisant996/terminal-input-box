@@ -681,7 +681,7 @@ bool display_manager::build(display_lines& out)
 
     wcwidth_iter iter(text.c_str() + left, text.length() - left);
     const char* const cursor_ptr = text.c_str() + pos;
-    const char* face = faces.c_str();
+    const char* face = faces.c_str() + left;
     char pending = 0;
     bool expanding = false;
     std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
@@ -689,7 +689,11 @@ bool display_manager::build(display_lines& out)
     assert(!(left && multiline));
     if (left && m_style->horiz_scroll_markers)
     {
-        iter.next(); // Skip the grapheme that the scroller replaces.
+        // Skip the grapheme that the scroller replaces.
+        iter.next();
+        face += iter.character_length();
+
+        // Append the scroller.
         line->append("<", 1, 1, FACE_SCROLLER);
         if (c_horz_scroll_indicator_chars > 0)
         {
