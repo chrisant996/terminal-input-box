@@ -395,7 +395,7 @@ bool display_manager::display_internal(display_lines& lines)
         if (m_displayed.m_change_counter && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
-            if (displayed->m_x1 == line->m_x1 && displayed->m_x2 == line->m_x2)
+            if (displayed->m_x1 == line->m_x1)
             {
                 reuse_displayed_line = true;
 
@@ -406,10 +406,12 @@ bool display_manager::display_internal(display_lines& lines)
                 if (line->m_text.equals(displayed->m_text) && line->m_faces.equals(displayed->m_faces))
                     continue;
 
+                const size_t limit_forward_skip = min(displayed->m_text.length(), line->m_text.length());
+
                 // Walk forward past a leading portion that exactly matches.
                 size_t displayed_begin = 0;
                 const size_t displayed_length = displayed->m_text.length();
-                while (begin < end && displayed_begin < displayed_length)
+                while (begin < end && displayed_begin < limit_forward_skip)
                 {
                     uint16_t width;
                     const size_t next = forward_one_grapheme(line->m_text.c_str(), end, uint32_t(begin), &width);
@@ -427,28 +429,45 @@ bool display_manager::display_internal(display_lines& lines)
                 }
 
                 // Walk backward past a trailing portion that exactly matches.
-                size_t displayed_end = displayed_length;
-                while (end > begin && displayed_end > displayed_begin)
+                // REVIEW: Instead of giving up if the x2 columns differ, it
+                // could walk backwards to find the greatest column less than
+                // or equal to `displayed->m_x2` that is a grapheme boundary
+                // for both `displayed` and `line`.  It could always print
+                // everything starting from there, but it could also walk
+                // backwards from there to find a shorter middle region to
+                // update.  But is that really a common enough case to justify
+                // the extra complexity and effort?
+                // REVIEW: But if the text is the full terminal width, then it
+                // could use ICH (CSI Ps @) and DCH (CSI Ps P) to shift
+                // characters instead of printing the whole line.  I'm not
+                // sure how much it really matters for performance, but it
+                // could reduce the number of bytes printed to the terminal.
+                if (displayed->m_x2 == line->m_x2)
                 {
-                    const size_t previous = backward_one_grapheme(line->m_text.c_str(), line->m_text.length(), uint32_t(end));
-                    const size_t displayed_previous = backward_one_grapheme(displayed->m_text.c_str(), displayed_length, uint32_t(displayed_end));
-                    const size_t length = end - previous;
-                    const size_t displayed_grapheme_length = displayed_end - displayed_previous;
-                    if (length != displayed_grapheme_length ||
-                        memcmp(line->m_text.c_str() + previous, displayed->m_text.c_str() + displayed_previous, length) != 0 ||
-                        memcmp(line->m_faces.c_str() + previous, displayed->m_faces.c_str() + displayed_previous, length) != 0)
-                        break;
+                    size_t displayed_end = displayed_length;
+                    while (end > begin && displayed_end > displayed_begin)
+                    {
+                        const size_t previous = backward_one_grapheme(line->m_text.c_str(), line->m_text.length(), uint32_t(end));
+                        const size_t displayed_previous = backward_one_grapheme(displayed->m_text.c_str(), displayed_length, uint32_t(displayed_end));
+                        const size_t length = end - previous;
+                        const size_t displayed_grapheme_length = displayed_end - displayed_previous;
+                        if (length != displayed_grapheme_length ||
+                            memcmp(line->m_text.c_str() + previous, displayed->m_text.c_str() + displayed_previous, length) != 0 ||
+                            memcmp(line->m_faces.c_str() + previous, displayed->m_faces.c_str() + displayed_previous, length) != 0)
+                            break;
 
-                    end = previous;
-                    displayed_end = displayed_previous;
+                        end = previous;
+                        displayed_end = displayed_previous;
+                    }
+
+                    // If the new line exactly matches the previously
+                    // displayed line, then there's nothing to do for that
+                    // line.
+                    if (reuse_displayed_line && begin == end && displayed->m_x2 == line->m_x2)
+                        continue;
                 }
             }
         }
-
-        // If the new line exactly matches the previously displayed line, then
-        // there's nothing to do for that line.
-        if (reuse_displayed_line && begin == end)
-            continue;
 
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
@@ -485,8 +504,10 @@ bool display_manager::display_internal(display_lines& lines)
         }
 
         // Fill remaining width.
-        if (!reuse_displayed_line && line->width() < max_size.x)
+        if (line->width() < max_size.x)
         {
+            if (reuse_displayed_line)
+                move_to_column(cursor, line->width(), lines.m_inner_offset.x);
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
             erase_row(max_size.x - line->width());
         }
