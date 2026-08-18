@@ -16,7 +16,44 @@ namespace tib {
 
 bool g_optimize_self_insert = true;
 
-void binding_target::set_func(bindable_func_t func, const char* text)
+bool binding_target::operator==(const binding_target& t) const noexcept
+{
+    if (m_type != t.m_type || m_func != t.m_func)
+        return false;
+    switch (m_type)
+    {
+    case binding_type::none:
+        break;
+    case binding_type::func:
+        if (!m_text != !t.m_text)
+            return false;
+        if (m_text && t.m_text && strcmp(m_text, t.m_text) != 0)
+            return false;
+        break;
+    case binding_type::macro:
+        if (!m_text != !t.m_text)
+            return false;
+        if (m_length != t.m_length)
+            return false;
+        if (m_text && t.m_text && memcmp(m_text, t.m_text, m_length) != 0)
+            return false;
+        break;
+    default:
+        assert(false);
+        break;
+    }
+    return true;
+}
+
+void binding_target::clear() noexcept
+{
+    m_type = binding_type::none;
+    m_func = nullptr;
+    m_text = nullptr;
+    m_length = 0;
+}
+
+void binding_target::set_func(bindable_func_t func, const char* text) noexcept
 {
     assert(func);
     m_type = binding_type::func;
@@ -25,7 +62,7 @@ void binding_target::set_func(bindable_func_t func, const char* text)
     m_length = 0;
 }
 
-void binding_target::set_macro(const char* text, size_t len)
+void binding_target::set_macro(const char* text, size_t len) noexcept
 {
     assert(text);
     len = resolve_auto_length(len, text);
@@ -33,6 +70,36 @@ void binding_target::set_macro(const char* text, size_t len)
     m_func = nullptr;
     m_text = text;
     m_length = len;
+}
+
+binding_target_copy::binding_target_copy(const binding_target& t) noexcept
+{
+    *this = t;
+}
+
+binding_target_copy& binding_target_copy::operator=(const binding_target& t) noexcept
+{
+    switch (t.get_type())
+    {
+    case binding_type::none:
+        m_owned_text.clear();
+        clear();
+        break;
+    case binding_type::func:
+        m_owned_text.set(t.get_text());
+        set_func(t.get_func(), m_owned_text.c_str());
+        break;
+    case binding_type::macro:
+        m_owned_text.set(t.get_text(), t.get_length());
+        set_macro(m_owned_text.c_str(), m_owned_text.length());
+        break;
+    default:
+        assert(false);
+        m_owned_text.clear();
+        clear();
+        break;
+    }
+    return *this;
 }
 
 key_table::~key_table()

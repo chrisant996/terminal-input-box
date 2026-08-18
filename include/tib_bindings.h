@@ -17,6 +17,7 @@ class editor_context;
 
 enum class binding_type : uint8_t
 {
+    none,
     func,
     macro,
 };
@@ -30,33 +31,49 @@ class binding_target
     friend key_table;
 
 public:
-                        ~binding_target() = default;
-                        binding_target() = delete;
-                        binding_target(bindable_func_t func, const char* text=nullptr) { set_func(func, text); }
-                        binding_target(const char* text, size_t len=c_auto_length) { set_macro(text, len); }
-                        binding_target(const binding_target& t) = default;
-                        binding_target(binding_target&& t) = default;
-                        binding_target& operator=(const binding_target& t) = default;
-                        binding_target& operator=(binding_target&& t) = default;
+                        ~binding_target() noexcept = default;
+                        binding_target() = default;
+                        binding_target(bindable_func_t func, const char* text=nullptr) noexcept { set_func(func, text); }
+                        binding_target(const char* text, size_t len=c_auto_length) noexcept { set_macro(text, len); }
+                        binding_target(const binding_target& t) noexcept = default;
+                        binding_target(binding_target&& t) noexcept = default;
+    binding_target&     operator=(const binding_target& t) noexcept = default;
+    binding_target&     operator=(binding_target&& t) noexcept = default;
+    bool                operator==(const binding_target& t) const noexcept;
 
-    binding_type        get_type() const { return m_type; }
-    bindable_func_t     get_func() const { assert(m_type == binding_type::func); return m_func; }
-    const char*         get_text() const { return m_text; }
-    size_t              get_length() const { assert(m_type == binding_type::macro); return m_length; }
+    binding_type        get_type() const noexcept { return m_type; }
+    bindable_func_t     get_func() const noexcept { assert(m_type == binding_type::func); return m_func; }
+    const char*         get_text() const noexcept { return m_text; }
+    size_t              get_length() const noexcept { assert(m_type == binding_type::macro); return m_length; }
 
-    void                set_func(bindable_func_t func, const char* name=nullptr);
-    void                set_macro(const char* text, size_t len=c_auto_length);
+    void                clear() noexcept;
+    void                set_func(bindable_func_t func, const char* name=nullptr) noexcept;
+    void                set_macro(const char* text, size_t len=c_auto_length) noexcept;
 
-private:
+protected:
     // Optimize dispatching key bindings by storing a pre-resolved encoding of
     // the operation.  If runtime cost didn't matter, it could be cleaner to
     // store just a target string (`foo` for bindable command name "foo", and
     // `"text"` for macro text "text") and resolve the target on demand.
     // PERF: Analyze actual performance cost of resolving targets on demand.
-    binding_type        m_type;
-    bindable_func_t     m_func;
-    const char*         m_text; // Borrowed, not owned.
-    size_t              m_length;
+    binding_type        m_type = binding_type::none;
+    bindable_func_t     m_func = nullptr;
+    const char*         m_text = nullptr;   // Borrowed, not owned.
+    size_t              m_length = 0;
+};
+
+class binding_target_copy : public binding_target
+{
+public:
+                        ~binding_target_copy() = default;
+                        binding_target_copy() = default;
+                        binding_target_copy(const binding_target_copy& t) noexcept = default;
+                        binding_target_copy(const binding_target& t) noexcept;
+    binding_target_copy& operator=(const binding_target_copy& t) noexcept = default;
+    binding_target_copy& operator=(const binding_target& t) noexcept;
+
+private:
+    cstring             m_owned_text;
 };
 
 struct key_binding

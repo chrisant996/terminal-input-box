@@ -137,6 +137,7 @@ private:
     MouseHelper         m_mouse_helper;
 #endif
     bool                m_can_drag = false;
+    binding_target_copy m_last_binding_target;
 
     // Display.
     display_manager     m_display;
