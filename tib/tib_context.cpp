@@ -353,6 +353,8 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
     // TODO: m_can_drag.
     // TODO: Whether/when to reset history index.
 
+    // TODO: remember the last binding target executed.
+
     switch (target->get_type())
     {
     case tib::binding_type::func:
