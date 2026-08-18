@@ -119,13 +119,14 @@ dispatch_outcome dispatcher::step(char c, editor_context* ctx)
                     while (peek && !(peek & 0xffffff00))
                     {
                         assert(term_in() == peek);
-                        ctx->insert_char(c);
+                        ctx->insert_char(char(peek));
                         peek = term_in_peek();
                     }
                     ctx->end_undo_group();
+                    break;
                 }
             }
-            ctx->insert_char(char(c));
+            ctx->insert_char(c);
             break;
         case dispatch_outcome::match:
             {

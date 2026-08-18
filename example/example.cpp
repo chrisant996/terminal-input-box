@@ -331,13 +331,14 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
     }
 }
 
-static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& show_sequence)
+static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& show_sequence, const tib::coord* old_extent=nullptr)
 {
     const tib::coord origin = ctx.get_origin();
     const tib::coord cursor = ctx.get_relative_cursor();
     const tib::coord extent = ctx.get_extent();
     const int32_t vert = extent.y - cursor.y;
 
+    tib::term_out(tib::c_hide_cursor);
     ctx.move_to_end_of_display();
 
     tib::cstring tmp;
@@ -349,9 +350,20 @@ static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& s
         tmp.append_color("");
     }
     tmp.append("\033[K");
+
+    if (old_extent && old_extent->y > extent.y)
+    {
+        const uint32_t delta = old_extent->y - extent.y;
+        for (uint32_t n = delta; n--;)
+            tmp.append("\n");
+        tmp.append("\033[K");
+        tmp.printf("\033[%uA", delta);
+    }
+
     tib::term_out(tmp.c_str(), tmp.length());
 
     ctx.move_to_caret_position();
+    tib::term_out(tib::c_show_cursor);
 }
 
 int main(int argc, const char** argv)
@@ -529,10 +541,12 @@ no_border:
 
     while (!s_done)
     {
+        const tib::coord old_extent = tib.get_extent();
+
         tib.display();
 
         if (!show_sequence.empty())
-            display_key_sequence(tib, show_sequence);
+            display_key_sequence(tib, show_sequence, &old_extent);
 
         const int32_t c = tib::term_in();
 

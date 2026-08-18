@@ -12,8 +12,8 @@
 
 namespace tib {
 
-int32_t (*hook_term_in)() = nullptr;
-bool (*hook_term_in_avail)() = nullptr;
+hook_term_in_func_t hook_term_in = nullptr;
+hook_term_in_avail_func_t hook_term_in_avail = nullptr;
 
 struct macro_playback
 {
@@ -30,16 +30,29 @@ static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 #endif
 
-struct pushed_input
+class pushed_input
 {
+public:
+                        pushed_input() = default;
     bool                empty() const { return !count; }
+    bool                has_capacity(size_t num) const { return std::size(data) - count >= num; }
     bool                push(uint8_t c);
+#ifdef _WIN32
+    bool                push_utf16(WCHAR c);
+#endif
+    bool                push_invalid();
     uint8_t             peek() const;
     uint8_t             read();
 
+private:
     uint8_t             data[16];
     uint16_t            head = 0;
     uint16_t            count = 0;
+
+#ifdef _WIN32
+    WCHAR               m_high_surrogate = 0;
+    cstring             m_tmp_utf8;
+#endif
 };
 
 static pushed_input s_pushed;
@@ -53,6 +66,60 @@ bool pushed_input::push(uint8_t c)
     data[(head + count) % std::size(data)] = c;
     ++count;
     return true;
+}
+
+#ifdef _WIN32
+bool pushed_input::push_utf16(WCHAR c)
+{
+    // If c is a high surrogate then cache it for later.
+    if (IS_HIGH_SURROGATE(c))
+    {
+        const WCHAR ls = m_high_surrogate;
+        m_high_surrogate = c;
+        if (ls)
+        {
+            // If a high surrogate
+            return push_invalid();
+        }
+        return true;
+    }
+
+    // If a high surrogate is cached then complete it.
+    if (m_high_surrogate)
+    {
+        if (!IS_LOW_SURROGATE(c))
+        {
+            if (!push_invalid())
+                return false;
+
+convert_c:
+            if (!to_utf8(&c, 1, m_tmp_utf8))
+                return false;
+
+push_utf8:
+            if (!has_capacity(m_tmp_utf8.length()))
+                return false;
+            for (size_t i = 0; i < m_tmp_utf8.length(); ++i)
+                push(m_tmp_utf8.c_str()[i]);
+            return true;
+        }
+
+        WCHAR convert[2];
+        convert[0] = m_high_surrogate;
+        convert[1] = c;
+        m_high_surrogate = 0;
+        if (!to_utf8(convert, 2, m_tmp_utf8))
+            return false;
+        goto push_utf8;
+    }
+
+    goto convert_c;
+}
+#endif
+
+bool pushed_input::push_invalid()
+{
+    return push(0xef) && push(0xbf) && push(0xbd);
 }
 
 uint8_t pushed_input::peek() const
@@ -124,9 +191,9 @@ int32_t term_in()
             if (!ReadConsoleW(h, tmp + available, 1, &num_read, nullptr) || 1 != num_read)
             {
                 // Return U+FFFD, the invalid character codepoint.
-                s_pushed.push(0xbf);
-                s_pushed.push(0xbd);
-                return uint8_t(0xef);
+                if (!s_pushed.push_invalid())
+                    return -1;
+                return s_pushed.read();
             }
             ++available;
         }
@@ -176,7 +243,7 @@ int32_t term_in_peek()
     return c;
 }
 
-bool term_in_avail()
+bool term_in_avail(const DWORD _timeout)
 {
     if (!s_pushed.empty())
         return true;
@@ -184,10 +251,63 @@ bool term_in_avail()
         return true;
 
     if (hook_term_in_avail)
-        return hook_term_in_avail();
+        return hook_term_in_avail(_timeout);
 
 #ifdef _WIN32
-    // TODO: check for pending terminal input; surrogate pairs may be complex.
+    bool ret = !s_pushed.empty();
+    bool sleep_on_error = false;
+    const DWORD stop = GetTickCount() + _timeout;
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    while (!ret)
+    {
+        DWORD timeout = stop - GetTickCount();
+        if (timeout > _timeout)
+            timeout = 0;
+
+        if (sleep_on_error)
+        {
+            sleep_on_error = false;
+            const DWORD sleep = (timeout > 1000) ? timeout - 1000 : timeout;
+            Sleep(sleep);
+            timeout -= sleep;
+        }
+
+        const DWORD waited = WaitForSingleObject(hin, timeout);
+        if (waited == WAIT_TIMEOUT)
+            break;
+
+        DWORD count;
+        INPUT_RECORD record;
+        if (!ReadConsoleInputW(hin, &record, 1, &count))
+        {
+            // Handle's probably invalid if ReadConsoleInput() failed.
+            sleep_on_error = true;
+            continue;
+        }
+
+        switch (record.EventType)
+        {
+        case KEY_EVENT:
+            // Because of ENABLE_VIRTUAL_TERMINAL_PROCESSING there is very
+            // little to do here.
+            ret = s_pushed.push_utf16(record.Event.KeyEvent.uChar.UnicodeChar);
+            break;
+
+        case MOUSE_EVENT:
+            // Should not happen with ENABLE_VIRTUAL_TERMINAL_PROCESSING.
+            assert(false);
+            break;
+
+        case WINDOW_BUFFER_SIZE_EVENT:
+            // REVIEW: can't really do anything with this unless term_in()
+            // also uses ReadConsoleInputW().
+            break;
+        }
+
+        if (!timeout)
+            break;
+    }
+    return ret;
 #else
     // TODO-LINUX: Alternative Linux implementation.
 #endif
