@@ -40,6 +40,8 @@ public:
     binding_target&     operator=(const binding_target& t) noexcept = default;
     binding_target&     operator=(binding_target&& t) noexcept = default;
     bool                operator==(const binding_target& t) const noexcept;
+    bool                is_func_ptr(bindable_func_t func) const noexcept;
+    bool                is_func_name(const char* name) const noexcept;
 
     binding_type        get_type() const noexcept { return m_type; }
     bindable_func_t     get_func() const noexcept { assert(m_type == binding_type::func); return m_func; }

@@ -45,6 +45,16 @@ bool binding_target::operator==(const binding_target& t) const noexcept
     return true;
 }
 
+bool binding_target::is_func_ptr(bindable_func_t func) const noexcept
+{
+    return (func && m_type == binding_type::func && m_func == func);
+}
+
+bool binding_target::is_func_name(const char* name) const noexcept
+{
+    return (name && m_type == binding_type::func && m_text && strcmp(name, m_text) == 0);
+}
+
 void binding_target::clear() noexcept
 {
     m_type = binding_type::none;
