@@ -93,6 +93,9 @@ public:
     void                paste_from_clipboard();
 #endif
 
+    const binding_target& get_last_binding_target() const noexcept { return m_last_binding_target; }
+    void                set_last_binding_target(const binding_target& t) noexcept;
+
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);
 #endif

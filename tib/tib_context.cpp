@@ -354,7 +354,7 @@ int32_t editor_context::do_binding_target(const binding_target* target, int32_t 
     // TODO: Whether/when to reset history index.
 
     // Remember the last binding target executed.
-    m_last_binding_target = *target;
+    set_last_binding_target(*target);
 
     switch (target->get_type())
     {
@@ -658,6 +658,11 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
     m_left = back_up_by_amount(get_caret(), m_text.c_str(), m_left, max_size.x - 1);
 }
 #endif
+
+void editor_context::set_last_binding_target(const binding_target& t) noexcept
+{
+    m_last_binding_target = t;
+}
 
 void editor_context::insert_char(char c)
 {

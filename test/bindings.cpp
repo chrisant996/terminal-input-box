@@ -18,12 +18,12 @@ TEST_CASE("Key bindings")
 {
     SECTION("Main")
     {
-        auto base = std::make_shared<tib::key_table>();
+        auto base = std::make_shared<tib::key_table>(false/*can_self_insert*/);
         add_binding(*base, "\x1b[A", command_one);
         add_binding(*base, "\x1b[B", command_two);
         add_binding(*base, "\x1b[1~", command_one);
 
-        auto overlay = std::make_shared<tib::key_table>();
+        auto overlay = std::make_shared<tib::key_table>(false/*can_self_insert*/);
         add_binding(*overlay, "\x1b[A", command_override);
 
         std::shared_ptr<tib::key_table_list> tables = std::make_shared<tib::key_table_list>();
@@ -33,41 +33,64 @@ TEST_CASE("Key bindings")
 
         SECTION("Base table")
         {
+            assert(!base->can_self_insert());
             dispatcher.init(tables);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::more);
-            REQUIRE(dispatcher.step('[') == tib::more);
-            REQUIRE(dispatcher.step('A') == tib::match);
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
             REQUIRE(dispatcher.get_target());
             REQUIRE(dispatcher.get_target()->get_func() == command_one);
 
-            REQUIRE(dispatcher.step('x') == tib::self_insert);
+            REQUIRE(dispatcher.step('x') == tib::dispatch_outcome::miss);
             REQUIRE(!dispatcher.get_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
 
-            REQUIRE(dispatcher.step('\x1b') == tib::more);
-            REQUIRE(dispatcher.step('[') == tib::more);
-            REQUIRE(dispatcher.step('Z') == tib::self_insert);
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('Z') == tib::dispatch_outcome::miss);
             REQUIRE(!dispatcher.get_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
+        }
 
-            // TODO: need a test for tib::miss.
+        SECTION("Self insert")
+        {
+            assert(!base->can_self_insert());
+            base->set_can_self_insert(true);
+            dispatcher.init(tables);
+
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
+            REQUIRE(dispatcher.get_target());
+            REQUIRE(dispatcher.get_target()->get_func() == command_one);
+
+            REQUIRE(dispatcher.step('x') == tib::dispatch_outcome::self_insert);
+            REQUIRE(!dispatcher.get_target());
+            REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
+
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('Z') == tib::dispatch_outcome::self_insert);
+            REQUIRE(!dispatcher.get_target());
+            REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
         }
 
         SECTION("Overlay table")
         {
+            assert(!base->can_self_insert());
             tables->emplace_back(overlay);
             dispatcher.init(tables);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::more);
-            REQUIRE(dispatcher.step('[') == tib::more);
-            REQUIRE(dispatcher.step('A') == tib::match);
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
             REQUIRE(dispatcher.get_target());
             REQUIRE(dispatcher.get_target()->get_func() == command_override);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::more);
-            REQUIRE(dispatcher.step('[') == tib::more);
-            REQUIRE(dispatcher.step('B') == tib::match);
+            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
+            REQUIRE(dispatcher.step('B') == tib::dispatch_outcome::match);
             REQUIRE(dispatcher.get_target());
             REQUIRE(dispatcher.get_target()->get_func() == command_two);
         }
@@ -214,13 +237,13 @@ PERF_CASE("Perf, resolve 26000 bindings")
         {
             for (const char* sequence : c_sequences)
             {
-                tib::dispatch_outcome outcome = tib::miss;
+                tib::dispatch_outcome outcome = tib::dispatch_outcome::miss;
                 for (const char* p = sequence; *p; ++p)
                 {
                     outcome = dispatcher.step(*p);
                     REQUIRE(!p[1] || outcome == tib::dispatch_outcome::more);
                 }
-                REQUIRE(outcome == tib::match);
+                REQUIRE(outcome == tib::dispatch_outcome::match);
                 ++resolved;
             }
         }

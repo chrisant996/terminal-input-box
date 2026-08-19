@@ -166,6 +166,16 @@ void dispatcher::init(std::shared_ptr<const key_table_list> tables)
     // from changes to a given key_table in the list.
     m_tables = tables;
     reset();
+
+    m_can_self_insert = !m_tables.get();
+    for (auto table = m_tables.get()->rbegin(); table != m_tables.get()->rend(); ++table)
+    {
+        if ((*table)->can_self_insert())
+        {
+            m_can_self_insert = true;
+            break;
+        }
+    }
 }
 
 void dispatcher::reset()
@@ -178,7 +188,9 @@ void dispatcher::reset()
 dispatch_outcome dispatcher::step(char c, editor_context* ctx)
 {
     dispatch_outcome outcome = step_internal(c);
-    if (outcome == dispatch_outcome::miss && !(c & 0xffffff00))
+
+    const bool self_insert = (m_can_self_insert && outcome == dispatch_outcome::miss && uint8_t(c) >= ' ');
+    if (self_insert)
         outcome = dispatch_outcome::self_insert;
 
     if (ctx)
@@ -186,14 +198,15 @@ dispatch_outcome dispatcher::step(char c, editor_context* ctx)
         switch (outcome)
         {
         case dispatch_outcome::self_insert:
+            ctx->set_last_binding_target(c_self_insert);
             if (g_optimize_self_insert)
             {
                 int32_t peek = term_in_peek();
-                if (peek && !(peek & 0xffffff00))
+                if (peek && peek >= ' ' && peek <= 0xff)
                 {
                     ctx->begin_undo_group();
                     ctx->insert_char(c);
-                    while (peek && !(peek & 0xffffff00))
+                    while (peek && peek >= ' ' && peek <= 0xff)
                     {
                         assert(term_in() == peek);
                         ctx->insert_char(char(peek));
@@ -267,5 +280,23 @@ dispatch_outcome dispatcher::step_internal(char c)
     m_outcome = dispatch_outcome::miss;
     return m_outcome;
 }
+
+int32_t self_insert(editor_context& ctx, int32_t key, const char* name) noexcept
+{
+    if (key < 0)
+        return -1;
+
+    if (key <= 0xff)
+    {
+        ctx.insert_char(char(key));
+        return 0;
+    }
+
+    // TODO: convert UTF32 to UTF8 and insert the characters.
+
+    return -1;
+}
+
+const binding_target c_self_insert(self_insert, "self-insert");
 
 } // namespace tib
