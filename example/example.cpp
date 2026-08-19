@@ -25,6 +25,7 @@ static const char c_long_usage[] =
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
 
+#pragma region Example customizations.
 static bool s_use_rainbow_faces = false;
 
 static const char* const c_bar_text_color = "0;38;2;180;140;33";
@@ -80,6 +81,7 @@ private:
 };
 
 static const bar_padding_border_definition c_bar_padding_border;
+#pragma endregion // Example customizations.
 
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
@@ -92,6 +94,23 @@ std::shared_ptr<tib::key_table_list> make_key_tables()
     return tables;
 }
 
+class custom_input_box : public tib::input_box, protected tib::editor_callbacks
+{
+public:
+                        ~custom_input_box() = default;
+                        custom_input_box();
+
+protected:
+                        // Methods on the tib::editor_callbacks interface.
+    void                provide_faces(const tib::input_buffer& buffer, tib::cstring& faces);
+};
+
+custom_input_box::custom_input_box()
+{
+    set_callbacks(this);
+}
+
+#pragma region Example customizations.
 struct color_t
 {
     uint8_t r;
@@ -109,21 +128,6 @@ static const color_t c_colors[] =
     { 0x00, 0x66, 0xcc },
     { 0xcc, 0x00, 0xcc },
 };
-
-class custom_input_box : public tib::input_box, protected tib::editor_callbacks
-{
-public:
-                        ~custom_input_box() = default;
-                        custom_input_box();
-
-protected:
-    void                provide_faces(const tib::input_buffer& buffer, tib::cstring& faces);
-};
-
-custom_input_box::custom_input_box()
-{
-    set_callbacks(this);
-}
 
 void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstring& faces)
 {
@@ -188,6 +192,7 @@ static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& s
     ctx.move_to_caret_position();
     tib::term_out(tib::c_show_cursor);
 }
+#pragma endregion // Example customizations.
 
 int main(int argc, const char** argv)
 {
@@ -203,6 +208,11 @@ int main(int argc, const char** argv)
     tib_host::set_console_vt_input();
     reset_wcwidths();
 
+    custom_input_box tib;
+    tib.set_bindings(make_key_tables());
+    tib.set_max_width(40);
+
+#pragma region Example customizations.
     const char c_norm_base[] = "0";
     const char c_padding_base[] = "0;48;2;33;33;33";
 
@@ -215,10 +225,6 @@ int main(int argc, const char** argv)
     face_defs.emplace(tib::FACE_SCROLLER, "0;7;36");
     face_defs.emplace(tib::FACE_EMPTY, c_norm_base);
     face_defs.emplace(FACE_CTRL, "0;36;44");
-
-    custom_input_box tib;
-    tib.set_bindings(make_key_tables());
-    tib.set_max_width(40);
 
     const tib::border_definition* border = nullptr;
     for (int i = 0; i < argc; ++i)
@@ -339,14 +345,7 @@ no_border:
     tib.set_color_table(colors);
     tib.set_face_defs(&face_defs);
     tib.set_border(border);
-
-#ifdef _WIN32
-    // CONSOLE_SCREEN_BUFFER_INFO csbi;
-    // GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    // tib.set_origin(csbi.dwCursorPosition.X + 1);
-#else
-    // TODO-LINUX: Query the terminal for the current position.
-#endif
+#pragma endregion // Example customizations.
 
     tib.initialize("hello world");
     tib.set_selection(0, uint16_t(tib.get_text().length()));
@@ -355,7 +354,13 @@ no_border:
     tib::cstring tmp;
     tib::cstring sequence;
     tib::cstring show_sequence;
+    tib::coord old_extent = tib.get_extent();
     double last_clock = tib::clock();
+
+    auto show_sequence_after_display = [&]()
+    {
+        display_key_sequence(tib, show_sequence, &old_extent);
+    };
 
     auto update_sequence_before_step = [&](int32_t c)
     {
@@ -392,6 +397,8 @@ no_border:
             sequence.clear();
             break;
         }
+
+        old_extent = tib.get_extent();
     };
 #pragma endregion // Show input sequence.
 
@@ -400,19 +407,17 @@ no_border:
 
     while (!tib.done())                                     // Required.
     {
-        const tib::coord old_extent = tib.get_extent();             // Custom.
-
         tib.display();                                      // Required.
 
-        display_key_sequence(tib, show_sequence, &old_extent);      // Custom.
+                /*Custom*/  show_sequence_after_display();
 
         const int32_t c = tib::term_in();                   // Required.
 
-        update_sequence_before_step(c);                             // Custom.
+                /*Custom*/  update_sequence_before_step(c);
 
         const auto outcome = dispatcher.step(c, &tib);      // Required.
 
-        update_sequence_after_step(outcome);                        // Custom.
+                /*Custom*/  update_sequence_after_step(outcome);
     }
 
 #pragma region Show input sequence.
