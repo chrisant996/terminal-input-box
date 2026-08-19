@@ -351,28 +351,14 @@ no_border:
     tib.initialize("hello world");
     tib.set_selection(0, uint16_t(tib.get_text().length()));
 
-    tib::dispatcher dispatcher;
-    dispatcher.init(tib.get_bindings());
-
+#pragma region Show input sequence.
     tib::cstring tmp;
-    tmp.set("\n\033[A");
-    tib::term_out(tmp.c_str(), tmp.length());
-
     tib::cstring sequence;
     tib::cstring show_sequence;
     double last_clock = tib::clock();
 
-    while (!tib.done())
+    auto update_sequence_before_step = [&](int32_t c)
     {
-        const tib::coord old_extent = tib.get_extent();
-
-        tib.display();
-
-        if (!show_sequence.empty())
-            display_key_sequence(tib, show_sequence, &old_extent);
-
-        const int32_t c = tib::term_in();
-
         const double now = tib::clock();
         if (now - last_clock >= 0.1)
             sequence.clear();
@@ -392,8 +378,11 @@ no_border:
             sequence = std::move(tmp);
         }
         show_sequence.set(sequence.c_str(), sequence.length());
+    };
 
-        switch (dispatcher.step(c, &tib))
+    auto update_sequence_after_step = [&](tib::dispatch_outcome outcome)
+    {
+        switch (outcome)
         {
         case tib::dispatch_outcome::self_insert:
             if (sequence.length() == 1/*c*/ + 1/*space*/)
@@ -403,12 +392,35 @@ no_border:
             sequence.clear();
             break;
         }
+    };
+#pragma endregion // Show input sequence.
+
+    tib::dispatcher dispatcher;                             // Required.
+    dispatcher.init(tib.get_bindings());                    // Required.
+
+    while (!tib.done())                                     // Required.
+    {
+        const tib::coord old_extent = tib.get_extent();             // Custom.
+
+        tib.display();                                      // Required.
+
+        display_key_sequence(tib, show_sequence, &old_extent);      // Custom.
+
+        const int32_t c = tib::term_in();                   // Required.
+
+        update_sequence_before_step(c);                             // Custom.
+
+        const auto outcome = dispatcher.step(c, &tib);      // Required.
+
+        update_sequence_after_step(outcome);                        // Custom.
     }
 
+#pragma region Show input sequence.
     show_sequence.clear();
     display_key_sequence(tib, show_sequence);
-    tib.erase_display();
+#pragma endregion // Show input sequence.
 
+    tib.erase_display();
     tib::term_out("\r\n", 2);
 
     return 0;
