@@ -86,23 +86,21 @@ struct key_binding
     binding_target      target;
 };
 
-// TODO: m_can_self_insert must be a tri-state; overlay tables should be able to force can_self_insert off, or on, or not affect can_self_insert at all.
-
 class key_table : public std::enable_shared_from_this<key_table>
 {
     friend class dispatcher;
 
 public:
                         ~key_table();
-                        key_table(bool can_self_insert=true) noexcept : m_can_self_insert(can_self_insert) {}
+                        key_table(int8_t can=-1) noexcept : m_can_self_insert(can) {}
 
     // FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
     bool                remove(const cstring& sequence);
     void                clear();
 
-    bool                can_self_insert() const noexcept { return m_can_self_insert; }
-    void                set_can_self_insert(bool self_insert=true) noexcept { m_can_self_insert = self_insert; }
+    int8_t              can_self_insert() const noexcept { return m_can_self_insert; }
+    void                set_can_self_insert(int8_t can=true) noexcept { m_can_self_insert = can; }
 
     auto                begin() const noexcept { return m_bindings.cbegin(); }
     auto                end() const noexcept { return m_bindings.cend(); }
@@ -114,12 +112,18 @@ public:
 
 private:
     std::vector<key_binding> m_bindings;
-    bool                m_can_self_insert = true;
+    int8_t              m_can_self_insert = -1;
 };
 
 typedef std::vector<std::shared_ptr<key_table>> key_table_list;
 
 enum class dispatch_outcome { miss, self_insert, more, match };
+
+// TODO: The dispatcher must not depend on editor_context (or at least not
+// exclusively).  The dispatcher must be usable with other things like popup
+// list UI, and must generalize to any arbitrary custom UI element.  And yet
+// commands need to be able to directly act upon an editor_context or other UI
+// object.
 
 class dispatcher
 {
@@ -144,9 +148,11 @@ private:
     cstring             m_sequence;
     const binding_target* m_target = nullptr;
     dispatch_outcome    m_outcome = dispatch_outcome::miss;
-    bool                m_can_self_insert = true;
+    int8_t              m_can_self_insert = true;
 };
 
 extern const binding_target c_self_insert;
+
+std::shared_ptr<tib::key_table_list> make_basic_key_table();
 
 } // namespace tib

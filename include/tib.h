@@ -9,6 +9,7 @@
 #include "tib_bindings.h"
 #include "tib_buffer.h"
 #include "tib_colors.h"
+#include "tib_commands.h"
 #include "tib_context.h"
 #include "tib_input.h"
 #include "tib_output.h"

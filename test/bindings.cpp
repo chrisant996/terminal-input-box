@@ -18,12 +18,12 @@ TEST_CASE("Key bindings")
 {
     SECTION("Main")
     {
-        auto base = std::make_shared<tib::key_table>(false/*can_self_insert*/);
+        auto base = std::make_shared<tib::key_table>();
         add_binding(*base, "\x1b[A", command_one);
         add_binding(*base, "\x1b[B", command_two);
         add_binding(*base, "\x1b[1~", command_one);
 
-        auto overlay = std::make_shared<tib::key_table>(false/*can_self_insert*/);
+        auto overlay = std::make_shared<tib::key_table>();
         add_binding(*overlay, "\x1b[A", command_override);
 
         std::shared_ptr<tib::key_table_list> tables = std::make_shared<tib::key_table_list>();
@@ -33,7 +33,7 @@ TEST_CASE("Key bindings")
 
         SECTION("Base table")
         {
-            assert(!base->can_self_insert());
+            assert(base->can_self_insert() <= 0);
             dispatcher.init(tables);
 
             REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
@@ -55,7 +55,7 @@ TEST_CASE("Key bindings")
 
         SECTION("Self insert")
         {
-            assert(!base->can_self_insert());
+            assert(base->can_self_insert() <= 0);
             base->set_can_self_insert(true);
             dispatcher.init(tables);
 
@@ -78,7 +78,7 @@ TEST_CASE("Key bindings")
 
         SECTION("Overlay table")
         {
-            assert(!base->can_self_insert());
+            assert(base->can_self_insert() <= 0);
             tables->emplace_back(overlay);
             dispatcher.init(tables);
 

@@ -25,8 +25,6 @@ static const char c_long_usage[] =
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
 
-static bool s_done = false;
-
 static bool s_use_rainbow_faces = false;
 
 static const char* const c_bar_text_color = "0;38;2;180;140;33";
@@ -83,189 +81,14 @@ private:
 
 static const bar_padding_border_definition c_bar_padding_border;
 
-static int32_t backspace(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.backspace();
-    return 0;
-}
-
-static int32_t del_word_left(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.backspace(true/*word*/);
-    return 0;
-}
-
-static int32_t accept_line(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    s_done = true;
-    return 0;
-}
-
-static int32_t begin_of_line(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.begin_of_input();
-    return 0;
-}
-
-static int32_t end_of_line(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.end_of_input();
-    return 0;
-}
-
-static int32_t backward_char(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_left();
-    return 0;
-}
-
-static int32_t forward_char(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_right();
-    return 0;
-}
-
-static int32_t backward_word(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_left(true/*word*/);
-    return 0;
-}
-
-static int32_t forward_word(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_right(true/*word*/);
-    return 0;
-}
-
-static int32_t del_char_right(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.del();
-    return 0;
-}
-
-static int32_t del_word_right(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.del(true/*word*/);
-    return 0;
-}
-
-static int32_t redo(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.redo();
-    return 0;
-}
-
-static int32_t undo(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.undo();
-    return 0;
-}
-
-static int32_t select_all(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.set_selection(0, uint16_t(ctx.get_text().length()));
-    return 0;
-}
-
-static int32_t cua_begin_of_line(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.begin_of_input(true/*select*/);
-    return 0;
-}
-
-static int32_t cua_end_of_line(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.end_of_input(true/*select*/);
-    return 0;
-}
-
-static int32_t cua_backward_char(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_left(false/*word*/, true/*select*/);
-    return 0;
-}
-
-static int32_t cua_forward_char(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_right(false/*word*/, true/*select*/);
-    return 0;
-}
-
-static int32_t cua_backward_word(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_left(true/*word*/, true/*select*/);
-    return 0;
-}
-
-static int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.move_right(true/*word*/, true/*select*/);
-    return 0;
-}
-
-static int32_t cut(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.cut_to_clipboard();
-    return 0;
-}
-
-static int32_t copy(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.copy_to_clipboard();
-    return 0;
-}
-
-static int32_t paste(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.paste_from_clipboard();
-    return 0;
-}
-
-static int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.insert_text(
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
-        "eiusmod tempor incididunt ut labore et dolore magna aliqua.  Ut enim "
-        "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
-        "aliquip ex ea commodo consequat.  Duis aute irure dolor in "
-        "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
-        "pariatur.  Excepteur sint occaecat cupidatat non proident, sunt in "
-        "culpa qui officia deserunt mollit anim id est laborum.");
-    return 0;
-}
-
-std::shared_ptr<tib::key_table_list> make_basic_key_table()
+std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
-
-    t->add({ "\177", tib::binding_target(backspace) });     // VT sends 0x7F for Backspace.
-    t->add({ "\001", tib::binding_target(select_all) });
-    t->add({ "\003", tib::binding_target(copy) });
-    t->add({ "\010", tib::binding_target(del_word_left) }); // VT sends 0x08 for Ctrl-Backspace.
-    t->add({ "\r", tib::binding_target(accept_line) });
-    t->add({ "\022", tib::binding_target(lorem_ipsum) });
+    t->add({ "\022", tib::binding_target(tib::lorem_ipsum) });
     t->add({ "\024", tib::binding_target("Macro Text") });
-    t->add({ "\026", tib::binding_target(paste) });
-    t->add({ "\030", tib::binding_target(cut) });
-    t->add({ "\031", tib::binding_target(redo) });
-    t->add({ "\032", tib::binding_target(undo) });
-    t->add({ "\033[H", tib::binding_target(begin_of_line) });
-    t->add({ "\033[F", tib::binding_target(end_of_line) });
-    t->add({ "\033[D", tib::binding_target(backward_char) });
-    t->add({ "\033[C", tib::binding_target(forward_char) });
-    t->add({ "\033[1;5D", tib::binding_target(backward_word) });
-    t->add({ "\033[1;5C", tib::binding_target(forward_word) });
-    t->add({ "\033[1;2H", tib::binding_target(cua_begin_of_line) });
-    t->add({ "\033[1;2F", tib::binding_target(cua_end_of_line) });
-    t->add({ "\033[1;2D", tib::binding_target(cua_backward_char) });
-    t->add({ "\033[1;2C", tib::binding_target(cua_forward_char) });
-    t->add({ "\033[1;6D", tib::binding_target(cua_backward_word) });
-    t->add({ "\033[1;6C", tib::binding_target(cua_forward_word) });
-    t->add({ "\033[3~", tib::binding_target(del_char_right) });
-    t->add({ "\033[3;5~", tib::binding_target(del_word_right) });
 
-    auto tables = std::make_shared<tib::key_table_list>();
-    tables->emplace_back(std::move(t));
+    auto tables = tib::make_basic_key_table();
+    tables->emplace_back(t);
     return tables;
 }
 
@@ -394,7 +217,7 @@ int main(int argc, const char** argv)
     face_defs.emplace(FACE_CTRL, "0;36;44");
 
     custom_input_box tib;
-    tib.set_bindings(make_basic_key_table());
+    tib.set_bindings(make_key_tables());
     tib.set_max_width(40);
 
     const tib::border_definition* border = nullptr;
@@ -525,7 +348,7 @@ no_border:
     // TODO-LINUX: Query the terminal for the current position.
 #endif
 
-    tib.initialize_text("hello world");
+    tib.initialize("hello world");
     tib.set_selection(0, uint16_t(tib.get_text().length()));
 
     tib::dispatcher dispatcher;
@@ -539,7 +362,7 @@ no_border:
     tib::cstring show_sequence;
     double last_clock = tib::clock();
 
-    while (!s_done)
+    while (!tib.done())
     {
         const tib::coord old_extent = tib.get_extent();
 

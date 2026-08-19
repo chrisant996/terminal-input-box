@@ -44,6 +44,10 @@ public:
                         ~editor_context();
                         editor_context();
 
+    void                initialize(const char* text=nullptr, size_t len=c_auto_length);
+    bool                done() const noexcept { return m_done; }
+    void                set_done() noexcept { m_done = true; }
+
     void                set_max_length(uint32_t m) { m_max_length = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
     void                set_max_width(uint16_t m) { m_layout.max_width = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
     void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
@@ -59,7 +63,6 @@ public:
     coord               get_relative_cursor() const { return m_display.get_relative_cursor(); }
     coord               get_extent() const { return m_display.get_extent(); }
 
-    void                initialize_text(const char* text=nullptr, size_t len=c_auto_length);
     std::shared_ptr<const key_table_list> get_bindings() const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
     void                set_callbacks(editor_callbacks* callbacks);
@@ -139,6 +142,7 @@ private:
 #if 0
     MouseHelper         m_mouse_helper;
 #endif
+    bool                m_done = false;
     bool                m_can_drag = false;
     binding_target_copy m_last_binding_target;
 

@@ -187,8 +187,10 @@ void editor_context::set_history(std::vector<cstring>* history)
 }
 #endif
 
-void editor_context::initialize_text(const char* text, size_t len)
+void editor_context::initialize(const char* text, size_t len)
 {
+    m_done = false;
+
     if (!text)
     {
         text = "";
@@ -874,7 +876,7 @@ void editor_context::redo()
 void editor_context::transfer_text(cstring& out)
 {
     out = std::move(m_text);
-    initialize_text();
+    initialize();
 }
 
 #ifdef DEBUG

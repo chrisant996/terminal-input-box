@@ -167,12 +167,13 @@ void dispatcher::init(std::shared_ptr<const key_table_list> tables)
     m_tables = tables;
     reset();
 
-    m_can_self_insert = !m_tables.get();
+    m_can_self_insert = m_tables.get()->empty() ? true : -1;
     for (auto table = m_tables.get()->rbegin(); table != m_tables.get()->rend(); ++table)
     {
-        if ((*table)->can_self_insert())
+        const int8_t can = (*table)->can_self_insert();
+        if (can >= 0)
         {
-            m_can_self_insert = true;
+            m_can_self_insert = can;
             break;
         }
     }
@@ -189,7 +190,7 @@ dispatch_outcome dispatcher::step(char c, editor_context* ctx)
 {
     dispatch_outcome outcome = step_internal(c);
 
-    const bool self_insert = (m_can_self_insert && outcome == dispatch_outcome::miss && uint8_t(c) >= ' ');
+    const bool self_insert = (m_can_self_insert > 0 && outcome == dispatch_outcome::miss && uint8_t(c) >= ' ');
     if (self_insert)
         outcome = dispatch_outcome::self_insert;
 
