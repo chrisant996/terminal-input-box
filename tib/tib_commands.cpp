@@ -244,7 +244,7 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\031", binding_target_func("redo") });
     t->add({ "\032", binding_target_func("undo") });
 
-    t->add({ "\177", binding_target_func("backspace") });     // VT sends 0x7F for Backspace.
+    t->add({ "\177", binding_target_func("del-char-left") }); // VT sends 0x7F for Backspace.
 
     t->add({ "\033[H", binding_target_func("begin-of-line") });
     t->add({ "\033[F", binding_target_func("end-of-line") });
