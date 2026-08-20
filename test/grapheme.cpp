@@ -223,7 +223,7 @@ static void make_matching_display_line_data(tib::cstring& text, tib::cstring& ma
     matching_faces = faces;
 }
 
-PERF_CASE("Perf, compare matching display line with memcmp")
+PERF_CASE("PERF, compare matching display line with memcmp")
 {
     tib::cstring text;
     tib::cstring matching_text;
@@ -241,7 +241,7 @@ PERF_CASE("Perf, compare matching display line with memcmp")
     REQUIRE(matches == c_display_line_comparison_passes);
 }
 
-PERF_CASE("Perf, compare matching display line by grapheme")
+PERF_CASE("PERF, compare matching display line by grapheme")
 {
     tib::cstring text;
     tib::cstring matching_text;

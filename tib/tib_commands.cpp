@@ -8,6 +8,7 @@
 #include "tib_base.h"
 #include "tib_bindings.h"
 #include "tib_context.h"
+#include <algorithm>
 #include <assert.h>
 
 namespace tib {
@@ -60,21 +61,21 @@ int32_t forward_word(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t backspace(editor_context& ctx, int32_t key, const char* name)
+int32_t del_char_left(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.backspace();
-    return 0;
-}
-
-int32_t del_word_left(editor_context& ctx, int32_t key, const char* name)
-{
-    ctx.backspace(true/*word*/);
     return 0;
 }
 
 int32_t del_char_right(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.del();
+    return 0;
+}
+
+int32_t del_word_left(editor_context& ctx, int32_t key, const char* name)
+{
+    ctx.backspace(true/*word*/);
     return 0;
 }
 
@@ -100,43 +101,43 @@ int32_t undo(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t select_all(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t select_all(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.set_selection(0, uint16_t(ctx.get_text().length()));
     return 0;
 }
 
-int32_t cua_begin_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_begin_of_line(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.begin_of_input(true/*select*/);
     return 0;
 }
 
-int32_t cua_end_of_line(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_end_of_line(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.end_of_input(true/*select*/);
     return 0;
 }
 
-int32_t cua_backward_char(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_backward_char(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.move_left(false/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_forward_char(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_forward_char(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.move_right(false/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_backward_word(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.move_left(true/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.move_right(true/*word*/, true/*select*/);
     return 0;
@@ -144,19 +145,19 @@ int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name
 
 //------------------------------------------------------------------------------
 
-int32_t cut(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t cut(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.cut_to_clipboard();
     return 0;
 }
 
-int32_t copy(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t copy(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.copy_to_clipboard();
     return 0;
 }
 
-int32_t paste(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t paste(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.paste_from_clipboard();
     return 0;
@@ -164,7 +165,7 @@ int32_t paste(tib::editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name)
+int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name)
 {
     ctx.insert_text(
         "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
@@ -179,42 +180,173 @@ int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-std::shared_ptr<tib::key_table_list> make_basic_key_table()
+int32_t self_insert(editor_context& ctx, int32_t key, const char* name) noexcept
 {
-    auto t = std::make_shared<tib::key_table>(true/*can_self_insert*/);
+    if (key < 0)
+        return -1;
 
-    t->add({ "\001", tib::binding_target(select_all) });
-    t->add({ "\003", tib::binding_target(copy) });
-    t->add({ "\010", tib::binding_target(del_word_left) }); // VT sends 0x08 for Ctrl-Backspace.
-    t->add({ "\r", tib::binding_target(accept_line) });
-    t->add({ "\026", tib::binding_target(paste) });
-    t->add({ "\030", tib::binding_target(cut) });
-    t->add({ "\031", tib::binding_target(redo) });
-    t->add({ "\032", tib::binding_target(undo) });
+    if (key <= 0xff)
+    {
+        ctx.insert_char(char(key));
+        return 0;
+    }
 
-    t->add({ "\177", tib::binding_target(backspace) });     // VT sends 0x7F for Backspace.
+    // TODO: convert UTF32 to UTF8 and insert the characters.
 
-    t->add({ "\033[H", tib::binding_target(begin_of_line) });
-    t->add({ "\033[F", tib::binding_target(end_of_line) });
-    t->add({ "\033[D", tib::binding_target(backward_char) });
-    t->add({ "\033[C", tib::binding_target(forward_char) });
-    t->add({ "\033[1;5D", tib::binding_target(backward_word) });
-    t->add({ "\033[1;5C", tib::binding_target(forward_word) });
+    return -1;
+}
 
-    t->add({ "\033[1;2H", tib::binding_target(cua_begin_of_line) });
-    t->add({ "\033[1;2F", tib::binding_target(cua_end_of_line) });
-    t->add({ "\033[1;2D", tib::binding_target(cua_backward_char) });
-    t->add({ "\033[1;2C", tib::binding_target(cua_forward_char) });
-    t->add({ "\033[1;6D", tib::binding_target(cua_backward_word) });
-    t->add({ "\033[1;6C", tib::binding_target(cua_forward_word) });
+//------------------------------------------------------------------------------
 
-    t->add({ "\033[3~", tib::binding_target(del_char_right) });
-    t->add({ "\033[3;5~", tib::binding_target(del_word_right) });
+std::shared_ptr<key_table_list> make_default_key_table()
+{
+    auto t = std::make_shared<key_table>(true/*can_self_insert*/);
 
-    auto tables = std::make_shared<tib::key_table_list>();
+    t->add({ "\001", binding_target_func("select-all") });
+    t->add({ "\003", binding_target_func("copy") });
+    t->add({ "\010", binding_target_func("del-word-left") }); // VT sends 0x08 for Ctrl-Backspace.
+    t->add({ "\r", binding_target_func("accept-line") });
+    t->add({ "\026", binding_target_func("paste") });
+    t->add({ "\030", binding_target_func("cut") });
+    t->add({ "\031", binding_target_func("redo") });
+    t->add({ "\032", binding_target_func("undo") });
+
+    t->add({ "\177", binding_target_func("backspace") });     // VT sends 0x7F for Backspace.
+
+    t->add({ "\033[H", binding_target_func("begin-of-line") });
+    t->add({ "\033[F", binding_target_func("end-of-line") });
+    t->add({ "\033[D", binding_target_func("backward-char") });
+    t->add({ "\033[C", binding_target_func("forward-char") });
+    t->add({ "\033[1;5D", binding_target_func("backward-word") });
+    t->add({ "\033[1;5C", binding_target_func("forward-word") });
+
+    t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });
+    t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });
+    t->add({ "\033[1;2D", binding_target_func("cua-backward-char") });
+    t->add({ "\033[1;2C", binding_target_func("cua-forward-char") });
+    t->add({ "\033[1;6D", binding_target_func("cua-backward-word") });
+    t->add({ "\033[1;6C", binding_target_func("cua-forward-word") });
+
+    t->add({ "\033[3~", binding_target_func("del-char-right") });
+    t->add({ "\033[3;5~", binding_target_func("del-word-right") });
+
+    auto tables = std::make_shared<key_table_list>();
     tables->emplace_back(std::move(t));
     return tables;
 }
+
+//------------------------------------------------------------------------------
+
+static const editor_command c_commands[] =
+{
+    { "accept-line", accept_line },
+    { "backward-char", backward_char },
+    { "backward-word", backward_word },
+    { "begin-of-line", begin_of_line },
+    { "copy", copy },
+    { "cua-backward-char", cua_backward_char },
+    { "cua-backward-word", cua_backward_word },
+    { "cua-begin-of-line", cua_begin_of_line },
+    { "cua-end-of-line", cua_end_of_line },
+    { "cua-forward-char", cua_forward_char },
+    { "cua-forward-word", cua_forward_word },
+    { "cut", cut },
+    { "del-char-left", del_char_left },
+    { "del-char-right", del_char_right },
+    { "del-word-left", del_word_left },
+    { "del-word-right", del_word_right },
+    { "end-of-line", end_of_line },
+    { "forward-char", forward_char },
+    { "forward-word", forward_word },
+    { "lorem-ipsum", lorem_ipsum },
+    { "paste", paste },
+    { "redo", redo },
+    { "select-all", select_all },
+    { "undo", undo },
+};
+
+void editor_context::ensure_commands()
+{
+    if (!s_commands.empty())
+        return;
+
+    for (const auto& command : c_commands)
+        s_commands.emplace_back(command);
+
+    s_unsorted_commands = true;
+}
+
+void editor_context::register_command(const char* name, editor_command_func_t func)
+{
+    assert(name);
+    if (!name)
+        return;
+
+    const auto found = std::lower_bound(s_commands.begin(), s_commands.end(), name, [](const editor_command& candidate, const char* name) {
+        const int comparison = strcmp(candidate.name, name);
+        return comparison < 0;
+    });
+
+    if (found != s_commands.end() && strcmp(found->name, name) == 0)
+    {
+        if (func)
+            found->func = func;
+        else
+            s_commands.erase(found);
+    }
+    else
+    {
+        s_command_names.emplace_back(name);
+
+        editor_command command;
+        command.name = s_command_names.back().c_str();
+        command.func = func;
+
+        s_commands.insert(found, std::move(command));
+        s_unsorted_commands = true;
+    }
+}
+
+const std::vector<editor_command>& editor_context::get_registered_commands()
+{
+    ensure_commands_sorted();
+    return s_commands;
+}
+
+void editor_context::ensure_commands_sorted()
+{
+    if (!s_unsorted_commands)
+        return;
+
+    std::sort(s_commands.begin(), s_commands.end(), [](const editor_command& a, const editor_command& b) {
+        const int comparison = strcmp(a.name, b.name);
+        return comparison < 0;
+    });
+
+    s_unsorted_commands = false;
+}
+
+editor_command_func_t editor_context::lookup_command(const char* name)
+{
+    if (!name)
+        return nullptr;
+
+    ensure_commands_sorted();
+
+    const auto found = std::lower_bound(s_commands.begin(), s_commands.end(), name, [](const editor_command& candidate, const char* name) {
+        const int comparison = strcmp(candidate.name, name);
+        return comparison < 0;
+    });
+
+    if (found == s_commands.end() || strcmp(found->name, name) != 0)
+        return nullptr;
+
+    return found->func;
+}
+
+std::vector<editor_command> editor_context::s_commands;
+std::vector<cstring> editor_context::s_command_names;
+bool editor_context::s_unsorted_commands = false;
 
 //------------------------------------------------------------------------------
 

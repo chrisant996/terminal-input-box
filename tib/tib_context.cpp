@@ -11,6 +11,8 @@
 
 namespace tib {
 
+bool g_optimize_self_insert = true;
+
 undo_entry::~undo_entry()
 {
     assert(!m_prev);
@@ -164,6 +166,8 @@ editor_context::~editor_context()
 
 editor_context::editor_context()
 {
+    ensure_commands();
+
     init_undo();
     m_display.init_buffer(this);
     m_display.init_layout(&m_layout);
@@ -217,16 +221,6 @@ void editor_context::initialize(const char* text, size_t len)
 #if 0
     m_history_index = m_history ? m_history->size() : 0;
 #endif
-}
-
-std::shared_ptr<const key_table_list> editor_context::get_bindings() const
-{
-    return m_bindings;
-}
-
-void editor_context::set_bindings(std::shared_ptr<const key_table_list> bindings)
-{
-    m_bindings = bindings;
 }
 
 void editor_context::set_callbacks(editor_callbacks* callbacks)
@@ -345,38 +339,6 @@ int32_t editor_context::go(void* cookie)
     }
 }
 #endif
-
-int32_t editor_context::do_binding_target(const binding_target* target, int32_t c)
-{
-    assert(target);
-    if (!target)
-        return -1;
-
-    // TODO: m_can_drag.
-    // TODO: Whether/when to reset history index.
-
-    // Remember the last binding target executed.
-    set_last_binding_target(*target);
-
-    switch (target->get_type())
-    {
-    case tib::binding_type::func:
-        {
-            const auto func = target->get_func();
-            assert(func);
-            return func(*this, uint8_t(c), target->get_text());
-        }
-        break;
-    case tib::binding_type::macro:
-        term_push_macro_text(target->get_text(), target->get_length());
-        break;
-    default:
-        assert(false);
-        break;
-    }
-
-    return -1;
-}
 
 void editor_context::display()
 {
@@ -661,9 +623,9 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
 }
 #endif
 
-void editor_context::set_last_binding_target(const binding_target& t) noexcept
+void editor_context::set_last_command(const char* name)
 {
-    m_last_binding_target = t;
+    m_last_command.set(name);
 }
 
 void editor_context::insert_char(char c)
@@ -877,6 +839,69 @@ void editor_context::transfer_text(cstring& out)
 {
     out = std::move(m_text);
     initialize();
+}
+
+int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const binding_target* binding) noexcept
+{
+    if (binding)
+    {
+        assert(binding->get_type() == binding_type::func);
+        if (binding->get_type() == binding_type::func)
+        {
+            const char* const name = binding->get_text();
+            set_last_command(name);
+
+            editor_command_func_t func = lookup_command(name);
+            if (!func)
+            {
+                // TODO: ding or something.
+                return 0;
+            }
+
+            return func(*this, key, name);
+        }
+    }
+    else
+    {
+        if (is_self_insertable(key))
+        {
+            const char c = char(key);
+            set_last_command("self-insert");
+
+            // The self-insert optimization collects as much raw insertable
+            // input as possible into a single insert operation, requiring
+            // only a single display refresh operation for the whole batch.
+            //
+            // However, the optimization may be turned off globally.  It may
+            // also be suppressed for some scope in a specific input box, for
+            // example to ensure that within some scope (perhaps for an
+            // extensibility framework) any invocations of the self_insert
+            // editor command insert only a single character without reading
+            // any further input from the terminal.
+            if (g_optimize_self_insert && m_allow_optimized_self_insert)
+            {
+                int32_t peek = term_in_peek();
+                if (is_self_insertable(peek))
+                {
+                    begin_undo_group();
+                    insert_char(c);
+                    while (is_self_insertable(peek))
+                    {
+                        assert(term_in() == peek);
+                        insert_char(char(peek));
+                        peek = term_in_peek();
+                    }
+                    end_undo_group();
+                    return 0;
+                }
+            }
+
+            insert_char(c);
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 #ifdef DEBUG

@@ -14,11 +14,40 @@
 
 namespace tib {
 
-bool g_optimize_self_insert = true;
+binding_target::binding_target(binding_type type, const char* text, size_t len) noexcept
+{
+    switch (type)
+    {
+    case binding_type::none:
+        assert(m_type == binding_type::none);
+        assert(!m_text);
+        assert(!m_length);
+        break;
+    case binding_type::func:
+        set_func(text);
+        break;
+    case binding_type::macro:
+        set_macro(text, len);
+        break;
+    default:
+        assert(false);
+        break;
+    }
+}
+
+binding_target binding_target_func(const char* name)
+{
+    return binding_target(binding_type::func, name);
+}
+
+binding_target binding_target_macro(const char* text, size_t len)
+{
+    return binding_target(binding_type::macro, text, len);
+}
 
 bool binding_target::operator==(const binding_target& t) const noexcept
 {
-    if (m_type != t.m_type || m_func != t.m_func)
+    if (m_type != t.m_type)
         return false;
     switch (m_type)
     {
@@ -45,11 +74,6 @@ bool binding_target::operator==(const binding_target& t) const noexcept
     return true;
 }
 
-bool binding_target::is_func_ptr(bindable_func_t func) const noexcept
-{
-    return (func && m_type == binding_type::func && m_func == func);
-}
-
 bool binding_target::is_func_name(const char* name) const noexcept
 {
     return (name && m_type == binding_type::func && m_text && strcmp(name, m_text) == 0);
@@ -58,17 +82,15 @@ bool binding_target::is_func_name(const char* name) const noexcept
 void binding_target::clear() noexcept
 {
     m_type = binding_type::none;
-    m_func = nullptr;
     m_text = nullptr;
     m_length = 0;
 }
 
-void binding_target::set_func(bindable_func_t func, const char* text) noexcept
+void binding_target::set_func(const char* name) noexcept
 {
-    assert(func);
+    assert(name);
     m_type = binding_type::func;
-    m_func = func;
-    m_text = text;
+    m_text = name;
     m_length = 0;
 }
 
@@ -77,7 +99,6 @@ void binding_target::set_macro(const char* text, size_t len) noexcept
     assert(text);
     len = resolve_auto_length(len, text);
     m_type = binding_type::macro;
-    m_func = nullptr;
     m_text = text;
     m_length = len;
 }
@@ -97,7 +118,7 @@ binding_target_copy& binding_target_copy::operator=(const binding_target& t) noe
         break;
     case binding_type::func:
         m_owned_text.set(t.get_text());
-        set_func(t.get_func(), m_owned_text.c_str());
+        set_func(m_owned_text.c_str());
         break;
     case binding_type::macro:
         m_owned_text.set(t.get_text(), t.get_length());
@@ -159,74 +180,70 @@ void key_table::clear()
     m_bindings.clear();
 }
 
-void dispatcher::init(std::shared_ptr<const key_table_list> tables)
+std::shared_ptr<const key_table_list> dispatcher_target::get_bindings() const
 {
-    // Copy the key_table_list.  This isolates the dispatcher from changes to
-    // the caller's key_table_list.  Compromise:  however, it does not isolate
-    // from changes to a given key_table in the list.
-    m_tables = tables;
-    reset();
+    return m_bindings;
+}
 
-    m_can_self_insert = m_tables.get()->empty() ? true : -1;
-    for (auto table = m_tables.get()->rbegin(); table != m_tables.get()->rend(); ++table)
-    {
-        const int8_t can = (*table)->can_self_insert();
-        if (can >= 0)
-        {
-            m_can_self_insert = can;
-            break;
-        }
-    }
+void dispatcher_target::set_bindings(std::shared_ptr<const key_table_list> bindings)
+{
+    m_bindings = bindings;
+}
+
+void dispatcher::clear_targets()
+{
+    m_registrants.clear();
+    m_recalc_can_self_insert = true;
+}
+
+void dispatcher::add_target(std::weak_ptr<dispatcher_target> target)
+{
+    m_registrants.emplace_back(target);
+    m_recalc_can_self_insert = true;
+
+    reset();
 }
 
 void dispatcher::reset()
 {
     m_sequence.clear();
-    m_target = nullptr;
+    m_binding_target = nullptr;
+    m_dispatcher_target.reset();
     m_outcome = dispatch_outcome::miss;
 }
 
-dispatch_outcome dispatcher::step(char c, editor_context* ctx)
+dispatch_outcome dispatcher::step(char c)
 {
+    maybe_recalc_can_self_insert();
+
     dispatch_outcome outcome = step_internal(c);
 
-    const bool self_insert = (m_can_self_insert > 0 && outcome == dispatch_outcome::miss && uint8_t(c) >= ' ');
-    if (self_insert)
-        outcome = dispatch_outcome::self_insert;
+    const bool self_insert = (outcome == dispatch_outcome::self_insert);
+    assert(implies(self_insert, m_can_self_insert > 0 && is_self_insertable(uint8_t(c))));
+    assert(implies(self_insert, get_sequence().length() == 1));
+    assert(implies(self_insert, get_sequence().c_str()[0] == c));
 
-    if (ctx)
+    switch (outcome)
     {
-        switch (outcome)
+    case dispatch_outcome::self_insert:
+    case dispatch_outcome::match:
         {
-        case dispatch_outcome::self_insert:
-            ctx->set_last_binding_target(c_self_insert);
-            if (g_optimize_self_insert)
+            auto ctx = m_dispatcher_target.lock();
+            if (ctx)
             {
-                int32_t peek = term_in_peek();
-                if (peek && peek >= ' ' && peek <= 0xff)
-                {
-                    ctx->begin_undo_group();
-                    ctx->insert_char(c);
-                    while (peek && peek >= ' ' && peek <= 0xff)
-                    {
-                        assert(term_in() == peek);
-                        ctx->insert_char(char(peek));
-                        peek = term_in_peek();
-                    }
-                    ctx->end_undo_group();
-                    break;
-                }
+                const auto target = get_binding_target();
+                assert(self_insert == !target);
+                if (target && target->get_type() == binding_type::macro)
+                    term_push_macro_text(target->get_text(), target->get_length());
+                else
+                    ctx->dispatch(get_sequence(), c, target);
             }
-            ctx->insert_char(c);
-            break;
-        case dispatch_outcome::match:
+            else
             {
-                const auto target = get_target();
-                assert(target);
-                ctx->do_binding_target(target, c);
+                // TODO: ding or something.
             }
-            break;
         }
+        break;
     }
 
     return outcome;
@@ -242,26 +259,57 @@ dispatch_outcome dispatcher::step_internal(char c)
     // Search the key tables in priority order (later tables overlay earlier
     // tables) looking for an exact match or a prefix match.
     bool is_prefix = false;
-    for (auto table = m_tables.get()->rbegin(); table != m_tables.get()->rend(); ++table)
+    int8_t can_self_insert = -1;
+    bool has_self_insert_target = false;
+    std::weak_ptr<dispatcher_target> self_insert_target;
+    for (auto& weak : m_registrants)
     {
-        const auto& bindings = (*table)->m_bindings;
-        const auto found = std::lower_bound(bindings.begin(), bindings.end(), m_sequence, [](const key_binding& candidate, const cstring& sequence) {
-            const size_t common_length = min(candidate.sequence.length(), sequence.length());
-            const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
-            return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
-        });
+        std::shared_ptr<dispatcher_target> target = weak.lock();
+        if (!target)
+            continue;
 
-        if (found != bindings.end() &&
-            found->sequence.length() >= m_sequence.length() &&
-            memcmp(found->sequence.c_str(), m_sequence.c_str(), m_sequence.length()) == 0)
+        const auto bindings_list = target->get_bindings();
+        if (!bindings_list)
+            continue;
+
+        for (auto& table = bindings_list->rbegin(); table != bindings_list->rend(); ++table)
         {
-            if (found->sequence.length() == m_sequence.length())
+            // Only one table can accept self-insert input; last one in the
+            // bindings list wins.
+            assert(can_self_insert <= 0);
+            if (can_self_insert < 0)
+                can_self_insert = (*table)->can_self_insert();
+
+            if (can_self_insert > 0 && m_sequence.length() == 1 && !has_self_insert_target)
             {
-                m_target = &found->target;
-                m_outcome = dispatch_outcome::match;
-                return m_outcome;
+                self_insert_target = target;
+                has_self_insert_target = true;
             }
-            is_prefix = true;
+
+            const auto& bindings = (*table)->m_bindings;
+            const auto found = std::lower_bound(bindings.begin(), bindings.end(), m_sequence, [](const key_binding& candidate, const cstring& sequence) {
+                const size_t common_length = min(candidate.sequence.length(), sequence.length());
+                const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
+                return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
+            });
+
+            if (found != bindings.end() &&
+                found->sequence.length() >= m_sequence.length() &&
+                memcmp(found->sequence.c_str(), m_sequence.c_str(), m_sequence.length()) == 0)
+            {
+                if (found->sequence.length() == m_sequence.length())
+                {
+                    m_binding_target = &found->target;
+                    m_dispatcher_target = weak;
+                    m_outcome = dispatch_outcome::match;
+                    return m_outcome;
+                }
+                is_prefix = true;
+            }
+
+            // Only one table gets to accept self-insert input.
+            if (can_self_insert > 0)
+                can_self_insert = 0;
         }
     }
 
@@ -278,26 +326,46 @@ dispatch_outcome dispatcher::step_internal(char c)
         return step(c);
     }
 
+    if (m_sequence.length() == 1 && has_self_insert_target && is_self_insertable(m_sequence.c_str()[0]))
+    {
+        m_binding_target = nullptr;
+        m_dispatcher_target = self_insert_target;
+        m_outcome = dispatch_outcome::self_insert;
+        return m_outcome;
+    }
+
     m_outcome = dispatch_outcome::miss;
     return m_outcome;
 }
 
-int32_t self_insert(editor_context& ctx, int32_t key, const char* name) noexcept
+void dispatcher::maybe_recalc_can_self_insert()
 {
-    if (key < 0)
-        return -1;
+    if (!m_recalc_can_self_insert)
+        return;
 
-    if (key <= 0xff)
+    m_recalc_can_self_insert = false;
+    m_can_self_insert = -1;
+
+    for (auto& weak : m_registrants)
     {
-        ctx.insert_char(char(key));
-        return 0;
+        std::shared_ptr<dispatcher_target> target = weak.lock();
+        if (!target)
+            continue;
+
+        const auto bindings_list = target->get_bindings();
+        if (!bindings_list)
+            continue;
+
+        for (auto table = bindings_list->rbegin(); table != bindings_list->rend(); ++table)
+        {
+            const int8_t can = (*table)->can_self_insert();
+            if (can >= 0)
+            {
+                m_can_self_insert = can;
+                return;
+            }
+        }
     }
-
-    // TODO: convert UTF32 to UTF8 and insert the characters.
-
-    return -1;
 }
-
-const binding_target c_self_insert(self_insert, "self-insert");
 
 } // namespace tib

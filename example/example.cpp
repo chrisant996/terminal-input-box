@@ -86,10 +86,10 @@ static const bar_padding_border_definition c_bar_padding_border;
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
-    t->add({ "\022", tib::binding_target(tib::lorem_ipsum) });
-    t->add({ "\024", tib::binding_target("Macro Text") });
+    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });
+    t->add({ "\024", tib::binding_target_macro("Macro Text") });
 
-    auto tables = tib::make_basic_key_table();
+    auto tables = tib::make_default_key_table();
     tables->emplace_back(t);
     return tables;
 }
@@ -208,9 +208,9 @@ int main(int argc, const char** argv)
     tib_host::set_console_vt_input();
     reset_wcwidths();
 
-    custom_input_box tib;
-    tib.set_bindings(make_key_tables());
-    tib.set_max_width(40);
+    std::shared_ptr<custom_input_box> tib = std::make_shared<custom_input_box>();
+    tib->set_bindings(make_key_tables());
+    tib->set_max_width(40);
 
 #pragma region Example customizations.
     const char c_norm_base[] = "0";
@@ -231,30 +231,30 @@ int main(int argc, const char** argv)
     {
         if (_stricmp(argv[i], "--single") == 0)
         {
-            tib.set_max_height(1);
-            tib.set_variable_height(false);
+            tib->set_max_height(1);
+            tib->set_variable_height(false);
         }
         else if (_stricmp(argv[i], "--multiline") == 0)
         {
-            tib.set_max_height(3);
+            tib->set_max_height(3);
         }
         else if (_stricmp(argv[i], "--fixed") == 0)
         {
-            tib.set_variable_height(false);
+            tib->set_variable_height(false);
         }
         else if (_stricmp(argv[i], "--variable") == 0)
         {
-            tib.set_max_height(3);
-            tib.set_variable_height(true);
+            tib->set_max_height(3);
+            tib->set_variable_height(true);
         }
         else if (_stricmp(argv[i], "--full-width") == 0)
         {
-            tib.set_max_width(INT16_MAX);
+            tib->set_max_width(INT16_MAX);
         }
         else if (_stricmp(argv[i], "--no-border") == 0)
         {
 no_border:
-            tib.set_empty_face(tib::FACE_EMPTY);
+            tib->set_empty_face(tib::FACE_EMPTY);
             colors->set_color(tib::color_element::base, c_norm_base);
             border = nullptr;
         }
@@ -265,19 +265,19 @@ no_border:
             {
                 if (_stricmp(argv[i], "light") == 0)
                 {
-                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_norm_base);
                     border = &tib::c_light_border;
                 }
                 else if (_stricmp(argv[i], "padding") == 0)
                 {
-                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
                     border = &c_padding_border;
                 }
                 else if (_stricmp(argv[i], "bar-padding") == 0)
                 {
-                    tib.set_empty_face(tib::FACE_DEFAULT);
+                    tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
                     border = &c_bar_padding_border;
                 }
@@ -342,24 +342,24 @@ no_border:
         }
     }
 
-    tib.set_color_table(colors);
-    tib.set_face_defs(&face_defs);
-    tib.set_border(border);
+    tib->set_color_table(colors);
+    tib->set_face_defs(&face_defs);
+    tib->set_border(border);
 #pragma endregion // Example customizations.
 
-    tib.initialize("hello world");
-    tib.set_selection(0, uint16_t(tib.get_text().length()));
+    tib->initialize("hello world");
+    tib->set_selection(0, uint16_t(tib->get_text().length()));
 
 #pragma region Show input sequence.
     tib::cstring tmp;
     tib::cstring sequence;
     tib::cstring show_sequence;
-    tib::coord old_extent = tib.get_extent();
+    tib::coord old_extent = tib->get_extent();
     double last_clock = tib::clock();
 
     auto show_sequence_after_display = [&]()
     {
-        display_key_sequence(tib, show_sequence, &old_extent);
+        display_key_sequence(*tib, show_sequence, &old_extent);
     };
 
     auto update_sequence_before_step = [&](int32_t c)
@@ -398,16 +398,16 @@ no_border:
             break;
         }
 
-        old_extent = tib.get_extent();
+        old_extent = tib->get_extent();
     };
 #pragma endregion // Show input sequence.
 
     tib::dispatcher dispatcher;                             // Required.
-    dispatcher.init(tib.get_bindings());                    // Required.
+    dispatcher.add_target(tib);                             // Required.
 
-    while (!tib.done())                                     // Required.
+    while (!tib->done())                                    // Required.
     {
-        tib.display();                                      // Required.
+        tib->display();                                     // Required.
 
                 /*Custom*/  show_sequence_after_display();
 
@@ -415,17 +415,17 @@ no_border:
 
                 /*Custom*/  update_sequence_before_step(c);
 
-        const auto outcome = dispatcher.step(c, &tib);      // Required.
+        const auto outcome = dispatcher.step(c);            // Required.
 
                 /*Custom*/  update_sequence_after_step(outcome);
     }
 
 #pragma region Show input sequence.
     show_sequence.clear();
-    display_key_sequence(tib, show_sequence);
+    display_key_sequence(*tib, show_sequence);
 #pragma endregion // Show input sequence.
 
-    tib.erase_display();
+    tib->erase_display();
     tib::term_out("\r\n", 2);
 
     return 0;

@@ -22,8 +22,6 @@ enum class binding_type : uint8_t
     macro,
 };
 
-typedef int32_t (*bindable_func_t)(editor_context& ctx, int32_t key, const char* name);
-
 class key_table;
 
 class binding_target
@@ -33,23 +31,20 @@ class binding_target
 public:
                         ~binding_target() noexcept = default;
                         binding_target() = default;
-                        binding_target(bindable_func_t func, const char* text=nullptr) noexcept { set_func(func, text); }
-                        binding_target(const char* text, size_t len=c_auto_length) noexcept { set_macro(text, len); }
+                        binding_target(binding_type type, const char* text, size_t len=c_auto_length) noexcept;
                         binding_target(const binding_target& t) noexcept = default;
                         binding_target(binding_target&& t) noexcept = default;
     binding_target&     operator=(const binding_target& t) noexcept = default;
     binding_target&     operator=(binding_target&& t) noexcept = default;
     bool                operator==(const binding_target& t) const noexcept;
-    bool                is_func_ptr(bindable_func_t func) const noexcept;
     bool                is_func_name(const char* name) const noexcept;
 
     binding_type        get_type() const noexcept { return m_type; }
-    bindable_func_t     get_func() const noexcept { assert(m_type == binding_type::func); return m_func; }
     const char*         get_text() const noexcept { return m_text; }
     size_t              get_length() const noexcept { assert(m_type == binding_type::macro); return m_length; }
 
     void                clear() noexcept;
-    void                set_func(bindable_func_t func, const char* name=nullptr) noexcept;
+    void                set_func(const char* name) noexcept;
     void                set_macro(const char* text, size_t len=c_auto_length) noexcept;
 
 protected:
@@ -59,10 +54,12 @@ protected:
     // `"text"` for macro text "text") and resolve the target on demand.
     // PERF: Analyze actual performance cost of resolving targets on demand.
     binding_type        m_type = binding_type::none;
-    bindable_func_t     m_func = nullptr;
     const char*         m_text = nullptr;   // Borrowed, not owned.
     size_t              m_length = 0;
 };
+
+binding_target binding_target_func(const char* name);
+binding_target binding_target_macro(const char* text, size_t len=c_auto_length);
 
 class binding_target_copy : public binding_target
 {
@@ -119,11 +116,26 @@ typedef std::vector<std::shared_ptr<key_table>> key_table_list;
 
 enum class dispatch_outcome { miss, self_insert, more, match };
 
-// TODO: The dispatcher must not depend on editor_context (or at least not
-// exclusively).  The dispatcher must be usable with other things like popup
-// list UI, and must generalize to any arbitrary custom UI element.  And yet
-// commands need to be able to directly act upon an editor_context or other UI
-// object.
+class dispatcher_target : public std::enable_shared_from_this<dispatcher_target>
+{
+public:
+    std::shared_ptr<const key_table_list> get_bindings() const;
+    void                set_bindings(std::shared_ptr<const key_table_list> bindings);
+
+    // TODO: someone should get a crack at handling/redirecting key sequences
+    // that aren't covered by the current key_table_list.
+
+    // The dispatch() callback is called by dispatcher::step() in two cases:
+    //  1.  The input sequence matched a key binding, in which case binding
+    //      points at the matched key binding.
+    //  2.  A key_table has self-insert enabled and the input sequence is a
+    //      single self-insert character, in which case binding is nullptr and
+    //      key is the character to be inserted.
+    virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding) noexcept = 0;
+
+private:
+    std::shared_ptr<const key_table_list> m_bindings;
+};
 
 class dispatcher
 {
@@ -131,28 +143,36 @@ public:
                         ~dispatcher() = default;
                         dispatcher() = default;
 
-    void                init(std::shared_ptr<const key_table_list> tables);
+    void                clear_targets();
+    void                add_target(std::weak_ptr<dispatcher_target> target);
 
     void                reset();
-    dispatch_outcome    step(char c, editor_context* ctx=nullptr);
+    dispatch_outcome    step(char c);
 
+    // TODO: Instead make this a binding_resolver that yields a
+    // resolved_binding, and have a resolved_binding::dispatch method that
+    // forwards to dispatcher_target::dispatch.
     const cstring&      get_sequence() const { return m_sequence; }
-    const binding_target* get_target() const { return m_target; }
+    const binding_target* get_binding_target() const { return m_binding_target; }
+    std::weak_ptr<dispatcher_target> get_dispatcher_target() const { return m_dispatcher_target; }
     dispatch_outcome    get_outcome() const { return m_outcome; }
 
 private:
     dispatch_outcome    step_internal(char c);
+    void                maybe_recalc_can_self_insert();
 
 private:
-    std::shared_ptr<const key_table_list> m_tables;
+    std::vector<std::weak_ptr<dispatcher_target>> m_registrants;
+    bool                m_recalc_can_self_insert = true;
+    int8_t              m_can_self_insert = -1;
+
     cstring             m_sequence;
-    const binding_target* m_target = nullptr;
+    const binding_target* m_binding_target = nullptr;
+    std::weak_ptr<dispatcher_target> m_dispatcher_target;
     dispatch_outcome    m_outcome = dispatch_outcome::miss;
-    int8_t              m_can_self_insert = true;
 };
 
-extern const binding_target c_self_insert;
-
-std::shared_ptr<tib::key_table_list> make_basic_key_table();
+std::shared_ptr<tib::key_table_list> make_default_key_table();
+inline bool is_self_insertable(int32_t key) { return (key >= ' ' && key <= 0xff); }
 
 } // namespace tib

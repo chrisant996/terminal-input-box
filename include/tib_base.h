@@ -359,5 +359,6 @@ bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
 
 double clock();
 bool getenv(const char* name, cstring& out);
+inline bool implies(bool a, bool b) { return !a || b; }
 
 } // namespace tib

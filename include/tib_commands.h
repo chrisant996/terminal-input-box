@@ -19,9 +19,9 @@ int32_t forward_char(tib::editor_context& ctx, int32_t key, const char* name);
 int32_t backward_word(tib::editor_context& ctx, int32_t key, const char* name);
 int32_t forward_word(tib::editor_context& ctx, int32_t key, const char* name);
 
-int32_t backspace(tib::editor_context& ctx, int32_t key, const char* name);;
-int32_t del_word_left(tib::editor_context& ctx, int32_t key, const char* name);
+int32_t del_char_left(tib::editor_context& ctx, int32_t key, const char* name);;
 int32_t del_char_right(tib::editor_context& ctx, int32_t key, const char* name);
+int32_t del_word_left(tib::editor_context& ctx, int32_t key, const char* name);
 int32_t del_word_right(tib::editor_context& ctx, int32_t key, const char* name);
 
 int32_t redo(tib::editor_context& ctx, int32_t key, const char* name);
@@ -41,6 +41,6 @@ int32_t paste(tib::editor_context& ctx, int32_t key, const char* name);
 
 int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name);
 
-std::shared_ptr<tib::key_table_list> make_basic_key_table();
+std::shared_ptr<tib::key_table_list> make_default_key_table();
 
 }
