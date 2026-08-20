@@ -13,6 +13,7 @@
 namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
+void (*hook_term_ding)() = nullptr;
 
 const char c_hide_cursor[] = "\x1b[?25l";
 const char c_show_cursor[] = "\x1b[?25h";
@@ -99,6 +100,14 @@ void term_out(const char* s, size_t len)
 #else
     fwrite(s, resolve_auto_length(len, s), 1, stdout);
 #endif
+}
+
+void ding()
+{
+    if (hook_term_ding)
+        return hook_term_ding();
+
+    term_out("\007", 1);
 }
 
 } // namespace tib

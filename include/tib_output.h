@@ -19,6 +19,9 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
 coord get_terminal_size();
 void term_out(const char* s, size_t len=c_auto_length);
 
+void ding();
+
 extern void (*hook_term_out)(const char* s, size_t len);
+extern void (*hook_term_ding)();
 
 } // namespace tib

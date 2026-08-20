@@ -244,6 +244,9 @@ dispatch_outcome dispatcher::step(uint8_t c)
             }
         }
         break;
+    case dispatch_outcome::miss:
+        ding();
+        break;
     }
 
     return outcome;

@@ -633,7 +633,7 @@ void editor_context::insert_char(char c)
     if (!c)
         return;
 
-    const bool merge = (static_cast<unsigned char>(c) & 0xc0) == 0x80;
+    const bool merge = (uint8_t(c) & 0xc0) == 0x80;
     begin_undo_group(merge);
 
     m_selection.reset_word_anchor();
@@ -890,8 +890,8 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
             editor_command_func_t func = lookup_command(name);
             if (!func)
             {
-                // TODO: ding or something.
-                return 0;
+                ding();
+                return -1;
             }
 
             return func(*this, key, name);
@@ -935,6 +935,8 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
             insert_char(c);
             return 0;
         }
+
+        ding();
     }
 
     return -1;
