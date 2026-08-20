@@ -36,7 +36,8 @@ int main(int argc, char** argv)
     install_crt_invalid_parameter_handler();
 #endif
 
-    // TODO: Override ding preference, otherwise the tests may be vocal.
+    // Override ding, otherwise tests could be vocal.
+    tib::hook_term_ding = [](){};
 
     bool list = false;
     bool times = false;
