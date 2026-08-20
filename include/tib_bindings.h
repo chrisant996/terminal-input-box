@@ -114,7 +114,14 @@ private:
 
 typedef std::vector<std::shared_ptr<key_table>> key_table_list;
 
-enum class dispatch_outcome { miss, self_insert, more, match };
+enum class dispatch_outcome
+{
+    miss,               // Input sequence did not resolve to a binding.
+    self_insert,        // Input sequence is literal text.
+    more,               // Input sequence is a prefix of one or more bindings.
+    match,              // Input sequence resolved to a binding.
+    expired,            // The dispatcher_target weak reference was expired.
+};
 
 class dispatcher_target : public std::enable_shared_from_this<dispatcher_target>
 {

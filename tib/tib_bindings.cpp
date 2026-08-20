@@ -240,7 +240,7 @@ dispatch_outcome dispatcher::step(char c)
             }
             else
             {
-                // TODO: ding or something.
+                outcome = dispatch_outcome::expired;
             }
         }
         break;
