@@ -326,7 +326,7 @@ dispatch_outcome dispatcher::step_internal(uint8_t c)
     {
         // Discard the sequence before c and try again.
         reset();
-        return step(c);
+        return step_internal(c);
     }
 
     if (m_sequence.length() == 1 && has_self_insert_target && is_self_insertable(m_sequence.c_str()[0]))

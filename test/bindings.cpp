@@ -64,11 +64,13 @@ TEST_CASE("Key bindings")
             REQUIRE(!dispatcher.get_binding_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
 
+            const uint32_t dispatch_count = tester->get_dispatch_count();
             REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
             REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
             REQUIRE(dispatcher.step('Z') == tib::dispatch_outcome::self_insert);
             REQUIRE(!dispatcher.get_binding_target());
             REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
+            REQUIRE(tester->get_dispatch_count() == dispatch_count + 1);
         }
 
         SECTION("Overlay table")
