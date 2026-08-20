@@ -48,11 +48,6 @@ public:
     void                set_macro(const char* text, size_t len=c_auto_length) noexcept;
 
 protected:
-    // Optimize dispatching key bindings by storing a pre-resolved encoding of
-    // the operation.  If runtime cost didn't matter, it could be cleaner to
-    // store just a target string (`foo` for bindable command name "foo", and
-    // `"text"` for macro text "text") and resolve the target on demand.
-    // PERF: Analyze actual performance cost of resolving targets on demand.
     binding_type        m_type = binding_type::none;
     const char*         m_text = nullptr;   // Borrowed, not owned.
     size_t              m_length = 0;

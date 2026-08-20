@@ -223,6 +223,8 @@ dispatch_outcome dispatcher::step(char c)
     assert(implies(self_insert, get_sequence().length() == 1));
     assert(implies(self_insert, get_sequence().c_str()[0] == c));
 
+    // TODO: this doesn't group the bytes of a Unicode codepoint (much less
+    // grapheme) into a single undo group, so "undo" can produce invalid UTF8.
     switch (outcome)
     {
     case dispatch_outcome::self_insert:
