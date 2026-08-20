@@ -191,9 +191,42 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name) noexcept
         return 0;
     }
 
-    // TODO: convert UTF32 to UTF8 and insert the characters.
+    // Interpret key as UTF32 and convert it to UTF8.
+    char utf8[4];
+    size_t length;
+    if (key <= 0x7ff)
+    {
+        utf8[0] = char(0xc0 | (key >> 6));
+        utf8[1] = char(0x80 | (key & 0x3f));
+        length = 2;
+    }
+    else if (key <= 0xffff)
+    {
+        if (key >= 0xd800 && key <= 0xdfff)
+            return -1;
+        utf8[0] = char(0xe0 | (key >> 12));
+        utf8[1] = char(0x80 | ((key >> 6) & 0x3f));
+        utf8[2] = char(0x80 | (key & 0x3f));
+        length = 3;
+    }
+    else if (key <= 0x10ffff)
+    {
+        utf8[0] = char(0xf0 | (key >> 18));
+        utf8[1] = char(0x80 | ((key >> 12) & 0x3f));
+        utf8[2] = char(0x80 | ((key >> 6) & 0x3f));
+        utf8[3] = char(0x80 | (key & 0x3f));
+        length = 4;
+    }
+    else
+        return -1;
 
-    return -1;
+    // Insert the converted UTF8 characters.
+    ctx.begin_undo_group();
+    for (size_t i = 0; i < length; ++i)
+        ctx.insert_char(utf8[i]);
+    ctx.end_undo_group();
+
+    return 0;
 }
 
 //------------------------------------------------------------------------------
