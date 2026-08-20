@@ -265,7 +265,7 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     invalidate_border();
 }
 
-coord display_manager::get_effective_max_size(bool omit_scroll_markers) const
+coord display_manager::get_effective_max_size(bool omit_scroll_markers)
 {
     assert(m_layout);
     if (!m_layout)
@@ -275,6 +275,11 @@ nope:
     }
 
     const coord term_size = get_terminal_size();
+    if (m_term_size != term_size)
+    {
+        invalidate();
+        m_term_size = term_size;
+    }
 
     const border_definition* b = m_style ? m_style->border : nullptr;
     const uint16_t b_left_width = b->get_left_width();
@@ -628,19 +633,11 @@ bool display_manager::build(display_lines& out)
     if (!m_layout || !m_buffer)
         return false;
 
-    // Ensure redisplay if terminal size is different than last time.  To wake
-    // immediately upon terminal resize requires a custom input hook, but even
-    // the default input routine will at least allow redisplay the next time
-    // some input becomes available.
-    coord term_size = get_terminal_size();
-    if (m_term_size != term_size)
-    {
-        // Invalidate to ensure display.
-        invalidate();
-        // Remember the actual terminal size; the effective terminal size may
-        // be reduced further below to accommodate border overhead.
-        m_term_size = term_size;
-    }
+    // NOTE:  Terminal size change is noted inside get_effective_max_size()
+    // inside editor_context::ensure_left() inside editor_context::display().
+    // Waking immediately upon terminal resize requires a custom input hook,
+    // but even the default input routine will at least allow redisplay the
+    // next time some input becomes available.
 
     const uint32_t change_counter = m_buffer->get_change_counter();
     const selection_state& sel_state = m_buffer->get_selection_state();

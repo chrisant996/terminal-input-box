@@ -143,7 +143,7 @@ public:
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
 
-    coord               get_effective_max_size(bool omit_scroll_markers=false) const;
+    coord               get_effective_max_size(bool omit_scroll_markers=false);
     coord               get_relative_cursor() const { return m_relative_cursor; }
     coord               get_extent() const;
 

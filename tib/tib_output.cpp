@@ -62,7 +62,6 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
     return length_fits;
 }
 
-// TODO: Abstract behind a terminal object.
 coord get_terminal_size()
 {
     coord size = { 80, 25 };

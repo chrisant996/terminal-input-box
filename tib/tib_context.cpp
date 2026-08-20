@@ -342,9 +342,6 @@ int32_t editor_context::go(void* cookie)
 
 void editor_context::display()
 {
-    // TODO: terminal size changes should invalidate.
-
-    // REVIEW: optimize this away as much as possible?
     ensure_left();
 
     m_display.display();
