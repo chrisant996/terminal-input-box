@@ -141,7 +141,7 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
         assert(len == faces.length());
         for (size_t i = 0; i < text.length(); ++i)
         {
-            if (s[i] < ' ')
+            if (s[i] >= 0 && s[i] < ' ')
             {
                 faces.set_at(i, FACE_CTRL);
             }
