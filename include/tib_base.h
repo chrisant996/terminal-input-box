@@ -34,6 +34,8 @@ typedef int32_t textpos_t;
 
 struct coord
 {
+    bool                operator==(const coord& other) const { return x == other.x && y == other.y; }
+    bool                operator!=(const coord& other) const { return x != other.x || y != other.y; }
     int32_t             x;
     int32_t             y;
 };

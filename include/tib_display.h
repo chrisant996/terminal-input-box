@@ -129,7 +129,7 @@ class display_manager
 {
 public:
                         ~display_manager() = default;
-                        display_manager() = default;
+                        display_manager();
 
     void                init_layout(const layout_info* layout);
     void                init_buffer(const input_buffer* buffer);
@@ -175,6 +175,7 @@ private:
     const face_definitions* m_face_defs = nullptr;  // Borrowed.
     editor_callbacks*   m_callbacks = nullptr;      // Borrowed.
     coord               m_origin = { -1, -1 };
+    coord               m_term_size;
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
     uint32_t            m_top = 0;

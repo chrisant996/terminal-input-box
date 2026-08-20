@@ -203,6 +203,11 @@ void display_lines::apply_scroll_markers(int16_t rows)
     m_cursor.y = max(0, m_cursor.y - m_top);
 }
 
+display_manager::display_manager()
+{
+    m_term_size = get_terminal_size();
+}
+
 void display_manager::init_layout(const layout_info* layout)
 {
     m_layout = layout;
@@ -623,7 +628,20 @@ bool display_manager::build(display_lines& out)
     if (!m_layout || !m_buffer)
         return false;
 
-    // TODO: redisplay when layout extents change.
+    // Ensure redisplay if terminal size is different than last time.  To wake
+    // immediately upon terminal resize requires a custom input hook, but even
+    // the default input routine will at least allow redisplay the next time
+    // some input becomes available.
+    coord term_size = get_terminal_size();
+    if (m_term_size != term_size)
+    {
+        // Invalidate to ensure display.
+        invalidate();
+        // Remember the actual terminal size; the effective terminal size may
+        // be reduced further below to accommodate border overhead.
+        m_term_size = term_size;
+    }
+
     const uint32_t change_counter = m_buffer->get_change_counter();
     const selection_state& sel_state = m_buffer->get_selection_state();
     const textpos_t sel_begin = sel_state.get_sel_begin();
@@ -660,7 +678,6 @@ bool display_manager::build(display_lines& out)
     tmp.m_selection_length = sel_end - sel_begin;
 
     // Set up border.
-    coord term_size = get_terminal_size();
     if (m_style && m_style->border)
     {
         const border_definition& b = *m_style->border;
