@@ -3,20 +3,8 @@
 
 #include "maybe_windows.h"
 #include "test.h"
+#include "test_util.h"
 #include "tib.h"
-
-static bool add_binding(tib::key_table& table, const char* sequence, const char* name)
-{
-    return table.add({ sequence, tib::binding_target_func(name) });
-}
-
-class dispatcher_tester : public tib::dispatcher_target
-{
-public:
-                        ~dispatcher_tester() = default;
-                        dispatcher_tester() = default;
-    int32_t             dispatch(const tib::cstring &sequence, int32_t key, const tib::binding_target *binding) noexcept { return -1; }
-};
 
 TEST_CASE("Key bindings")
 {
@@ -101,6 +89,31 @@ TEST_CASE("Key bindings")
             REQUIRE(dispatcher.get_binding_target());
             REQUIRE(dispatcher.get_binding_target()->is_func_name("command-two"));
         }
+    }
+}
+
+TEST_CASE("UTF8 multi-byte input")
+{
+    SECTION("Dispatcher preserves UTF8 bytes")
+    {
+        const bool optimize_self_insert = tib::g_optimize_self_insert;
+        MAKE_CLEANUP([optimize_self_insert]() { tib::g_optimize_self_insert = optimize_self_insert; });
+        tib::g_optimize_self_insert = false;
+
+        auto input = std::make_shared<tib::editor_context>();
+        input->initialize();
+        input->set_bindings(tib::make_default_key_table());
+
+        tib::dispatcher dispatcher;
+        dispatcher.add_target(input);
+
+        const char utf8[] = "\xf0\x9f\x98\x80";
+        for (const char c : utf8)
+        {
+            if (c)
+                REQUIRE(dispatcher.step(c) == tib::dispatch_outcome::self_insert);
+        }
+        REQUIRE(input->get_text() == tib::cstring(utf8));
     }
 }
 

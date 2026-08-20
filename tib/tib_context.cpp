@@ -633,7 +633,35 @@ void editor_context::insert_char(char c)
     if (!c)
         return;
 
-    insert_text(&c, 1);
+    const bool merge = (static_cast<unsigned char>(c) & 0xc0) == 0x80;
+    begin_undo_group(merge);
+
+    m_selection.reset_word_anchor();
+
+    elide_selected_text();
+
+    inc_change_counter();
+
+    if (m_text.length() < m_max_length)
+    {
+        if (m_selection.get_caret() == m_text.length())
+        {
+            m_text.append(&c, 1);
+            m_selection.set_caret(textpos_t(m_text.length()));
+        }
+        else
+        {
+            cstring tmp;
+            const int32_t insert_pos = m_selection.get_caret();
+            tmp.set(m_text.c_str(), insert_pos);
+            tmp.append(&c, 1);
+            m_selection.set_caret(textpos_t(tmp.length()));
+            tmp.append(m_text.c_str() + insert_pos, m_text.length() - insert_pos);
+            m_text = std::move(tmp);
+        }
+    }
+
+    end_undo_group();
 }
 
 void editor_context::insert_text(const char* s, size_t available)
@@ -749,6 +777,11 @@ void editor_context::inc_change_counter()
 
 void editor_context::begin_undo_group()
 {
+    begin_undo_group(false);
+}
+
+void editor_context::begin_undo_group(bool merge)
+{
     if (!m_undo_head)
         return;
 
@@ -772,10 +805,13 @@ void editor_context::begin_undo_group()
             assert(!m_undo_current);
         }
 
-        undo_entry* p = new undo_entry;
-        p->m_sel_before = m_selection;
-        p->link_at_tail(m_undo_head, m_undo_tail);
-        assert(p == m_undo_tail);
+        if (!merge || m_undo_tail == m_undo_head)
+        {
+            undo_entry* p = new undo_entry;
+            p->m_sel_before = m_selection;
+            p->link_at_tail(m_undo_head, m_undo_tail);
+            assert(p == m_undo_tail);
+        }
     }
     ++m_grouping;
 }

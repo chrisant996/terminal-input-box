@@ -212,7 +212,7 @@ void dispatcher::reset()
     m_outcome = dispatch_outcome::miss;
 }
 
-dispatch_outcome dispatcher::step(char c)
+dispatch_outcome dispatcher::step(uint8_t c)
 {
     maybe_recalc_can_self_insert();
 
@@ -221,10 +221,8 @@ dispatch_outcome dispatcher::step(char c)
     const bool self_insert = (outcome == dispatch_outcome::self_insert);
     assert(implies(self_insert, m_can_self_insert > 0 && is_self_insertable(uint8_t(c))));
     assert(implies(self_insert, get_sequence().length() == 1));
-    assert(implies(self_insert, get_sequence().c_str()[0] == c));
+    assert(implies(self_insert, uint8_t(get_sequence().c_str()[0]) == c));
 
-    // TODO: this doesn't group the bytes of a Unicode codepoint (much less
-    // grapheme) into a single undo group, so "undo" can produce invalid UTF8.
     switch (outcome)
     {
     case dispatch_outcome::self_insert:
@@ -238,7 +236,7 @@ dispatch_outcome dispatcher::step(char c)
                 if (target && target->get_type() == binding_type::macro)
                     term_push_macro_text(target->get_text(), target->get_length());
                 else
-                    ctx->dispatch(get_sequence(), c, target);
+                    ctx->dispatch(get_sequence(), uint8_t(c), target);
             }
             else
             {
@@ -251,12 +249,12 @@ dispatch_outcome dispatcher::step(char c)
     return outcome;
 }
 
-dispatch_outcome dispatcher::step_internal(char c)
+dispatch_outcome dispatcher::step_internal(uint8_t c)
 {
     if (m_outcome != dispatch_outcome::more)
         reset();
 
-    m_sequence.append(&c, 1);
+    m_sequence.append(reinterpret_cast<const char*>(&c), 1);
 
     // Search the key tables in priority order (later tables overlay earlier
     // tables) looking for an exact match or a prefix match.

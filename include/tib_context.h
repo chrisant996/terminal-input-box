@@ -144,6 +144,7 @@ private:
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
+    void                begin_undo_group(bool merge);
     void                inc_change_counter();
 
     static void         ensure_commands_sorted();
