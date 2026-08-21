@@ -24,72 +24,94 @@ TEST_CASE("Key bindings")
         std::shared_ptr<dispatcher_tester> tester = std::make_shared<dispatcher_tester>();
         tester->set_bindings(bindings);
 
-        tib::dispatcher dispatcher;
+        tib::binding_resolver resolver;
 
         SECTION("Base table")
         {
             assert(base->can_self_insert() <= 0);
-            dispatcher.add_target(tester);
+            resolver.add_target(tester);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
-            REQUIRE(dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_binding_target()->is_func_name("command-one"));
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('A');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("command-one"));
+            }
 
-            REQUIRE(dispatcher.step('x') == tib::dispatch_outcome::miss);
-            REQUIRE(!dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
+            {
+                auto resolved = resolver.step('x');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
+                REQUIRE(!resolved.binding_target);
+                REQUIRE(resolved.sequence == tib::cstring("x"));
+            }
 
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('Z') == tib::dispatch_outcome::miss);
-            REQUIRE(!dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('Z');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
+                REQUIRE(!resolved.binding_target);
+                REQUIRE(resolved.sequence == tib::cstring("Z"));
+            }
         }
 
         SECTION("Self insert")
         {
             assert(base->can_self_insert() <= 0);
             base->set_can_self_insert(true);
-            dispatcher.add_target(tester);
+            resolver.add_target(tester);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
-            REQUIRE(dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_binding_target()->is_func_name("command-one"));
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('A');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("command-one"));
+            }
 
-            REQUIRE(dispatcher.step('x') == tib::dispatch_outcome::self_insert);
-            REQUIRE(!dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_sequence() == tib::cstring("x"));
+            {
+                auto resolved = resolver.step('x');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+                REQUIRE(!resolved.binding_target);
+                REQUIRE(resolved.sequence == tib::cstring("x"));
+            }
 
-            const uint32_t dispatch_count = tester->get_dispatch_count();
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('Z') == tib::dispatch_outcome::self_insert);
-            REQUIRE(!dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_sequence() == tib::cstring("Z"));
-            REQUIRE(tester->get_dispatch_count() == dispatch_count + 1);
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('Z');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+                REQUIRE(!resolved.binding_target);
+                REQUIRE(resolved.sequence == tib::cstring("Z"));
+            }
         }
 
         SECTION("Overlay table")
         {
             assert(base->can_self_insert() <= 0);
             bindings->emplace_back(overlay);
-            dispatcher.add_target(tester);
+            resolver.add_target(tester);
 
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('A') == tib::dispatch_outcome::match);
-            REQUIRE(dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_binding_target()->is_func_name("command-override"));
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('A');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("command-override"));
+            }
 
-            REQUIRE(dispatcher.step('\x1b') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('[') == tib::dispatch_outcome::more);
-            REQUIRE(dispatcher.step('B') == tib::dispatch_outcome::match);
-            REQUIRE(dispatcher.get_binding_target());
-            REQUIRE(dispatcher.get_binding_target()->is_func_name("command-two"));
+            {
+                REQUIRE(resolver.step('\x1b').more());
+                REQUIRE(resolver.step('[').more());
+                auto resolved = resolver.step('B');
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("command-two"));
+            }
         }
     }
 }
@@ -106,14 +128,19 @@ TEST_CASE("UTF8 multi-byte input")
         input->initialize();
         input->set_bindings(tib::make_default_key_table());
 
-        tib::dispatcher dispatcher;
-        dispatcher.add_target(input);
+        tib::binding_resolver resolver;
+        resolver.add_target(input);
 
         const char utf8[] = "\xf0\x9f\x98\x80";
         for (const char c : utf8)
         {
             if (c)
-                REQUIRE(dispatcher.step(c) == tib::dispatch_outcome::self_insert);
+            {
+                auto resolved = resolver.step(c);
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+                resolved.dispatch();
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+            }
         }
         REQUIRE(input->get_text() == tib::cstring(utf8));
     }
@@ -252,12 +279,12 @@ PERF_CASE("PERF, resolve 26000 bindings")
         std::shared_ptr<dispatcher_tester> tester = std::make_shared<dispatcher_tester>();
         tester->set_bindings(bindings);
 
-        tib::dispatcher dispatcher;
-        dispatcher.add_target(tester);
+        tib::binding_resolver resolver;
+        resolver.add_target(tester);
 
         constexpr uint32_t c_passes = 100;
 
-        uint32_t resolved = 0;
+        uint32_t num_resolved = 0;
         for (size_t pass = 0; pass < c_passes; ++pass)
         {
             for (const char* sequence : c_sequences)
@@ -265,15 +292,16 @@ PERF_CASE("PERF, resolve 26000 bindings")
                 tib::dispatch_outcome outcome = tib::dispatch_outcome::miss;
                 for (const char* p = sequence; *p; ++p)
                 {
-                    outcome = dispatcher.step(*p);
-                    REQUIRE(!p[1] || outcome == tib::dispatch_outcome::more);
+                    auto resolved = resolver.step(*p);
+                    outcome = resolved.outcome;
+                    REQUIRE(!p[1] || resolved.more());
                 }
                 REQUIRE(outcome == tib::dispatch_outcome::match);
-                ++resolved;
+                ++num_resolved;
             }
         }
 
-        REQUIRE(resolved == c_passes * std::size(c_sequences));
+        REQUIRE(num_resolved == c_passes * std::size(c_sequences));
 
         static_assert(c_passes * std::size(c_sequences) == 26000);
     }
@@ -288,16 +316,16 @@ PERF_CASE("PERF, resolve default commands 10000 times")
 
         constexpr uint32_t c_passes = 10000;
 
-        uint32_t resolved = 0;
+        uint32_t num_resolved = 0;
         for (size_t pass = 0; pass < c_passes; ++pass)
         {
             for (const auto& command : commands)
             {
                 REQUIRE(tib::editor_context::lookup_command(command.name) == command.func);
-                ++resolved;
+                ++num_resolved;
             }
         }
 
-        REQUIRE(resolved == c_passes * commands.size());
+        REQUIRE(num_resolved == c_passes * commands.size());
     }
 }

@@ -402,8 +402,8 @@ no_border:
     };
 #pragma endregion // Show input sequence.
 
-    tib::dispatcher dispatcher;                             // Required.
-    dispatcher.add_target(tib);                             // Required.
+    tib::binding_resolver resolver;                         // Required.
+    resolver.add_target(tib);                               // Required.
 
     while (!tib->done())                                    // Required.
     {
@@ -415,9 +415,10 @@ no_border:
 
                 /*Custom*/  update_sequence_before_step(c);
 
-        const auto outcome = dispatcher.step(c);            // Required.
+        auto resolved = resolver.step(c);                   // Required.
+        resolved.dispatch();                                // Required.
 
-                /*Custom*/  update_sequence_after_step(outcome);
+                /*Custom*/  update_sequence_after_step(resolved.outcome);
     }
 
 #pragma region Show input sequence.

@@ -190,53 +190,33 @@ void dispatcher_target::set_bindings(std::shared_ptr<const key_table_list> bindi
     m_bindings = bindings;
 }
 
-void dispatcher::clear_targets()
+resolved_binding::operator bool()
 {
-    m_registrants.clear();
-    m_recalc_can_self_insert = true;
+    return outcome == dispatch_outcome::match || outcome == dispatch_outcome::self_insert;
 }
 
-void dispatcher::add_target(std::weak_ptr<dispatcher_target> target)
+bool resolved_binding::dispatch()
 {
-    m_registrants.emplace_back(target);
-    m_recalc_can_self_insert = true;
-
-    reset();
-}
-
-void dispatcher::reset()
-{
-    m_sequence.clear();
-    m_binding_target = nullptr;
-    m_dispatcher_target.reset();
-    m_outcome = dispatch_outcome::miss;
-}
-
-dispatch_outcome dispatcher::step(uint8_t c)
-{
-    maybe_recalc_can_self_insert();
-
-    dispatch_outcome outcome = step_internal(c);
-
     const bool self_insert = (outcome == dispatch_outcome::self_insert);
-    assert(implies(self_insert, m_can_self_insert > 0 && is_self_insertable(uint8_t(c))));
-    assert(implies(self_insert, get_sequence().length() == 1));
-    assert(implies(self_insert, uint8_t(get_sequence().c_str()[0]) == c));
+    assert(implies(self_insert, is_self_insertable(key)));
+    assert(implies(self_insert, sequence.length() == 1));
+    assert(implies(self_insert, uint8_t(sequence.c_str()[0]) == key));
 
     switch (outcome)
     {
     case dispatch_outcome::self_insert:
     case dispatch_outcome::match:
         {
-            auto ctx = m_dispatcher_target.lock();
+            auto ctx = dispatcher_target.lock();
             if (ctx)
             {
-                const auto target = get_binding_target();
+                const auto target = binding_target;
                 assert(self_insert == !target);
                 if (target && target->get_type() == binding_type::macro)
                     term_push_macro_text(target->get_text(), target->get_length());
                 else
-                    ctx->dispatch(get_sequence(), uint8_t(c), target);
+                    ctx->dispatch(sequence, key, target); // REVIEW: do anything with the return value?
+                return true;
             }
             else
             {
@@ -249,14 +229,27 @@ dispatch_outcome dispatcher::step(uint8_t c)
         break;
     }
 
-    return outcome;
+    return false;
 }
 
-dispatch_outcome dispatcher::step_internal(uint8_t c)
+void binding_resolver::clear_targets()
 {
-    if (m_outcome != dispatch_outcome::more)
-        reset();
+    m_registrants.clear();
+}
 
+void binding_resolver::add_target(std::weak_ptr<dispatcher_target> target)
+{
+    m_registrants.emplace_back(target);
+    reset();
+}
+
+void binding_resolver::reset()
+{
+    m_sequence.clear();
+}
+
+resolved_binding binding_resolver::step(uint8_t c)
+{
     m_sequence.append(reinterpret_cast<const char*>(&c), 1);
 
     // Search the key tables in priority order (later tables overlay earlier
@@ -302,10 +295,14 @@ dispatch_outcome dispatcher::step_internal(uint8_t c)
             {
                 if (found->sequence.length() == m_sequence.length())
                 {
-                    m_binding_target = &found->target;
-                    m_dispatcher_target = weak;
-                    m_outcome = dispatch_outcome::match;
-                    return m_outcome;
+                    resolved_binding resolved;
+                    resolved.sequence = m_sequence;
+                    resolved.key = c;
+                    resolved.binding_target = &found->target;
+                    resolved.dispatcher_target = weak;
+                    resolved.outcome = dispatch_outcome::match;
+                    reset();
+                    return resolved;
                 }
                 is_prefix = true;
             }
@@ -318,57 +315,38 @@ dispatch_outcome dispatcher::step_internal(uint8_t c)
 
     if (is_prefix)
     {
-        m_outcome = dispatch_outcome::more;
-        return m_outcome;
+        resolved_binding resolved;
+        resolved.sequence = m_sequence;
+        resolved.key = c;
+        resolved.outcome = dispatch_outcome::more;
+        // Do not reset() yet; there is more...
+        return resolved;
     }
 
     if (m_sequence.length() > 1)
     {
         // Discard the sequence before c and try again.
         reset();
-        return step_internal(c);
+        return step(c);
     }
 
     if (m_sequence.length() == 1 && has_self_insert_target && is_self_insertable(m_sequence.c_str()[0]))
     {
-        m_binding_target = nullptr;
-        m_dispatcher_target = self_insert_target;
-        m_outcome = dispatch_outcome::self_insert;
-        return m_outcome;
+        resolved_binding resolved;
+        resolved.sequence = m_sequence;
+        resolved.key = c;
+        resolved.dispatcher_target = self_insert_target;
+        resolved.outcome = dispatch_outcome::self_insert;
+        reset();
+        return resolved;
     }
 
-    m_outcome = dispatch_outcome::miss;
-    return m_outcome;
-}
-
-void dispatcher::maybe_recalc_can_self_insert()
-{
-    if (!m_recalc_can_self_insert)
-        return;
-
-    m_recalc_can_self_insert = false;
-    m_can_self_insert = -1;
-
-    for (auto& weak : m_registrants)
-    {
-        std::shared_ptr<dispatcher_target> target = weak.lock();
-        if (!target)
-            continue;
-
-        const auto bindings_list = target->get_bindings();
-        if (!bindings_list)
-            continue;
-
-        for (auto table = bindings_list->rbegin(); table != bindings_list->rend(); ++table)
-        {
-            const int8_t can = (*table)->can_self_insert();
-            if (can >= 0)
-            {
-                m_can_self_insert = can;
-                return;
-            }
-        }
-    }
+    resolved_binding resolved;
+    resolved.sequence = m_sequence;
+    resolved.key = c;
+    resolved.outcome = dispatch_outcome::miss;
+    reset();
+    return resolved;
 }
 
 } // namespace tib

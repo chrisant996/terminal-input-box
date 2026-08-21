@@ -80,7 +80,7 @@ struct key_binding
 
 class key_table : public std::enable_shared_from_this<key_table>
 {
-    friend class dispatcher;
+    friend class binding_resolver;
 
 public:
                         ~key_table();
@@ -124,9 +124,6 @@ public:
     std::shared_ptr<const key_table_list> get_bindings() const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
 
-    // TODO: someone should get a crack at handling/redirecting key sequences
-    // that aren't covered by the current key_table_list.
-
     // The dispatch() callback is called by dispatcher::step() in two cases:
     //  1.  The input sequence matched a key binding, in which case binding
     //      points at the matched key binding.
@@ -139,39 +136,34 @@ private:
     std::shared_ptr<const key_table_list> m_bindings;
 };
 
-class dispatcher
+struct resolved_binding
+{
+                        operator bool();
+    bool                more() const { return outcome == dispatch_outcome::more; }
+    bool                dispatch();
+
+    cstring             sequence;
+    int32_t             key = 0;
+    const binding_target* binding_target = nullptr; // REVIEW: binding_target_copy?
+    std::weak_ptr<dispatcher_target> dispatcher_target;
+    dispatch_outcome    outcome = dispatch_outcome::miss;
+};
+
+class binding_resolver
 {
 public:
-                        ~dispatcher() = default;
-                        dispatcher() = default;
+                        ~binding_resolver() = default;
+                        binding_resolver() = default;
 
     void                clear_targets();
     void                add_target(std::weak_ptr<dispatcher_target> target);
 
     void                reset();
-    dispatch_outcome    step(uint8_t c);
-
-    // TODO: Instead make this a binding_resolver that yields a
-    // resolved_binding, and have a resolved_binding::dispatch method that
-    // forwards to dispatcher_target::dispatch.
-    const cstring&      get_sequence() const { return m_sequence; }
-    const binding_target* get_binding_target() const { return m_binding_target; }
-    std::weak_ptr<dispatcher_target> get_dispatcher_target() const { return m_dispatcher_target; }
-    dispatch_outcome    get_outcome() const { return m_outcome; }
-
-private:
-    dispatch_outcome    step_internal(uint8_t c);
-    void                maybe_recalc_can_self_insert();
+    resolved_binding    step(uint8_t c);
 
 private:
     std::vector<std::weak_ptr<dispatcher_target>> m_registrants;
-    bool                m_recalc_can_self_insert = true;
-    int8_t              m_can_self_insert = -1;
-
     cstring             m_sequence;
-    const binding_target* m_binding_target = nullptr;
-    std::weak_ptr<dispatcher_target> m_dispatcher_target;
-    dispatch_outcome    m_outcome = dispatch_outcome::miss;
 };
 
 std::shared_ptr<tib::key_table_list> make_default_key_table();
