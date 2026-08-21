@@ -60,12 +60,10 @@ public:
     const selection_state& get_selection_state() const { return m_selection; }
 
     const cstring&      get_text() const { return m_text; }
-    textpos_t           get_left() const { return m_left; }
     uint32_t            get_change_counter() const { return m_change_counter; }
 
 protected:
     cstring             m_text;
-    textpos_t           m_left = 0;
     selection_state     m_selection;
     uint32_t            m_change_counter = 0;
 };

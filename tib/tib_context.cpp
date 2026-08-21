@@ -45,20 +45,6 @@ void undo_entry::unlink(undo_entry*& head, undo_entry*& tail)
     m_next = nullptr;
 }
 
-static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
-{
-    while (pos > 0 && backup)
-    {
-        uint16_t width;
-        const textpos_t prev = backward_one_grapheme(s, len, pos, &width);
-        if (backup < width)
-            break;
-        pos = prev;
-        backup -= width;
-    }
-    return pos;
-}
-
 static bool is_space(char c)
 {
     // FUTURE:  Various other appropriate Unicode blank space codepoints?
@@ -209,7 +195,7 @@ void editor_context::initialize(const char* text, size_t len)
     m_selection.set_caret(0);
     insert_text(text, len);
     m_selection.clear_dirty();
-    m_left = 0;
+    m_display.clear_scroll_offsets();
     init_undo();
 
     assert(!m_selection.is_dirty());
@@ -342,8 +328,6 @@ int32_t editor_context::go(void* cookie)
 
 void editor_context::display()
 {
-    ensure_left();
-
     m_display.display();
 }
 
@@ -362,37 +346,6 @@ void editor_context::move_to_caret_position()
     m_display.move_to_caret_position();
 }
 
-void editor_context::ensure_left()
-{
-    const coord max_size = m_display.get_effective_max_size(true/*omit_scroll_markers*/);
-    if (max_size.y != 1)
-    {
-        m_left = 0;
-        return;
-    }
-
-    m_left = min(m_left, m_selection.get_caret());
-
-    // Auto-scroll horizontally forward.
-    parse_graphemes(m_text.c_str() + m_left, m_selection.get_caret() - m_left, 0, m_tmp_graphemes);
-    uint32_t width = 0;
-    for (const auto& g : m_tmp_graphemes)
-        width += g.width;
-    for (auto g = m_tmp_graphemes.cbegin(); width >= uint32_t(max_size.x); ++g)
-    {
-        width -= g->width;
-        m_left += g->length;
-    }
-
-    // Auto-scroll horizontally backward.
-    assert(m_selection.get_caret() >= m_left);
-    {
-        textpos_t backup_left = back_up_by_amount(m_selection.get_caret(), m_text.c_str(), m_selection.get_caret(), 4);
-        if (m_left > backup_left)
-            m_left = backup_left;
-    }
-}
-
 void editor_context::begin_of_input(bool select)
 {
     if (!select)
@@ -402,7 +355,7 @@ void editor_context::begin_of_input(bool select)
     else
         m_selection.set_selection(m_selection.get_anchor(), 0);
 
-    m_left = 0;
+    m_display.clear_scroll_offsets();
 
     if (!select)
         m_selection.reset_word_anchor();

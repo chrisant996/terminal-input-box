@@ -9,6 +9,7 @@
 #include "tib_buffer.h"
 #include "tib_colors.h"
 #include "tib_output.h"
+#include "wcwidth.h"
 #include <memory>
 #include <vector>
 #include <map>
@@ -147,6 +148,9 @@ public:
     coord               get_relative_cursor() const { return m_relative_cursor; }
     coord               get_extent() const;
 
+    textpos_t           get_left() const { return m_left; }
+    void                clear_scroll_offsets();
+
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }
     bool                display();
@@ -159,6 +163,7 @@ private:
     void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
     const char*         get_face_def(char face) const;
     bool                display_internal(display_lines& lines);
+    void                ensure_left();
     bool                build(display_lines& out);
     void                append_border(coord extent);
 
@@ -178,12 +183,15 @@ private:
     coord               m_term_size;
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
-    uint32_t            m_top = 0;
+    uint32_t            m_top = 0;                  // Vertical scroll top.
+    textpos_t           m_left = 0;                 // Horizontal scroll left.
     bool                m_border_dirty = false;
     coord               m_relative_cursor = { -1, -1 };
 
     cstring             m_accumulator;
     bool                m_coalesce_output = false;
+
+    std::vector<grapheme_info> m_tmp_graphemes;
 };
 
 } // namespace tib

@@ -33,6 +33,20 @@ int8_t border_definition::get_width(const char* s, int8_t width) const
     return (!s || !*s) ? 0 : (width < 0) ? __wcswidth(s, -1) : width;
 }
 
+static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
+{
+    while (pos > 0 && backup)
+    {
+        uint16_t width;
+        const textpos_t prev = backward_one_grapheme(s, len, pos, &width);
+        if (backup < width)
+            break;
+        pos = prev;
+        backup -= width;
+    }
+    return pos;
+}
+
 #ifdef WIDE_HORZ_SCROLL_MARKERS
 const uint16_t c_horz_scroll_indicator_chars = 2;
 #else
@@ -274,13 +288,6 @@ nope:
         return { 0, 0 };
     }
 
-    const coord term_size = get_terminal_size();
-    if (m_term_size != term_size)
-    {
-        invalidate();
-        m_term_size = term_size;
-    }
-
     const border_definition* b = m_style ? m_style->border : nullptr;
     const uint16_t b_left_width = b->get_left_width();
     const uint16_t b_right_width = b->get_right_width();
@@ -289,12 +296,12 @@ nope:
 
     coord max_size;
     max_size.x = m_layout->max_width;
-    max_size.y = clamp<int16_t>(m_layout->max_height, 0, term_size.y - b_height);
-    if (m_origin.x + max_size.x + extra_border_width >= term_size.x)
+    max_size.y = clamp<int16_t>(m_layout->max_height, 0, m_term_size.y - b_height);
+    if (m_origin.x + max_size.x + extra_border_width >= m_term_size.x)
     {
-        if (term_size.x <= m_origin.x + extra_border_width)
+        if (m_term_size.x <= m_origin.x + extra_border_width)
             goto nope;
-        max_size.x = term_size.x - (m_origin.x + extra_border_width - 1);
+        max_size.x = m_term_size.x - (m_origin.x + extra_border_width - 1);
         if (max_size.x < 8)
             goto nope;
     }
@@ -314,6 +321,45 @@ coord display_manager::get_extent() const
     return m_displayed.m_extent;
 }
 
+void display_manager::clear_scroll_offsets()
+{
+    m_top = 0;
+    m_left = 0;
+}
+
+void display_manager::ensure_left()
+{
+    const coord max_size = get_effective_max_size(true/*omit_scroll_markers*/);
+    if (max_size.y != 1)
+    {
+        m_left = 0;
+        return;
+    }
+
+    const cstring& text = m_buffer->get_text();
+    const selection_state& selection = m_buffer->get_selection_state();
+    m_left = min(m_left, selection.get_caret());
+
+    // Auto-scroll horizontally forward.
+    parse_graphemes(text.c_str() + m_left, selection.get_caret() - m_left, 0, m_tmp_graphemes);
+    uint32_t width = 0;
+    for (const auto& g : m_tmp_graphemes)
+        width += g.width;
+    for (auto g = m_tmp_graphemes.cbegin(); width >= uint32_t(max_size.x); ++g)
+    {
+        width -= g->width;
+        m_left += g->length;
+    }
+
+    // Auto-scroll horizontally backward.
+    assert(selection.get_caret() >= m_left);
+    {
+        textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
+        if (m_left > backup_left)
+            m_left = backup_left;
+    }
+}
+
 bool display_manager::display()
 {
     assert(m_layout);
@@ -328,6 +374,17 @@ bool display_manager::display()
         m_origin.y = -1;
         m_relative_cursor = { -1, 0 };   // Cursor is relative to origin.
     }
+
+    // Update awareness of the terminal size.
+    const coord term_size = get_terminal_size();
+    if (m_term_size != term_size)
+    {
+        invalidate();
+        invalidate_border();
+        m_term_size = term_size;
+    }
+
+    ensure_left();
 
     // Format content into display structures.
     // TODO: allow host to add their own display_line rows; that will simplify
@@ -356,7 +413,7 @@ bool display_manager::display_internal(display_lines& lines)
     m_coalesce_output = g_coalesce_output;
 
     coord cursor = m_relative_cursor;
-    const coord term_size = get_terminal_size();
+    const coord term_size = m_term_size;
     const coord max_size = get_effective_max_size();
 
     if (cursor.x < 0 && cursor.y < 0)
@@ -644,7 +701,7 @@ bool display_manager::build(display_lines& out)
     const textpos_t sel_begin = sel_state.get_sel_begin();
     const textpos_t sel_end = sel_state.get_sel_end();
     const textpos_t pos = sel_state.get_caret();
-    const textpos_t left = m_buffer->get_left();
+    const textpos_t left = m_left;
 
     if (change_counter == m_displayed.m_change_counter &&
         pos == m_displayed.m_pos &&
@@ -675,6 +732,7 @@ bool display_manager::build(display_lines& out)
     tmp.m_selection_length = sel_end - sel_begin;
 
     // Set up border.
+    coord term_size = m_term_size;
     if (m_style && m_style->border)
     {
         const border_definition& b = *m_style->border;

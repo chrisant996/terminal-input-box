@@ -139,8 +139,6 @@ protected:
     void                set_allow_optimized_self_insert(bool allow) { m_allow_optimized_self_insert = allow; }
 
 private:
-    void                ensure_left();
-    void                print_visible();
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
@@ -170,7 +168,6 @@ private:
 
     // Display.
     display_manager     m_display;
-    std::vector<grapheme_info> m_tmp_graphemes;
 
     // Undo/redo queue.
     undo_entry*         m_undo_head = nullptr;
