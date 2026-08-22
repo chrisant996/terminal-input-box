@@ -297,6 +297,12 @@ int32_t term_in_peek()
     if (!term_in_avail())
         return -1;
 
+    // term_in_avail() can queue multiple UTF8 bytes for one UTF16 input
+    // character.  Return the head in place; reading and pushing it back would
+    // rotate the queued bytes.
+    if (!s_pushed.empty())
+        return s_pushed.peek();
+
     const int32_t c = term_in();
     if (c < 0)
         return c;
