@@ -12,6 +12,10 @@
 
 namespace tib {
 
+// Some internal magic values, leveraging invalid UTF8 bytes.
+constexpr char c_input_terminal_resize_magic_char = char(c_input_terminal_resize);
+static_assert(uint8_t(c_input_terminal_resize_magic_char) == 0xfe);
+
 hook_term_in_func_t hook_term_in = nullptr;
 hook_term_in_avail_func_t hook_term_in_avail = nullptr;
 
@@ -30,24 +34,36 @@ static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 #endif
 
+static int32_t translate_special(char c)
+{
+    // Handle special internal values.
+    switch (c)
+    {
+    case c_input_terminal_resize_magic_char:
+        return c_input_terminal_resize;
+    }
+
+    return uint8_t(c);
+}
+
 class pushed_input
 {
 public:
                         pushed_input() = default;
-    bool                empty() const { return !count; }
-    bool                has_capacity(size_t num) const { return std::size(data) - count >= num; }
+    bool                empty() const { return !m_count; }
+    bool                has_capacity(size_t num) const { return std::size(m_data) - m_count >= num; }
     bool                push(uint8_t c);
 #ifdef _WIN32
-    bool                push_utf16(WCHAR c);
+    int32_t             push_utf16(WCHAR c);
 #endif
     bool                push_invalid();
-    uint8_t             peek() const;
-    uint8_t             read();
+    int32_t             peek() const;
+    int32_t             read();
 
 private:
-    uint8_t             data[16];
-    uint16_t            head = 0;
-    uint16_t            count = 0;
+    uint8_t             m_data[16];
+    uint16_t            m_head = 0;
+    uint16_t            m_count = 0;
 
 #ifdef _WIN32
     WCHAR               m_high_surrogate = 0;
@@ -59,29 +75,27 @@ static pushed_input s_pushed;
 
 bool pushed_input::push(uint8_t c)
 {
-    assert(count < std::size(data));
-    if (count >= std::size(data))
+    assert(m_count < std::size(m_data));
+    if (m_count >= std::size(m_data))
         return false;
 
-    data[(head + count) % std::size(data)] = c;
-    ++count;
+    if (m_high_surrogate && !push_invalid())
+        return false;
+
+    m_data[(m_head + m_count) % std::size(m_data)] = c;
+    ++m_count;
     return true;
 }
 
 #ifdef _WIN32
-bool pushed_input::push_utf16(WCHAR c)
+int32_t pushed_input::push_utf16(WCHAR c)
 {
     // If c is a high surrogate then cache it for later.
     if (IS_HIGH_SURROGATE(c))
     {
-        const WCHAR ls = m_high_surrogate;
-        m_high_surrogate = c;
-        if (ls)
-        {
-            // If a high surrogate
-            return push_invalid();
-        }
-        return true;
+        const int32_t pushed = m_high_surrogate ? push_invalid() : -1;
+        m_high_surrogate = c; // After push_invalid() because that clears it.
+        return pushed;
     }
 
     // If a high surrogate is cached then complete it.
@@ -119,23 +133,61 @@ push_utf8:
 
 bool pushed_input::push_invalid()
 {
+    m_high_surrogate = 0;
     return push(0xef) && push(0xbf) && push(0xbd);
 }
 
-uint8_t pushed_input::peek() const
+int32_t pushed_input::peek() const
 {
     assert(!empty());
-    return data[head];
+    const char c = m_data[m_head];
+    return translate_special(c);
 }
 
-uint8_t pushed_input::read()
+int32_t pushed_input::read()
 {
     assert(!empty());
-    const char c = data[head];
-    ++head;
-    --count;
-    head %= std::size(data);
-    return c;
+    const char c = m_data[m_head];
+    ++m_head;
+    --m_count;
+    m_head %= std::size(m_data);
+    return translate_special(c);
+}
+
+static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
+{
+    // Only respond to key down events.
+    if (!record.bKeyDown)
+    {
+        // WARNING:  Some times conhost can send through ALT codes, with the
+        // resulting Unicode code point in the Alt key-up event.  I don't know
+        // whether that also happens when ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        // is present, but I think that would be a console bug, and not
+        // something for this to attempt to mitigate.
+        return true;
+    }
+
+#ifdef DEBUG
+    // Unaccompanied Alt/Ctrl/Shift/Windows key presses should not be received
+    // because ENABLE_VIRTUAL_TERMINAL_PROCESSING should already filter them.
+    switch (record.wVirtualKeyCode)
+    {
+    case VK_MENU:
+    case VK_CONTROL:
+    case VK_SHIFT:
+    case VK_LWIN:
+    case VK_RWIN:
+        assert(false);
+#if 0
+        return true;
+#else
+        // Behave the same in both DEBUG and RELEASE builds.
+        break;
+#endif
+    }
+#endif
+
+    return false;
 }
 
 int32_t term_in()
@@ -176,35 +228,45 @@ int32_t term_in()
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     if (GetConsoleMode(h, &mode))
     {
-        WCHAR tmp[2];
-        size_t available = 0;
+again:
         DWORD num_read;
-        // TODO: conditionally use ENABLE_MOUSE_INPUT like Clink does, and
-        // then translate MOUSE_INPUT_RECORD's into VT sequences.
-        // TODO: use ReadConsoleInputW to support window size events and mouse
-        // input.
-        if (!ReadConsoleW(h, tmp, 1, &num_read, nullptr) || 1 != num_read)
+#define USE_READCONSOLEINPUT
+#ifdef USE_READCONSOLEINPUT
+        // TODO: conditionally use ENABLE_MOUSE_INPUT like Clink does?
+        INPUT_RECORD record;
+        if (!ReadConsoleInputW(h, &record, 1, &num_read) || 1 != num_read)
             return -1;
-        ++available;
-        if (IS_HIGH_SURROGATE(tmp[0]))
+        switch (record.EventType)
         {
-            assert(1 == available);
-            if (!ReadConsoleW(h, tmp + available, 1, &num_read, nullptr) || 1 != num_read)
-            {
-                // Return U+FFFD, the replacement character codepoint.
-                if (!s_pushed.push_invalid())
-                    return -1;
-                return s_pushed.read();
-            }
-            ++available;
+        case KEY_EVENT:
+            if (is_invalid_keyevent(record.Event.KeyEvent))
+                goto again;
+            break;
+        case MOUSE_EVENT:
+            // TODO: mouse handling for legacy console?
+            assert(false);
+            goto again;
+        case WINDOW_BUFFER_SIZE_EVENT:
+            return c_input_terminal_resize;
+        default:
+            assert(false);
+        case MENU_EVENT:
+        case FOCUS_EVENT:
+            goto again;
         }
-        if (!to_utf8(tmp, available, s_tmp_utf8) || s_tmp_utf8.empty())
+        assert(record.EventType == KEY_EVENT);
+#define tmp_input record.Event.KeyEvent.uChar.UnicodeChar
+#else
+        WCHAR tmp;
+        if (!ReadConsoleW(h, &tmp, 1, &num_read, nullptr) || 1 != num_read)
             return -1;
-        const char c = s_tmp_utf8.c_str()[0];
-        for (size_t i = 1; i < s_tmp_utf8.length(); ++i)
-            s_pushed.push(s_tmp_utf8.c_str()[i]);
-        s_tmp_utf8.clear();
-        return uint8_t(c);
+#define tmp_input tmp
+#endif
+        const int32_t pushed = s_pushed.push_utf16(tmp_input);
+        if (pushed < 0)
+            goto again;
+        return s_pushed.read();
+#undef tmp_input
     }
     else
     {
@@ -246,6 +308,14 @@ int32_t term_in_peek()
 
 bool term_in_avail(const DWORD _timeout)
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    DWORD mode;
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    assert(GetConsoleMode(h, &mode));
+#endif
+#endif
+
     if (!s_pushed.empty())
         return true;
     if (s_macro_playback)
@@ -279,7 +349,7 @@ bool term_in_avail(const DWORD _timeout)
 
         DWORD count;
         INPUT_RECORD record;
-        if (!ReadConsoleInputW(hin, &record, 1, &count))
+        if (!ReadConsoleInputW(hin, &record, 1, &count) || 1 != count)
         {
             // Handle's probably invalid if ReadConsoleInput() failed.
             sleep_on_error = true;
@@ -291,7 +361,13 @@ bool term_in_avail(const DWORD _timeout)
         case KEY_EVENT:
             // Because of ENABLE_VIRTUAL_TERMINAL_PROCESSING there is very
             // little to do here.
-            ret = s_pushed.push_utf16(record.Event.KeyEvent.uChar.UnicodeChar);
+            if (!is_invalid_keyevent(record.Event.KeyEvent))
+            {
+                const int32_t pushed = s_pushed.push_utf16(record.Event.KeyEvent.uChar.UnicodeChar);
+                if (pushed < 0)
+                    continue;
+                ret = (pushed > 0);
+            }
             break;
 
         case MOUSE_EVENT:
@@ -302,19 +378,24 @@ bool term_in_avail(const DWORD _timeout)
             break;
 
         case WINDOW_BUFFER_SIZE_EVENT:
+#ifdef USE_READCONSOLEINPUT
+            if (s_pushed.push(int8_t(c_input_terminal_resize)))
+                ret = true;
+#else
             // REVIEW: can't really do anything with this unless term_in()
             // also uses ReadConsoleInputW().
+#endif
             break;
         }
 
         if (!timeout)
             break;
     }
-    return ret;
 #else
     // TODO-LINUX: Alternative Linux implementation.
+    ret = false;
 #endif
-    return false;
+    return ret;
 }
 
 bool term_push_macro_text(const char* text, size_t len)
