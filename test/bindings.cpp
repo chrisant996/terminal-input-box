@@ -120,9 +120,7 @@ TEST_CASE("UTF8 multi-byte input")
 {
     SECTION("Dispatcher preserves UTF8 bytes")
     {
-        const bool optimize_self_insert = tib::g_optimize_self_insert;
-        MAKE_CLEANUP([optimize_self_insert]() { tib::g_optimize_self_insert = optimize_self_insert; });
-        tib::g_optimize_self_insert = false;
+        REQUIRE(!tib::g_optimize_self_insert);
 
         auto input = std::make_shared<tib::editor_context>();
         input->initialize();

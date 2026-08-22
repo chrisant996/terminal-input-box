@@ -39,6 +39,9 @@ int main(int argc, char** argv)
     // Override ding, otherwise tests could be vocal.
     tib::hook_term_ding = [](){};
 
+    // Override self-insert optimization, for stable test outcomes.
+    tib::g_optimize_self_insert = false;
+
     bool list = false;
     bool times = false;
 
