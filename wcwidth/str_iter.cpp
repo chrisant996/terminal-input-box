@@ -68,11 +68,8 @@ invalid_preceding_data:
             if (!(length == expected))
                 goto invalid_preceding_data;
 invalid_current_data:
-            expected = 1;
             ++m_ptr;
-            length = 1;
-            ax = 0xfffd;
-            invalid = 1;
+            return 0xfffd;
         }
         else if (c >= 0b11110000)
         {
