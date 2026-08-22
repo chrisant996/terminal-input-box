@@ -40,7 +40,7 @@ char32_t str_iter_impl<char>::next()
         {
             // -1 == preceding data was invalid.
             // 1 == deferred reporting of data that has now become preceding.
-            return 0xfffd;
+            return 0xFFFD;
         }
 
         const uint8_t c = uint8_t(*m_ptr);
@@ -53,7 +53,7 @@ char32_t str_iter_impl<char>::next()
                 // appear before the end of a character.
 invalid_preceding_data:
                 invalid = -1;
-                ax = 0xfffd;
+                ax = 0xFFFD;
             }
             else
             {
@@ -69,7 +69,7 @@ invalid_preceding_data:
                 goto invalid_preceding_data;
 invalid_current_data:
             ++m_ptr;
-            return 0xfffd;
+            return 0xFFFD;
         }
         else if (c >= 0b11110000)
         {
@@ -154,7 +154,12 @@ invalid_current_data:
             ++m_ptr;
             ax = (ax << 6) | (c & 0b01111111);
             if (length == expected)
+            {
+                // Detect surrogates.
+                if (expected == 3 && uint32_t(ax - 0xD800) <= 0x07FF)
+                    return 0xFFFD;
                 return ax;
+            }
         }
 
         assert(expected);
@@ -166,7 +171,7 @@ invalid_current_data:
     assert(ax);
     assert(expected);
     assert(length < expected);
-    return 0xfffd;
+    return 0xFFFD;
 }
 
 template <>
@@ -188,27 +193,27 @@ char32_t str_iter_impl<WCHAR>::next()
         if ((c & 0xfc00) == 0xd800)
         {
             if (!more() || (*m_ptr & 0xfc00) != 0xdc00)         // Invalid.
-                return 0xfffd;
+                return 0xFFFD;
             ax = c << 10;
             continue;
         }
         else if ((c & 0xfc00) == 0xdc00)
         {
             if (ax < (1 << 10))                                 // Invalid.
-                return 0xfffd;
+                return 0xFFFD;
             c = ax + c - 0x35fdc00;
             ax = 0;
         }
         else
         {
             if (ax)                                             // Invalid.
-               return 0xfffd;
+               return 0xFFFD;
         }
         return c;
     }
 
     if (ax)                                                     // Invalid.
-        return 0xfffd;
+        return 0xFFFD;
     return 0;
 }
 #endif
