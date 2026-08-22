@@ -9,8 +9,7 @@
 
 namespace tib {
 
-extern const char c_hide_cursor[];
-extern const char c_show_cursor[];
+bool ensure_term_caps();
 
 bool is_console();
 

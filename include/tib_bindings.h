@@ -86,7 +86,7 @@ public:
                         ~key_table();
                         key_table(int8_t can=-1) noexcept : m_can_self_insert(can) {}
 
-    // FUTURE: Need some way to troubleshoot messed up bindings.
+    // TODO-FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
     bool                remove(const cstring& sequence);
     void                clear();
@@ -99,7 +99,7 @@ public:
     auto                cbegin() const noexcept { return m_bindings.cbegin(); }
     auto                cend() const noexcept { return m_bindings.cend(); }
 
-    // FUTURE: provide an enumeration that filters to only key bindings that
+    // TODO-FUTURE: provide an enumeration that filters to only key bindings that
     // match a prefix sequence?
 
 private:

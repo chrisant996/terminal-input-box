@@ -21,12 +21,14 @@ static const char c_long_usage[] =
 "  --no-border       No border (default; same as '--border none').\n"
 "  --border STYLE    Use border style:  light, padding, bar-padding, none.\n"
 "  --rainbow         Apply rainbow colors to words.\n"
+"  --show-keys       Show input key sequences.\n"
 ;
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
 
 #pragma region Example customizations.
 static bool s_use_rainbow_faces = false;
+static bool s_show_keys = false;
 
 static const char* const c_bar_text_color = "0;38;2;180;140;33";
 static const char* const c_border_text_color = "0;38;2;33;33;33";
@@ -65,10 +67,10 @@ protected:
     {
         wcwidth_iter iter(in);
         iter.next();
-        out.printf("\033[%sm", c_bar_text_color);
+        out.printf("\x1b[%sm", c_bar_text_color);
         out.append(iter.character_pointer(), iter.character_length());
         iter.next();
-        out.printf("\033[%sm", c_border_text_color);
+        out.printf("\x1b[%sm", c_border_text_color);
         out.append(iter.character_pointer(), iter.character_length());
         dst = out.c_str();
         dst_width = 2;
@@ -107,6 +109,7 @@ protected:
 
 custom_input_box::custom_input_box()
 {
+    tib::ensure_term_caps();
     set_callbacks(this);
 }
 
@@ -165,32 +168,35 @@ static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& s
     const tib::coord extent = ctx.get_extent();
     const int32_t vert = extent.y - cursor.y;
 
-    tib::term_out(tib::c_hide_cursor);
+    if (tib::g_show_hide_cursor)
+        tib::term_out(tib::c_hide_cursor);
     ctx.move_to_end_of_display();
 
     tib::cstring tmp;
     if (show_sequence.length())
     {
         tmp.append_color("36");
-        tmp.append("\033[4Gkeys:  ");
+        tmp.append(tib::term_col(4));
+        tmp.append("keys:  ");
         tmp.append(show_sequence.c_str(), show_sequence.length());
         tmp.append_color("");
     }
-    tmp.append("\033[K");
+    tmp.append(tib::term_erase_to_eol());
 
     if (old_extent && old_extent->y > extent.y)
     {
         const uint32_t delta = old_extent->y - extent.y;
         for (uint32_t n = delta; n--;)
             tmp.append("\n");
-        tmp.append("\033[K");
-        tmp.printf("\033[%uA", delta);
+        tmp.append(tib::term_erase_to_eol());
+        tmp.append(tib::term_move_up(delta));
     }
 
     tib::term_out(tmp.c_str(), tmp.length());
 
     ctx.move_to_caret_position();
-    tib::term_out(tib::c_show_cursor);
+    if (tib::g_show_hide_cursor)
+        tib::term_out(tib::c_show_cursor);
 }
 #pragma endregion // Example customizations.
 
@@ -201,7 +207,10 @@ int main(int argc, const char** argv)
     {
         tib::cstring v;
         if (tib::getenv("TIB_NO_COALESCE_OUTPUT", v) && !v.empty())
+        {
             tib::g_coalesce_output = !(atoi(v.c_str()) > 0);
+            tib::g_show_hide_cursor = !(atoi(v.c_str()) > 0);
+        }
     }
 
     tib_host::set_crt_locale_utf8();
@@ -301,6 +310,10 @@ no_border:
         {
             s_use_rainbow_faces = true;
         }
+        else if (_stricmp(argv[i], "--show-keys") == 0)
+        {
+            s_show_keys = true;
+        }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
         {
@@ -331,7 +344,7 @@ no_border:
         {
             tib::cstring tmp;
             tmp.set(colors->get_color(tib::color_element::base));
-            tmp.printf("\033[38;2;%u;%u;%um", c_colors[i].r, c_colors[i].g, c_colors[i].b);
+            tmp.printf("\x1b[38;2;%u;%u;%um", c_colors[i].r, c_colors[i].g, c_colors[i].b);
             static_assert(std::is_nothrow_move_constructible_v<tib::cstring>);
             static_assert(std::is_nothrow_move_assignable_v<tib::cstring>);
             rainbow_colors.emplace_back(std::move(tmp));
@@ -359,11 +372,15 @@ no_border:
 
     auto show_sequence_after_display = [&]()
     {
+        if (!s_show_keys)
+            return;
         display_key_sequence(*tib, show_sequence, &old_extent);
     };
 
     auto update_sequence_before_step = [&](int32_t c)
     {
+        if (!s_show_keys)
+            return;
         const double now = tib::clock();
         if (now - last_clock >= 0.1)
             sequence.clear();
@@ -387,6 +404,8 @@ no_border:
 
     auto update_sequence_after_step = [&](tib::dispatch_outcome outcome)
     {
+        if (!s_show_keys)
+            return;
         switch (outcome)
         {
         case tib::dispatch_outcome::self_insert:
@@ -422,8 +441,11 @@ no_border:
     }
 
 #pragma region Show input sequence.
-    show_sequence.clear();
-    display_key_sequence(*tib, show_sequence);
+    if (s_show_keys)
+    {
+        show_sequence.clear();
+        display_key_sequence(*tib, show_sequence);
+    }
 #pragma endregion // Show input sequence.
 
     tib->erase_display();

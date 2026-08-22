@@ -8,6 +8,7 @@
 #include "tib_base.h"
 #include "tib_buffer.h"
 #include "tib_output.h"
+#include "tib_termcap.h"
 #include "tib_display.h"
 #include "tib_context.h"
 #include "wcwidth.h"
@@ -16,6 +17,7 @@
 namespace tib {
 
 bool g_coalesce_output = true;
+bool g_show_hide_cursor = true;
 
 const border_definition c_light_border =
 {
@@ -418,9 +420,6 @@ bool display_manager::display_internal(display_lines& lines)
 
     if (cursor.x < 0 && cursor.y < 0)
         cursor = { -1, 0 };             // -1 forces move_to_column.
-// BUGBUG: cursor location initialization isn't thorough or fully correct yet.
-
-    // TODO: Encapsulate terminal codes behind some termcap layer.
 
     auto erase_row = [&](int16_t width)
     {
@@ -428,7 +427,7 @@ bool display_manager::display_internal(display_lines& lines)
             return;
         if (m_origin.x + max_size.x - 1 == term_size.x)
         {
-            output("\x1b[K");
+            output(term_erase_to_eol());
         }
         else
         {
@@ -437,7 +436,8 @@ bool display_manager::display_internal(display_lines& lines)
         }
     };
 
-    output(c_hide_cursor);
+    if (g_show_hide_cursor)
+        output(c_hide_cursor);
 
     // Draw border if needed.
     if (!lines.m_erase && m_style && m_style->border && m_border_dirty)
@@ -554,7 +554,7 @@ bool display_manager::display_internal(display_lines& lines)
             if (!iter.more())
                 break;
 
-            // BUGGBUG: does not handle invalid UTF8 correctly.
+            // BUGBUG: this does not handle invalid UTF8 correctly.
             const char32_t c = iter.next();
             const uint32_t clen = iter.character_length();
             assert(clen <= len);
@@ -597,7 +597,8 @@ bool display_manager::display_internal(display_lines& lines)
     move_to_column(cursor, lines.m_cursor.x, lines.m_inner_offset.x);
 
     output_color("");
-    output(c_show_cursor);
+    if (g_show_hide_cursor)
+        output(c_show_cursor);
 
     if (m_coalesce_output)
     {
@@ -646,11 +647,14 @@ void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offs
 {
     y += inner_offset;
     if (m_origin.y > 0)
-        outputf("\x1b[%uH", m_origin.y + y);
+    {
+        output(term_row_col(m_origin.y + y, 1));
+        cursor.x = 0; // REVIEW: is this accurate, or is this supposed to be relative to origin?
+    }
     else if (y < cursor.y)
-        outputf("\x1b[%uA", cursor.y - y);
+        output(term_move_up(cursor.y - y));
     else if (y > cursor.y)
-        outputf("\x1b[%uB", y - cursor.y);
+        output(term_move_down(y - cursor.y));
     else
         return;
     cursor.y = y;
@@ -661,7 +665,7 @@ void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_o
     x += inner_offset;
     const uint16_t term_x = m_origin.x + x;
     if (term_x > 0)
-        outputf("\x1b[%uG", term_x);
+        output(term_col(term_x));
     else
         output("\r");
     cursor.x = x;
@@ -775,14 +779,14 @@ bool display_manager::build(display_lines& out)
     }
 
     // Parse text into rows (lines).
-    // FUTURE: Performance could be improved by first parsing to find row
+    // TODO-PERF: Performance could be improved by first parsing to find row
     // start offsets, then calculating which rows will actually be visible,
     // and finally constructing only display_line instances for the visible
     // rows.
     bool short_circuited = false;
     while (iter.more())
     {
-        // BUGBUG: does not handle invalid UTF8 correctly.
+        // BUGBUG: this does not handle invalid UTF8 correctly.
         const char32_t c = iter.next();
         const char* p = iter.character_pointer();
         uint32_t clen = iter.character_length();
@@ -978,7 +982,7 @@ void display_manager::append_border(coord extent)
 
     if (b.has_top())
     {
-        outputf("\x1b[%uG", m_origin.x);
+        output(term_col(m_origin.x));
         if (b.top_left)
             output(b.top_left);
         const int16_t top_width = b.get_top_width();
@@ -993,19 +997,20 @@ void display_manager::append_border(coord extent)
         output("\r\n");
         if (b_left_width)
         {
-            outputf("\x1b[%uG", m_origin.x);
+            output(term_col(m_origin.x));
             output(b.left);
         }
         if (b_right_width)
         {
-            outputf("\x1b[%uG", m_origin.x + extent.x - b_right_width);
+            output(term_col(m_origin.x + extent.x - b_right_width));
             output(b.right);
         }
     }
 
     if (b.has_bottom())
     {
-        outputf("\r\n\x1b[%uG", m_origin.x);
+        output("\r\n");
+        output(term_col(m_origin.x));
         if (b.bottom_left)
             output(b.bottom_left);
         const int16_t bottom_width = b.get_bottom_width();
@@ -1016,7 +1021,7 @@ void display_manager::append_border(coord extent)
     }
 
     if (extent.y > 1)
-        outputf("\x1b[%uA", extent.y - 1);
+        output(term_move_up(extent.y - 1));
 }
 
 void display_manager::output(const char* s, size_t len)

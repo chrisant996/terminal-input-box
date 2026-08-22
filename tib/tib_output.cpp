@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_output.h"
+#include "tib_termcap.h"
 #include "wcwidth.h"
 #include <assert.h>
 
@@ -14,9 +15,6 @@ namespace tib {
 
 void (*hook_term_out)(const char* s, size_t len) = nullptr;
 void (*hook_term_ding)() = nullptr;
-
-const char c_hide_cursor[] = "\x1b[?25l";
-const char c_show_cursor[] = "\x1b[?25h";
 
 static bool is_console_raw()
 {
@@ -60,23 +58,6 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
     if (truncated_width)
         *truncated_width = width_fits;
     return length_fits;
-}
-
-coord get_terminal_size()
-{
-    coord size = { 80, 25 };
-#ifdef _WIN32
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (GetConsoleScreenBufferInfo(hout, &csbi))
-    {
-        size.x = csbi.dwSize.X;
-        size.y = csbi.dwSize.Y;
-    }
-#else
-    // TODO-LINUX: Alternative Linux implementation.
-#endif
-    return size;
 }
 
 void term_out(const char* s, size_t len)

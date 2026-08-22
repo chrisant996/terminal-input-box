@@ -19,6 +19,7 @@ class wcwidth_iter;
 namespace tib {
 
 extern bool g_coalesce_output;
+extern bool g_show_hide_cursor;
 
 struct border_definition
 {

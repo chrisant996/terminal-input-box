@@ -13,6 +13,7 @@
 #include "tib_context.h"
 #include "tib_input.h"
 #include "tib_output.h"
+#include "tib_termcap.h"
 
 namespace tib {
 

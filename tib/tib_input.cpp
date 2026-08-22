@@ -162,9 +162,6 @@ int32_t term_in()
         return uint8_t(c);
     }
 
-    // TODO: How to represent EOF?
-    // TODO: How to represent failure?
-
     if (hook_term_in)
     {
         const int32_t c = hook_term_in();
@@ -294,7 +291,9 @@ bool term_in_avail(const DWORD _timeout)
             break;
 
         case MOUSE_EVENT:
-            // Should not happen with ENABLE_VIRTUAL_TERMINAL_PROCESSING.
+            // REVIEW: should not happen with ENABLE_MOUSE_INPUT missing, and
+            // using ReadConsoleW claims to not return them (mouse support is
+            // not implemented by ENABLE_VIRTUAL_TERMINAL_PROCESSING?).
             assert(false);
             break;
 

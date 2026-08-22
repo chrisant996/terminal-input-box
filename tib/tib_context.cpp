@@ -47,7 +47,7 @@ void undo_entry::unlink(undo_entry*& head, undo_entry*& tail)
 
 static bool is_space(char c)
 {
-    // FUTURE:  Various other appropriate Unicode blank space codepoints?
+    // REVIEW: Various other appropriate Unicode blank space codepoints?
     return (c == ' ' || c == '\t' || c == '\r' || c == '\n');
 }
 
