@@ -51,8 +51,8 @@ no_cleanup:
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
-    // TODO-FUTURE: ENABLE_WINDOW_INPUT for terminal resize?
-    // TODO-FUTURE: ENABLE_MOUSE_INPUT for mouse input?
+    // TODO: ENABLE_WINDOW_INPUT for terminal resize.
+    // TODO: ENABLE_MOUSE_INPUT for mouse input, but use the conditional approach from Clink.
     SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT));
     SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);

@@ -99,9 +99,6 @@ public:
     auto                cbegin() const noexcept { return m_bindings.cbegin(); }
     auto                cend() const noexcept { return m_bindings.cend(); }
 
-    // TODO-FUTURE: provide an enumeration that filters to only key bindings that
-    // match a prefix sequence?
-
 private:
     std::vector<key_binding> m_bindings;
     int8_t              m_can_self_insert = -1;

@@ -179,6 +179,10 @@ int32_t term_in()
         WCHAR tmp[2];
         size_t available = 0;
         DWORD num_read;
+        // TODO: conditionally use ENABLE_MOUSE_INPUT like Clink does, and
+        // then translate MOUSE_INPUT_RECORD's into VT sequences.
+        // TODO: use ReadConsoleInputW to support window size events and mouse
+        // input.
         if (!ReadConsoleW(h, tmp, 1, &num_read, nullptr) || 1 != num_read)
             return -1;
         ++available;
@@ -187,7 +191,7 @@ int32_t term_in()
             assert(1 == available);
             if (!ReadConsoleW(h, tmp + available, 1, &num_read, nullptr) || 1 != num_read)
             {
-                // Return U+FFFD, the invalid character codepoint.
+                // Return U+FFFD, the replacement character codepoint.
                 if (!s_pushed.push_invalid())
                     return -1;
                 return s_pushed.read();

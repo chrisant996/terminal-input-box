@@ -781,7 +781,7 @@ bool display_manager::build(display_lines& out)
     }
 
     // Parse text into rows (lines).
-    // TODO-PERF: Performance could be improved by first parsing to find row
+    // TODO: Performance could be improved by first parsing to find row
     // start offsets, then calculating which rows will actually be visible,
     // and finally constructing only display_line instances for the visible
     // rows.
