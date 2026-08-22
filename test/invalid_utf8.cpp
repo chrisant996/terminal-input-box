@@ -63,11 +63,26 @@ TEST_CASE("Invalid UTF8")
         const char two_byte[] = { char(0xc2), 'a', '\0' };
         check_utf8(two_byte, { { 0xfffd, 1 }, { 'a', 2 } });
 
-        const char three_byte[] = { char(0xe1), char(0x80), 'a', '\0' };
-        check_utf8(three_byte, { { 0xfffd, 2 }, { 'a', 3 } });
+        const char three_byte_after_lead[] = { char(0xe1), 'a', '\0' };
+        check_utf8(three_byte_after_lead, { { 0xfffd, 1 }, { 'a', 2 } });
 
-        const char four_byte[] = { char(0xf1), char(0x80), char(0x80), 'a', '\0' };
-        check_utf8(four_byte, { { 0xfffd, 3 }, { 'a', 4 } });
+        const char three_byte_after_one_continuation[] =
+            { char(0xe1), char(0x80), 'a', '\0' };
+        check_utf8(three_byte_after_one_continuation,
+            { { 0xfffd, 2 }, { 'a', 3 } });
+
+        const char four_byte_after_lead[] = { char(0xf1), 'a', '\0' };
+        check_utf8(four_byte_after_lead, { { 0xfffd, 1 }, { 'a', 2 } });
+
+        const char four_byte_after_one_continuation[] =
+            { char(0xf1), char(0x80), 'a', '\0' };
+        check_utf8(four_byte_after_one_continuation,
+            { { 0xfffd, 2 }, { 'a', 3 } });
+
+        const char four_byte_after_two_continuations[] =
+            { char(0xf1), char(0x80), char(0x80), 'a', '\0' };
+        check_utf8(four_byte_after_two_continuations,
+            { { 0xfffd, 3 }, { 'a', 4 } });
 
         const char followed_by_valid_utf8[] =
             { char(0xe1), char(0xc2), char(0xa2), 'a', '\0' };
@@ -89,17 +104,30 @@ TEST_CASE("Invalid UTF8")
 
     SECTION("Overlong encodings")
     {
-        const char two_byte[] = { char(0xc0), char(0xaf), 'a', '\0' };
-        check_utf8(two_byte, { { 0xfffd, 1 }, { 0xfffd, 2 }, { 'a', 3 } });
+        const char two_byte_low[] = { char(0xc0), char(0x81), 'a', '\0' };
+        check_utf8(two_byte_low, { { 0xfffd, 1 }, { 0xfffd, 2 }, { 'a', 3 } });
 
-        const char three_byte[] =
-            { char(0xe0), char(0x9f), char(0xbf), 'a', '\0' };
-        check_utf8(three_byte,
+        const char two_byte_high[] = { char(0xc0), char(0xbf), 'a', '\0' };
+        check_utf8(two_byte_high, { { 0xfffd, 1 }, { 0xfffd, 2 }, { 'a', 3 } });
+
+        const char three_byte_low[] =
+            { char(0xe0), char(0x80), char(0x80), 'a', '\0' };
+        check_utf8(three_byte_low,
             { { 0xfffd, 1 }, { 0xfffd, 2 }, { 0xfffd, 3 }, { 'a', 4 } });
 
-        const char four_byte[] =
+        const char three_byte_high[] =
+            { char(0xe0), char(0x9f), char(0xbf), 'a', '\0' };
+        check_utf8(three_byte_high,
+            { { 0xfffd, 1 }, { 0xfffd, 2 }, { 0xfffd, 3 }, { 'a', 4 } });
+
+        const char four_byte_low[] =
+            { char(0xf0), char(0x80), char(0x80), char(0x80), 'a', '\0' };
+        check_utf8(four_byte_low,
+            { { 0xfffd, 1 }, { 0xfffd, 2 }, { 0xfffd, 3 }, { 0xfffd, 4 }, { 'a', 5 } });
+
+        const char four_byte_high[] =
             { char(0xf0), char(0x8f), char(0xbf), char(0xbf), 'a', '\0' };
-        check_utf8(four_byte,
+        check_utf8(four_byte_high,
             { { 0xfffd, 1 }, { 0xfffd, 2 }, { 0xfffd, 3 }, { 0xfffd, 4 }, { 'a', 5 } });
 
         // This project intentionally accepts the modified UTF-8 encoding of NUL.
@@ -131,5 +159,34 @@ TEST_CASE("Invalid UTF8")
             { char(0xf4), char(0x90), char(0x80), char(0x80), 'a', '\0' };
         check_utf8(input,
             { { 0xfffd, 1 }, { 0xfffd, 2 }, { 0xfffd, 3 }, { 0xfffd, 4 }, { 'a', 5 } });
+    }
+
+    SECTION("Valid boundary encodings")
+    {
+        const char first_two_byte[] = { char(0xc2), char(0x80), 'a', '\0' };
+        check_utf8(first_two_byte, { { 0x0080, 2 }, { 'a', 3 } });
+
+        const char last_two_byte[] = { char(0xdf), char(0xbf), 'a', '\0' };
+        check_utf8(last_two_byte, { { 0x07ff, 2 }, { 'a', 3 } });
+
+        const char first_three_byte[] =
+            { char(0xe0), char(0xa0), char(0x80), 'a', '\0' };
+        check_utf8(first_three_byte, { { 0x0800, 3 }, { 'a', 4 } });
+
+        const char before_surrogates[] =
+            { char(0xed), char(0x9f), char(0xbf), 'a', '\0' };
+        check_utf8(before_surrogates, { { 0xd7ff, 3 }, { 'a', 4 } });
+
+        const char after_surrogates[] =
+            { char(0xee), char(0x80), char(0x80), 'a', '\0' };
+        check_utf8(after_surrogates, { { 0xe000, 3 }, { 'a', 4 } });
+
+        const char first_four_byte[] =
+            { char(0xf0), char(0x90), char(0x80), char(0x80), 'a', '\0' };
+        check_utf8(first_four_byte, { { 0x10000, 4 }, { 'a', 5 } });
+
+        const char last_four_byte[] =
+            { char(0xf4), char(0x8f), char(0xbf), char(0xbf), 'a', '\0' };
+        check_utf8(last_four_byte, { { 0x10ffff, 4 }, { 'a', 5 } });
     }
 }
