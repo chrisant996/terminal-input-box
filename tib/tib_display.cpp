@@ -64,6 +64,7 @@ display_line::display_line(uint16_t x1)
 
 void display_line::append(const char* p, uint32_t len, uint32_t width, char face)
 {
+    assert(len != c_auto_length);
     m_text.append(p, len);
     const size_t faces_len = m_faces.length();
     memset(m_faces.reserve(faces_len + len) + faces_len, face, len);
@@ -554,13 +555,14 @@ bool display_manager::display_internal(display_lines& lines)
             if (!iter.more())
                 break;
 
-            // BUGBUG: this does not handle invalid UTF8 correctly.
             const char32_t c = iter.next();
             const uint32_t clen = iter.character_length();
             assert(clen <= len);
 
-            // PERF: optimize to add a run instead of just a grapheme?
-            output(iter.character_pointer(), clen);
+            if (c == 0xfffd)
+                output(c_replacement_character);
+            else
+                output(iter.character_pointer(), clen);
 
             t += clen;
             f += clen;
@@ -786,7 +788,6 @@ bool display_manager::build(display_lines& out)
     bool short_circuited = false;
     while (iter.more())
     {
-        // BUGBUG: this does not handle invalid UTF8 correctly.
         const char32_t c = iter.next();
         const char* p = iter.character_pointer();
         uint32_t clen = iter.character_length();
@@ -834,7 +835,10 @@ again:
             line = std::make_unique<display_line>(m_origin.x);
         }
 
-        line->append(p, clen, cwidth, *face);
+        if (c == 0xfffd)
+            line->append(c_replacement_character, c_replacement_character_length, cwidth, *face);
+        else
+            line->append(p, clen, cwidth, *face);
 
         if (expanding)
         {

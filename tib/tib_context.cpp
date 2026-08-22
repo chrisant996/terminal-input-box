@@ -59,7 +59,6 @@ textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool
     assert(pos <= len);
 
     // Try to make sure pos is at a valid codepoint boundary.
-    // BUGBUG: this does not handle invalid UTF8 well.
     if (pos > 0 && pos < len)
     {
         const textpos_t prev = backward_one_grapheme(s, _len, pos);

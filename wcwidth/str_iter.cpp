@@ -5,6 +5,11 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "str_iter.h"
+#include <vector> // For std::size.
+
+const char c_replacement_character[] = "\xef\xbf\xbd";
+const uint32_t c_replacement_character_length = 3;
+static_assert(c_replacement_character_length == std::size(c_replacement_character) - 1);
 
 template <>
 char32_t str_iter_impl<char>::next()
@@ -12,32 +17,159 @@ char32_t str_iter_impl<char>::next()
     if (!more())
         return 0;
 
-    // TODO: Detect invalid UTF8 correctly; List-Redux fixed that, IIRC.
+    // https://en.wikipedia.org/wiki/UTF-8
+    //
+    //  - Bytes that never appear in UTF-8: 0xC0, 0xC1, 0xF5–0xFF,
+    //  - A "continuation byte" (0x80–0xBF) at the start of a character,
+    //  - A non-continuation byte (or the string ending) before the end of a
+    //    character.
+    //  - An overlong encoding (0xE0 followed by less than 0xA0, or 0xF0
+    //    followed by less than 0x90).
+    //  - A 4-byte sequence that decodes to a value greater than U+10FFFF
+    //    (0xF4 followed by 0x90 or greater).
+    //
+    // HOWEVER, overlong 0xC0 0x80 should be allowed for U+0000.
 
-    int32_t ax = 0;
-    int32_t encode_length = 0;
+    uint32_t ax = 0;
+    uint8_t expected = 0;
+    uint8_t length = 0;
+    int8_t invalid = 0;
     do
     {
-        const int32_t c = uint8_t(*m_ptr++);
-        ax = (ax << 6) | (c & 0x7f);
-        if (encode_length)
+        if (invalid)
         {
-            --encode_length;
+            // -1 == preceding data was invalid.
+            // 1 == deferred reporting of data that has now become preceding.
+            return 0xfffd;
+        }
+
+        const uint8_t c = uint8_t(*m_ptr);
+
+        if (c <= 0x7F)
+        {
+            if (!(length == expected))
+            {
+                // A non-continuation byte (or the string ending) cannot
+                // appear before the end of a character.
+invalid_preceding_data:
+                invalid = -1;
+                ax = 0xfffd;
+            }
+            else
+            {
+                // An ASCII byte.
+                ++m_ptr;
+                return c;
+            }
+        }
+        else if (c >= 0xF5 || c == 0xC1)
+        {
+            // Bytes that never appear in UTF-8: 0xC1, 0xF5–0xFF.
+            if (!(length == expected))
+                goto invalid_preceding_data;
+invalid_current_data:
+            expected = 1;
+            ++m_ptr;
+            length = 1;
+            ax = 0xfffd;
+            invalid = 1;
+        }
+        else if (c >= 0b11110000)
+        {
+            // A non-continuation byte (or the string ending) cannot appear
+            // before the end of a character.
+            if (!(length == expected))
+                goto invalid_preceding_data;
+
+            // Start a four byte sequence.
+            expected = 4;
+            ++m_ptr;
+            length = 1;
+            ax = c & 0b00000111;
+        }
+        else if (c >= 0b11100000)
+        {
+            // A non-continuation byte (or the string ending) cannot appear before
+            // the end of a character.
+            if (!(length == expected))
+                goto invalid_preceding_data;
+
+            // Start a three byte sequence.
+            expected = 3;
+            ++m_ptr;
+            length = 1;
+            ax = c & 0b00001111;
+        }
+        else if (c >= 0b11000000)
+        {
+            // A non-continuation byte (or the string ending) cannot appear before
+            // the end of a character.
+            if (!(length == expected))
+                goto invalid_preceding_data;
+
+            // Start a two byte sequence.
+            expected = 2;
+            ++m_ptr;
+            length = 1;
+            ax = c & 0b00011111;
         }
         else
         {
-            if ((c & 0xc0) < 0xc0)
+            // Continuation byte.
+            assert(c >= 0b10000000);
+
+            // A "continuation byte" (0x80–0xBF) cannot appear at the start of a
+            // character.
+            if (length == expected)
+                goto invalid_current_data;
+
+            // Detect a 4-byte sequence that decodes to a value greater than
+            // U+10FFFF (0xF4 followed by 0x90 or greater).
+            if (ax == 4 && c >= 0x90 && expected == 4 && length == 1)
+                goto invalid_preceding_data;
+
+            // Detect overlong encodings.
+            if (ax == 0)
+            {
+                switch (expected)
+                {
+                case 3:
+                    // 0xE0 followed by less than 0xA0.
+                    if (c < 0xA0 && length == 1)
+                        goto invalid_preceding_data;
+                    break;
+                case 4:
+                    // 0xF0 followed by less than 0x90.
+                    if (c < 0x90 && length == 1)
+                        goto invalid_preceding_data;
+                    break;
+                case 2:
+                    // 0xC0 followed by 0x80 is an overlong encoding for U+0000,
+                    // which is accepted so that U+0000 can be encoded without
+                    // using any NUL bytes.  But no other use of 0xC0 is allowed.
+                    if (length == 1 && c != 0x80)
+                        goto invalid_preceding_data;
+                    break;
+                }
+            }
+
+            ++length;
+            ++m_ptr;
+            ax = (ax << 6) | (c & 0b01111111);
+            if (length == expected)
                 return ax;
-
-            if (encode_length = !!(c & 0x20))
-                encode_length += !!(c & 0x10);
-
-            ax &= (0x1f >> encode_length);
         }
+
+        assert(expected);
+        assert(length < expected);
     }
     while (more());
 
-    return 0;
+    // An incomplete encoding is invalid.
+    assert(ax);
+    assert(expected);
+    assert(length < expected);
+    return 0xfffd;
 }
 
 template <>
