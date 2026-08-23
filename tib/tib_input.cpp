@@ -167,9 +167,8 @@ static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
         return true;
     }
 
-#ifdef DEBUG
-    // Unaccompanied Alt/Ctrl/Shift/Windows key presses should not be received
-    // because ENABLE_VIRTUAL_TERMINAL_PROCESSING should already filter them.
+    // Ignore unaccompanied Alt/Ctrl/Shift/Windows key presses.  These can
+    // happen even when ENABLE_VIRTUAL_TERMINAL_PROCESSING is present.
     switch (record.wVirtualKeyCode)
     {
     case VK_MENU:
@@ -177,15 +176,8 @@ static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
     case VK_SHIFT:
     case VK_LWIN:
     case VK_RWIN:
-        assert(false);
-#if 0
         return true;
-#else
-        // Behave the same in both DEBUG and RELEASE builds.
-        break;
-#endif
     }
-#endif
 
     return false;
 }
