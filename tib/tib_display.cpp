@@ -754,107 +754,6 @@ bool display_manager::build(display_lines& out)
     const bool multiline = (max_size.y > 1);
     assert(implies(multiline, !left));
 
-    // Lambda to build a display_line.
-    const char* const cursor_ptr = text.c_str() + pos;
-    char pending = 0;
-    bool expanding = false;
-    auto build_line = [&](display_line* line, wcwidth_iter& iter, const char*& face)
-    {
-        if (left && m_style->horiz_scroll_markers)
-        {
-            // Skip the grapheme that the scroller replaces.
-            iter.next();
-            face += iter.character_length();
-
-            // Append the scroller.
-            line->append("<", 1, 1, FACE_SCROLLER);
-            if (c_horz_scroll_indicator_chars > 0)
-            {
-                for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                    line->append("<", 1, 1, FACE_SCROLLER);
-            }
-        }
-
-        bool short_circuited = false;
-        while (iter.more())
-        {
-            const char32_t c = iter.next();
-            const char* p = iter.character_pointer();
-            uint32_t clen = iter.character_length();
-            uint32_t cwidth = iter.character_wcwidth_twoctrl();
-
-            if (iter.character_wcwidth_signed() < 0)
-            {
-                if (*p == '\n' && multiline)
-                {
-                    face += clen;
-                    break;
-                }
-                else
-                {
-                    assert(uint8_t(*p) < ' ' || uint8_t(*p) == 0x7F);
-                    pending = (uint8_t(*p) < ' ') ? *p + '@' : '?';
-                    expanding = true;
-                    p = "^";
-                    assert(clen == 1);
-                    cwidth = 1;
-                }
-            }
-
-again:
-            if (!multiline)
-            {
-                if (line->width() + cwidth > uint32_t(max_size_omit_scroll_markers.x) &&
-                    !(!expanding &&
-                      !iter.more() &&
-                      line->width() + cwidth <= uint32_t(max_size_omit_scroll_markers.x + c_horz_scroll_indicator_chars)))
-                {
-                    short_circuited = true;
-                    break;
-                }
-            }
-            else if (line->width() + cwidth > uint32_t(max_size.x))
-            {
-                break;
-            }
-
-            if (c == 0xfffd)
-                line->append(c_replacement_character, c_replacement_character_length, cwidth, *face);
-            else
-                line->append(p, clen, cwidth, *face);
-
-            if (expanding)
-            {
-                p = &pending;
-                assert(clen == 1);
-                assert(cwidth == 1);
-                expanding = false;
-                goto again;
-            }
-
-            face += clen;
-        }
-
-        if (!multiline) // Is inside the lambda because of short_circuited.
-        {
-            // Add horizontal scroll marker if needed.
-            assert(tmp.m_lines.size() == 0);
-            if (short_circuited || iter.more())
-            {
-                assert(!multiline);
-                assert(int32_t(line->width()) < max_size.x);
-                while (int32_t(line->width() + 1) < max_size.x)
-                    line->append(" ", 1, 1, FACE_DEFAULT);
-                line->append(">", 1, 1, FACE_SCROLLER);
-                if (c_horz_scroll_indicator_chars > 0)
-                {
-                    for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                        line->append(">", 1, 1, FACE_SCROLLER);
-                }
-            }
-        }
-    };
-
     // Calculate row boundaries without allocating display_line strings.
     // Special cases:  (1) a control character can wrap between its '^' and
     // its second displayed byte, and (2) if the final row is full then an
@@ -864,6 +763,7 @@ again:
     uint32_t row_width = 0;
     int32_t y_extent = max_size.y;
     wcwidth_iter scan(text.c_str() + left, text.length() - left);
+    const char* const cursor_ptr = text.c_str() + pos;
     while (scan.more())
     {
         scan.next();
@@ -951,7 +851,9 @@ again:
     tmp.m_top = clamp<int32_t>(m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
     tmp.m_top = max<int32_t>(tmp.m_top, 0);
 
-    // Lambda for building a line.
+    // Lambda for building a display line.
+    char pending = 0;
+    bool expanding = false;
     auto build_row = [&](size_t index)
     {
         const row_start& start = rows[index];
@@ -965,12 +867,104 @@ again:
             assert(iter.character_length() == 1);
             const char c = *iter.character_pointer();
             assert(uint8_t(c) < ' ' || uint8_t(c) == 0x7F);
-            const char pending = (uint8_t(c) < ' ') ? c + '@' : '?';
-            line->append(&pending, 1, 1, *face);
+            const char ctrl = (uint8_t(c) < ' ') ? c + '@' : '?';
+            line->append(&ctrl, 1, 1, *face);
             face += iter.character_length();
         }
 
-        build_line(line.get(), iter, face);
+        if (left && m_style->horiz_scroll_markers)
+        {
+            // Skip the grapheme that the scroller replaces.
+            iter.next();
+            face += iter.character_length();
+
+            // Append the scroller.
+            line->append("<", 1, 1, FACE_SCROLLER);
+            if (c_horz_scroll_indicator_chars > 0)
+            {
+                for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
+                    line->append("<", 1, 1, FACE_SCROLLER);
+            }
+        }
+
+        bool short_circuited = false;
+        while (iter.more())
+        {
+            const char32_t c = iter.next();
+            const char* p = iter.character_pointer();
+            uint32_t clen = iter.character_length();
+            uint32_t cwidth = iter.character_wcwidth_twoctrl();
+
+            if (iter.character_wcwidth_signed() < 0)
+            {
+                if (*p == '\n' && multiline)
+                {
+                    face += clen;
+                    break;
+                }
+                else
+                {
+                    assert(uint8_t(*p) < ' ' || uint8_t(*p) == 0x7F);
+                    pending = (uint8_t(*p) < ' ') ? *p + '@' : '?';
+                    expanding = true;
+                    p = "^";
+                    assert(clen == 1);
+                    cwidth = 1;
+                }
+            }
+
+again:
+            if (!multiline)
+            {
+                if (line->width() + cwidth > uint32_t(max_size_omit_scroll_markers.x) &&
+                    !(!expanding &&
+                    !iter.more() &&
+                    line->width() + cwidth <= uint32_t(max_size_omit_scroll_markers.x + c_horz_scroll_indicator_chars)))
+                {
+                    short_circuited = true;
+                    break;
+                }
+            }
+            else if (line->width() + cwidth > uint32_t(max_size.x))
+            {
+                break;
+            }
+
+            if (c == 0xfffd)
+                line->append(c_replacement_character, c_replacement_character_length, cwidth, *face);
+            else
+                line->append(p, clen, cwidth, *face);
+
+            if (expanding)
+            {
+                p = &pending;
+                assert(clen == 1);
+                assert(cwidth == 1);
+                expanding = false;
+                goto again;
+            }
+
+            face += clen;
+        }
+
+        if (!multiline) // Is inside the lambda because of short_circuited.
+        {
+            // Add horizontal scroll marker if needed.
+            assert(tmp.m_lines.size() == 0);
+            if (short_circuited || iter.more())
+            {
+                assert(!multiline);
+                assert(int32_t(line->width()) < max_size.x);
+                while (int32_t(line->width() + 1) < max_size.x)
+                    line->append(" ", 1, 1, FACE_DEFAULT);
+                line->append(">", 1, 1, FACE_SCROLLER);
+                if (c_horz_scroll_indicator_chars > 0)
+                {
+                    for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
+                        line->append(">", 1, 1, FACE_SCROLLER);
+                }
+            }
+        }
 
         return line;
     };
@@ -1006,6 +1000,7 @@ again:
     for (int32_t i = tmp.m_top; i < end; ++i)
         tmp.m_lines.emplace_back(build_row(i));
 
+    // Adjust the cursor to be relative to the origin.
     tmp.m_cursor.y -= tmp.m_top;
 
     // Apply scroll markers.
