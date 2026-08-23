@@ -289,6 +289,7 @@ resolved_binding binding_resolver::step(uint8_t c)
                 return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
             });
 
+// TODO: if exact match not found, then also match against pattern bindings, e.g. for mouse input.
             if (found != bindings.end() &&
                 found->sequence.length() >= m_sequence.length() &&
                 memcmp(found->sequence.c_str(), m_sequence.c_str(), m_sequence.length()) == 0)
