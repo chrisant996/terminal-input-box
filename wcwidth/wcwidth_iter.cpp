@@ -199,6 +199,10 @@ char32_t wcwidth_iter::next()
     // REVIEW:  This had tried to handle standalone combining mark codepoints,
     // but it broke properly constructed use of combining marks.  I'm not sure
     // how to differentiate standalone or malformed use of combining marks...
+// TODO: filling a single line input box with "✔️" graphemes results in two
+// problems -- (1) the cursor position is wrong and (2) the spaces for padding
+// look odd (but maybe only because the cursor position is wrong).
+// TODO: add some wcwidth unit tests.
 #if 0
     // In the Windows console subsystem, combining marks actually have a
     // column width of 1, not 0 as the original wcwidth implementation
