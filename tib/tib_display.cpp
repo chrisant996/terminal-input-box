@@ -115,26 +115,23 @@ void display_lines::clear()
     m_extent = { 0, 0 };
 }
 
-void display_lines::apply_scroll_markers(int16_t rows)
+void display_lines::apply_scroll_markers(int32_t y_extent, int32_t total_rows)
 {
     // NOTE:  Horizontal scroll markers work differently and are applied
-    // directly in build().
-    assert(rows > 0);
-    if (m_lines.size() < size_t(rows))
-    {
-        m_top = 0;
+    // separately.
+    assert(!m_lines.empty());
+    if (y_extent <= 1 || y_extent >= total_rows)
         return;
-    }
 
-    // Discard lines after the visible section.
-    if (m_lines.size() > size_t(m_top + rows))
+    const bool above = (m_top > 0);
+    const bool below = (m_top + y_extent < total_rows);
+
+    // Apply scroll marker to last row.
+    if (below)
     {
-        m_lines.erase(m_lines.begin() + m_top + rows, m_lines.end());
-
-        // Apply scroll marker to last row.
-        display_line& d = *m_lines[m_top + rows - 1];
-        assert(d.m_trail_scroller_width_displaced);
-        assert(d.m_trail_scroller_len_displayed);
+        display_line& d = *m_lines.back();
+        if (!d.m_trail_scroller_width_displaced && !d.m_trail_scroller_len_displayed)
+            d.calculate_multiline_scroll_marker();
 
         // NOTE: build() should always pad to max width, except on last
         // line, and max width should always be at least 8.
@@ -159,14 +156,9 @@ void display_lines::apply_scroll_markers(int16_t rows)
         }
     }
 
-    // Discard lines before the visible section.
-    if (m_lines.size() > rows)
+    // Apply scroll marker to first row.
+    if (above)
     {
-        m_top = int32_t(m_lines.size() - size_t(rows));
-        m_lines.erase(m_lines.begin(), m_lines.begin() + m_top);
-        assert(m_lines.size() == rows);
-
-        // Apply scroll marker to first row.
         display_line& d = *m_lines[0].get();
 
         // NOTE: build() should always pad to max width, except on last line.
@@ -216,8 +208,6 @@ void display_lines::apply_scroll_markers(int16_t rows)
                 d.append(" ", 1, 1, FACE_DEFAULT);
         }
     }
-
-    m_cursor.y = max(0, m_cursor.y - m_top);
 }
 
 display_manager::display_manager()
@@ -689,6 +679,12 @@ const char* display_manager::get_face_def(char face) const
     return def->second;
 }
 
+struct row_start
+{
+    textpos_t           offset;
+    bool                pending;
+};
+
 bool display_manager::build(display_lines& out)
 {
     assert(m_layout);
@@ -756,207 +752,275 @@ bool display_manager::build(display_lines& out)
     if (max_size.y < 1)
         return false;
     const bool multiline = (max_size.y > 1);
+    assert(implies(multiline, !left));
 
-    wcwidth_iter iter(text.c_str() + left, text.length() - left);
+    // Lambda to build a display_line.
     const char* const cursor_ptr = text.c_str() + pos;
-    const char* face = faces.c_str() + left;
     char pending = 0;
     bool expanding = false;
-    std::unique_ptr<display_line> line = std::make_unique<display_line>(m_origin.x);
-
-    assert(!(left && multiline));
-    if (left && m_style->horiz_scroll_markers)
+    auto build_line = [&](display_line* line, wcwidth_iter& iter, const char*& face)
     {
-        // Skip the grapheme that the scroller replaces.
-        iter.next();
-        face += iter.character_length();
-
-        // Append the scroller.
-        line->append("<", 1, 1, FACE_SCROLLER);
-        if (c_horz_scroll_indicator_chars > 0)
+        if (left && m_style->horiz_scroll_markers)
         {
-            for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                line->append("<", 1, 1, FACE_SCROLLER);
-        }
-    }
+            // Skip the grapheme that the scroller replaces.
+            iter.next();
+            face += iter.character_length();
 
-    // Parse text into rows (lines).
-    // TODO: Performance could be improved by first parsing to find row
-    // start offsets, then calculating which rows will actually be visible,
-    // and finally constructing only display_line instances for the visible
-    // rows.
-    bool short_circuited = false;
-    while (iter.more())
-    {
-        const char32_t c = iter.next();
-        const char* p = iter.character_pointer();
-        uint32_t clen = iter.character_length();
-        uint32_t cwidth = iter.character_wcwidth_twoctrl();
-
-        if (iter.character_pointer() <= cursor_ptr && cursor_ptr < iter.character_pointer() + clen)
-        {
-            tmp.m_cursor.x = line->width();
-            tmp.m_cursor.y = uint32_t(tmp.m_lines.size());
-        }
-
-        if (iter.character_wcwidth_signed() < 0)
-        {
-            if (*p == '\n' && multiline)
-            {
-                tmp.m_lines.emplace_back(std::move(line));
-                line = std::make_unique<display_line>(m_origin.x);
-                goto next;
-            }
-            else
-            {
-                pending = *p + '@';
-                expanding = true;
-                p = "^";
-                assert(clen == 1);
-                cwidth = 1;
-            }
-        }
-
-again:
-        if (!multiline)
-        {
-            if (line->width() + cwidth > uint32_t(max_size_omit_scroll_markers.x) &&
-                !(!expanding &&
-                  !iter.more() &&
-                  line->width() + cwidth <= uint32_t(max_size_omit_scroll_markers.x + c_horz_scroll_indicator_chars)))
-            {
-                short_circuited = true;
-                break;
-            }
-        }
-        else if (line->width() + cwidth > uint32_t(max_size.x))
-        {
-            tmp.m_lines.emplace_back(std::move(line));
-            line = std::make_unique<display_line>(m_origin.x);
-        }
-
-        if (c == 0xfffd)
-            line->append(c_replacement_character, c_replacement_character_length, cwidth, *face);
-        else
-            line->append(p, clen, cwidth, *face);
-
-        if (expanding)
-        {
-            p = &pending;
-            assert(clen == 1);
-            assert(cwidth == 1);
-            expanding = false;
-            goto again;
-        }
-
-next:
-        face += clen;
-    }
-
-    // Add last line.
-    if (tmp.m_cursor.x < 0)
-    {
-        tmp.m_cursor.x = line->width();
-        tmp.m_cursor.y = uint32_t(tmp.m_lines.size());
-    }
-    tmp.m_lines.emplace_back(std::move(line));
-    if (!multiline)
-    {
-        // Add horizontal scroll marker if needed.
-        assert(tmp.m_lines.size() == 1);
-        assert(tmp.m_cursor.x >= 0);
-        assert(tmp.m_cursor.x <= max_size.x);
-        if (short_circuited || iter.more())
-        {
-            auto& back = tmp.m_lines.back();
-            assert(int32_t(back->width()) < max_size.x);
-            while (int32_t(back->width() + 1) < max_size.x)
-                back->append(" ", 1, 1, FACE_DEFAULT);
-            back->append(">", 1, 1, FACE_SCROLLER);
+            // Append the scroller.
+            line->append("<", 1, 1, FACE_SCROLLER);
             if (c_horz_scroll_indicator_chars > 0)
             {
                 for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                    back->append(">", 1, 1, FACE_SCROLLER);
+                    line->append("<", 1, 1, FACE_SCROLLER);
             }
         }
-    }
-    else if (tmp.m_cursor.x >= max_size.x)
-    {
-        tmp.m_cursor.x = 0;
-        ++tmp.m_cursor.y;
-        while (tmp.m_cursor.y >= tmp.m_lines.size())
-        {
-            line = std::make_unique<display_line>(m_origin.x);
-            tmp.m_lines.emplace_back(std::move(line));
-        }
-    }
-    else if (tmp.m_lines.back()->width() == max_size.x)
-    {
-        // In multiline mode, if the last line takes up the full width, then
-        // there's a phantom blank line at the end.
-        tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
-    }
 
-    // Handle variable height mode.
+        bool short_circuited = false;
+        while (iter.more())
+        {
+            const char32_t c = iter.next();
+            const char* p = iter.character_pointer();
+            uint32_t clen = iter.character_length();
+            uint32_t cwidth = iter.character_wcwidth_twoctrl();
+
+            if (iter.character_wcwidth_signed() < 0)
+            {
+                if (*p == '\n' && multiline)
+                {
+                    face += clen;
+                    break;
+                }
+                else
+                {
+                    assert(uint8_t(*p) < ' ' || uint8_t(*p) == 0x7F);
+                    pending = (uint8_t(*p) < ' ') ? *p + '@' : '?';
+                    expanding = true;
+                    p = "^";
+                    assert(clen == 1);
+                    cwidth = 1;
+                }
+            }
+
+again:
+            if (!multiline)
+            {
+                if (line->width() + cwidth > uint32_t(max_size_omit_scroll_markers.x) &&
+                    !(!expanding &&
+                      !iter.more() &&
+                      line->width() + cwidth <= uint32_t(max_size_omit_scroll_markers.x + c_horz_scroll_indicator_chars)))
+                {
+                    short_circuited = true;
+                    break;
+                }
+            }
+            else if (line->width() + cwidth > uint32_t(max_size.x))
+            {
+                break;
+            }
+
+            if (c == 0xfffd)
+                line->append(c_replacement_character, c_replacement_character_length, cwidth, *face);
+            else
+                line->append(p, clen, cwidth, *face);
+
+            if (expanding)
+            {
+                p = &pending;
+                assert(clen == 1);
+                assert(cwidth == 1);
+                expanding = false;
+                goto again;
+            }
+
+            face += clen;
+        }
+
+        if (!multiline) // Is inside the lambda because of short_circuited.
+        {
+            // Add horizontal scroll marker if needed.
+            assert(tmp.m_lines.size() == 0);
+            if (short_circuited || iter.more())
+            {
+                assert(!multiline);
+                assert(int32_t(line->width()) < max_size.x);
+                while (int32_t(line->width() + 1) < max_size.x)
+                    line->append(" ", 1, 1, FACE_DEFAULT);
+                line->append(">", 1, 1, FACE_SCROLLER);
+                if (c_horz_scroll_indicator_chars > 0)
+                {
+                    for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
+                        line->append(">", 1, 1, FACE_SCROLLER);
+                }
+            }
+        }
+    };
+
+    // Calculate row boundaries without allocating display_line strings.
+    // Special cases:  (1) a control character can wrap between its '^' and
+    // its second displayed byte, and (2) if the final row is full then an
+    // extra phantom row is needed for the cursor to land in.
+    std::vector<row_start> rows;
+    rows.push_back({ left, false });
+    uint32_t row_width = 0;
     int32_t y_extent = max_size.y;
-    if (m_layout->variable_height && size_t(y_extent) > tmp.m_lines.size())
-        y_extent = int32_t(tmp.m_lines.size());
-    assert(y_extent > 0);
-
-    // Record the actual extents.
-    tmp.m_extent.x += max_size.x;
-    tmp.m_extent.y += y_extent;
-
-    // Scroll to keep cursor in view.
-    tmp.m_top = m_top;
-    tmp.m_top = clamp<int32_t>(tmp.m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
-    tmp.m_top = max<int32_t>(tmp.m_top, 0);
-
-    if (multiline)
+    wcwidth_iter scan(text.c_str() + left, text.length() - left);
+    while (scan.more())
     {
-        // Scroll vertically when cursor is on a multiline scroll marker.
-        if (y_extent < tmp.m_lines.size())
+        scan.next();
+        const char* const p = scan.character_pointer();
+        const uint32_t clen = scan.character_length();
+        const textpos_t offset = textpos_t(p - text.c_str());
+
+        if (p <= cursor_ptr && cursor_ptr < p + clen)
         {
-            for (size_t i = 0; i <= 2; ++i)
+            tmp.m_cursor.x = int16_t(row_width);
+            tmp.m_cursor.y = int16_t(rows.size() - 1);
+        }
+
+        if (scan.character_wcwidth_signed() < 0)
+        {
+            // Newlines in multiline mode are literal line breaks.
+            if (*p == '\n' && multiline)
             {
-                size_t bottom = tmp.m_top + y_extent;
-                if (bottom >= i && bottom - i < tmp.m_lines.size())
-                    tmp.m_lines[bottom - i]->calculate_multiline_scroll_marker();
+                rows.push_back({ textpos_t(offset + clen), false });
+                row_width = 0;
+                continue;
             }
 
-            if (tmp.m_top == tmp.m_cursor.y)
+            // Otherwise control characters take two cells:  e.g. "^X".
+            assert(clen == 1);
+            if (row_width + 1 > uint32_t(max_size.x))
             {
-                if (tmp.m_top > 0)
-                {
-                    const display_line& d = *tmp.m_lines[tmp.m_top];
-                    if (tmp.m_cursor.x < c_horz_scroll_indicator_chars)
-                        --tmp.m_top;
-                }
+                if (!multiline)
+                    break;
+                rows.push_back({ offset, false });
+                row_width = 0;
             }
-            else if (tmp.m_top + y_extent - 1 == tmp.m_cursor.y)
+            ++row_width;
+            if (row_width + 1 > uint32_t(max_size.x))
             {
-                if (tmp.m_top + y_extent < tmp.m_lines.size())
-                {
-                    const display_line& d = *tmp.m_lines[tmp.m_top + y_extent - 1];
-                    if (d.m_trail_scroller_width_displaced &&
-                        tmp.m_cursor.x >= d.width() - d.m_trail_scroller_width_displaced)
-                        ++tmp.m_top;
-                }
+                if (!multiline)
+                    break;
+                rows.push_back({ offset, true });
+                row_width = 0;
             }
+            ++row_width;
         }
         else
         {
-            tmp.m_top = 0;
+            const uint32_t cwidth = scan.character_wcwidth_twoctrl();
+            if (row_width + cwidth > uint32_t(max_size.x))
+            {
+                if (!multiline)
+                    break;
+                rows.push_back({ offset, false });
+                row_width = 0;
+            }
+            row_width += cwidth;
+        }
+    }
+
+    // Determine cursor position.
+    if (tmp.m_cursor.x < 0)
+    {
+        tmp.m_cursor.x = int16_t(row_width);
+        tmp.m_cursor.y = int16_t(rows.size() - 1);
+    }
+    if (tmp.m_cursor.x >= max_size.x)
+    {
+        assert(multiline);
+        tmp.m_cursor.x = 0;
+        ++tmp.m_cursor.y;
+    }
+    assert(implies(multiline, tmp.m_cursor.y >= 0));
+    assert(implies(!multiline, tmp.m_cursor.y == 0));
+
+    // In multiline mode, if the last line takes up the full width, then
+    // there's a phantom blank line at the end.
+    if (multiline && row_width == uint32_t(max_size.x))
+        rows.push_back({ textpos_t(text.length()), false });
+    assert(implies(!multiline, rows.size() == 1));
+
+    // Determine the height.
+    const int32_t total_rows = int32_t(rows.size());
+    if (m_layout->variable_height && y_extent > total_rows)
+        y_extent = total_rows;
+    assert(y_extent > 0);
+
+    // Calculate the visible range before constructing its display lines.
+    tmp.m_top = clamp<int32_t>(m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
+    tmp.m_top = max<int32_t>(tmp.m_top, 0);
+
+    // Lambda for building a line.
+    auto build_row = [&](size_t index)
+    {
+        const row_start& start = rows[index];
+        auto line = std::make_unique<display_line>(m_origin.x);
+        wcwidth_iter iter(text.c_str() + start.offset, text.length() - start.offset);
+        const char* face = faces.c_str() + start.offset;
+
+        if (start.pending)
+        {
+            iter.next();
+            assert(iter.character_length() == 1);
+            const char c = *iter.character_pointer();
+            assert(uint8_t(c) < ' ' || uint8_t(c) == 0x7F);
+            const char pending = (uint8_t(c) < ' ') ? c + '@' : '?';
+            line->append(&pending, 1, 1, *face);
+            face += iter.character_length();
         }
 
-        // Apply scroll markers.
-        if (y_extent > 1 && y_extent < tmp.m_lines.size())
-            tmp.apply_scroll_markers(y_extent);
+        build_line(line.get(), iter, face);
 
-        // Handle fixed height mode.
-        while (tmp.m_lines.size() < y_extent)
-            tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+        return line;
+    };
+
+    // Scroll vertically when cursor is on a multiline scroll marker.
+    if (y_extent < total_rows)
+    {
+        if (tmp.m_top == tmp.m_cursor.y)
+        {
+            if (tmp.m_top > 0 && tmp.m_cursor.x < c_horz_scroll_indicator_chars)
+                --tmp.m_top;
+        }
+        else if (tmp.m_top + y_extent - 1 == tmp.m_cursor.y &&
+                 tmp.m_top + y_extent < total_rows)
+        {
+            // Must build a row to check precisely where the scroller is in
+            // the row (it may not be at the very end, depending on grapheme
+            // boundaries).
+            auto bottom = build_row(tmp.m_top + y_extent - 1);
+            bottom->calculate_multiline_scroll_marker();
+            if (bottom->m_trail_scroller_width_displaced &&
+                tmp.m_cursor.x >= bottom->width() - bottom->m_trail_scroller_width_displaced)
+                ++tmp.m_top;
+        }
     }
+    else
+    {
+        tmp.m_top = 0;
+    }
+
+    // Build only the rows that will be visible.
+    const int32_t end = min<int32_t>(tmp.m_top + y_extent, total_rows);
+    for (int32_t i = tmp.m_top; i < end; ++i)
+        tmp.m_lines.emplace_back(build_row(i));
+
+    tmp.m_cursor.y -= tmp.m_top;
+
+    // Apply scroll markers.
+    tmp.apply_scroll_markers(y_extent, total_rows);
+
+    // Handle fixed height mode.
+    while (tmp.m_lines.size() < y_extent)
+        tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+
+    assert(implies(!multiline, !tmp.m_top));
+    assert(implies(!multiline, y_extent == 1));
+    assert(implies(!multiline, tmp.m_lines.size() == 1));
+
+    tmp.m_extent.x += max_size.x;
+    tmp.m_extent.y += y_extent;
 
     assert(tmp.m_cursor.y >= 0);
     assert(size_t(tmp.m_cursor.y) < tmp.m_lines.size());
