@@ -137,17 +137,29 @@ key_table::~key_table()
 {
 }
 
+int key_table::sort_predicate(const key_binding& candidate, const key_binding& binding)
+{
+    // Sort order is:
+    //  1.  Literal bindings, in alphabetical order.
+    //  2.  Pattern bindings, in alphabetical order.
+    int comparison = int(candidate.pattern) - int(binding.pattern);
+    if (!comparison)
+    {
+        const size_t common_length = min(candidate.sequence.length(), binding.sequence.length());
+        comparison = memcmp(candidate.sequence.c_str(), binding.sequence.c_str(), common_length);
+        if (!comparison)
+            comparison = int(candidate.sequence.length()) - int(binding.sequence.length());
+    }
+    return comparison < 0;
+}
+
 bool key_table::add(key_binding&& binding)
 {
     assert(binding.sequence.length() > 0);
     if (!binding.sequence.length())
         return false;
 
-    const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), binding.sequence, [](const key_binding& candidate, const cstring& sequence) {
-        const size_t common_length = min(candidate.sequence.length(), sequence.length());
-        const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
-        return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
-    });
+    const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), binding, sort_predicate);
 
     if (found != m_bindings.end() && found->sequence == binding.sequence)
         *found = std::move(binding);
@@ -157,17 +169,17 @@ bool key_table::add(key_binding&& binding)
     return true;
 }
 
-bool key_table::remove(const cstring& sequence)
+bool key_table::remove(const cstring& sequence, bool pattern)
 {
     assert(sequence.length() > 0);
     if (!sequence.length())
         return false;
 
-    const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), sequence, [](const key_binding& candidate, const cstring& sequence) {
-        const size_t common_length = min(candidate.sequence.length(), sequence.length());
-        const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
-        return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
-    });
+    key_binding binding;
+    binding.sequence = sequence;
+    binding.pattern = pattern;
+
+    const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), binding, sort_predicate);
 
     if (found != m_bindings.end() && found->sequence == sequence)
         m_bindings.erase(found);
@@ -215,7 +227,7 @@ bool resolved_binding::dispatch()
                 if (target && target->get_type() == binding_type::macro)
                     term_push_macro_text(target->get_text(), target->get_length());
                 else
-                    ctx->dispatch(sequence, key, target); // REVIEW: do anything with the return value?
+                    ctx->dispatch(sequence, key, target, &params); // REVIEW: do anything with the return value?
                 return true;
             }
             else
@@ -283,14 +295,16 @@ resolved_binding binding_resolver::step(uint8_t c)
             }
 
             const auto& bindings = (*table)->m_bindings;
-            const auto found = std::lower_bound(bindings.begin(), bindings.end(), m_sequence, [](const key_binding& candidate, const cstring& sequence) {
+            const auto patterns = std::partition_point(bindings.begin(), bindings.end(), [](const key_binding& binding) {
+                return !binding.pattern;
+            });
+            const auto found = std::lower_bound(bindings.begin(), patterns, m_sequence, [](const key_binding& candidate, const cstring& sequence) {
                 const size_t common_length = min(candidate.sequence.length(), sequence.length());
                 const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
                 return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
             });
 
-// TODO: if exact match not found, then also match against pattern bindings, e.g. for mouse input.
-            if (found != bindings.end() &&
+            if (found != patterns &&
                 found->sequence.length() >= m_sequence.length() &&
                 memcmp(found->sequence.c_str(), m_sequence.c_str(), m_sequence.length()) == 0)
             {
@@ -306,6 +320,68 @@ resolved_binding binding_resolver::step(uint8_t c)
                     return resolved;
                 }
                 is_prefix = true;
+            }
+
+            if (found == patterns ||
+                found->sequence.length() != m_sequence.length() ||
+                memcmp(found->sequence.c_str(), m_sequence.c_str(), m_sequence.length()) != 0)
+            {
+                const char* const input = m_sequence.c_str();
+                const size_t input_length = m_sequence.length();
+                for (auto pattern = patterns; pattern != bindings.end(); ++pattern)
+                {
+                    const char* const sequence = pattern->sequence.c_str();
+                    const size_t sequence_length = pattern->sequence.length();
+                    size_t input_pos = 0;
+                    size_t sequence_pos = 0;
+                    binding_params params;
+
+                    while (input_pos < input_length && sequence_pos < sequence_length)
+                    {
+                        if (sequence[sequence_pos] == '%' && sequence_pos + 1 < sequence_length)
+                        {
+                            const char op = sequence[sequence_pos + 1];
+                            if (op == '#')
+                            {
+                                if (input[input_pos] < '0' || input[input_pos] > '9')
+                                    break;
+
+                                const size_t param_begin = input_pos;
+                                do
+                                {
+                                    ++input_pos;
+                                } while (input_pos < input_length && input[input_pos] >= '0' && input[input_pos] <= '9');
+                                params.emplace_back(input + param_begin, input_pos - param_begin);
+                                sequence_pos += 2;
+                                continue;
+                            }
+                            if (op == '%')
+                                ++sequence_pos;
+                        }
+
+                        if (input[input_pos] != sequence[sequence_pos])
+                            break;
+                        ++input_pos;
+                        ++sequence_pos;
+                    }
+
+                    if (input_pos == input_length)
+                    {
+                        if (sequence_pos == sequence_length)
+                        {
+                            resolved_binding resolved;
+                            resolved.sequence = m_sequence;
+                            resolved.key = c;
+                            resolved.binding_target = &pattern->target;
+                            resolved.dispatcher_target = weak;
+                            resolved.outcome = dispatch_outcome::match;
+                            resolved.params = std::move(params);
+                            reset();
+                            return resolved;
+                        }
+                        is_prefix = true;
+                    }
+                }
             }
 
             // Only one table gets to accept self-insert input.

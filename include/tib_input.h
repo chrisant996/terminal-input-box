@@ -16,6 +16,8 @@ int32_t term_in_peek();
 bool term_in_avail(DWORD timeout=0);
 bool term_push_macro_text(const char* text, size_t len=-1);
 
+void enable_mouse_input(bool enable);
+
 // Hooks for custom terminal read behavior.
 typedef int32_t (*hook_term_in_func_t)();
 typedef bool (*hook_term_in_avail_func_t)(DWORD timeout);

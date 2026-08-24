@@ -18,7 +18,7 @@ namespace tib {
 
 extern bool g_optimize_self_insert;
 
-typedef int32_t (*editor_command_func_t)(editor_context& ctx, int32_t key, const char* name);
+typedef int32_t (*editor_command_func_t)(editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 struct editor_command
 {
@@ -132,7 +132,7 @@ public:
     static editor_command_func_t lookup_command(const char* name);
 
                         // Methods on the tib::dispatcher_target interface.
-    int32_t             dispatch(const cstring& sequence, int32_t key, const binding_target* binding) noexcept;
+    int32_t             dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept;
 
 protected:
     bool                get_allow_optimized_self_insert() const { return m_allow_optimized_self_insert; }

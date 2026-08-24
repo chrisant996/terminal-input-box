@@ -24,6 +24,8 @@ enum class binding_type : uint8_t
 
 class key_table;
 
+typedef std::vector<cstring> binding_params;
+
 class binding_target
 {
     friend key_table;
@@ -76,6 +78,16 @@ struct key_binding
 
     cstring             sequence;
     binding_target      target;
+    bool                pattern = false;
+
+    // Syntax for pattern bindings is:
+    //
+    //  %%              Matches literal '%' character.
+    //  %#              Matches one or more digits, which are captured into
+    //                  the params member of resolved_binding.
+    //  anything else   Matches itself.
+    //
+    // Pattern bindings are mainly intended for matching mouse input.
 };
 
 class key_table : public std::enable_shared_from_this<key_table>
@@ -88,7 +100,7 @@ public:
 
     // TODO-FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
-    bool                remove(const cstring& sequence);
+    bool                remove(const cstring& sequence, bool pattern=false);
     void                clear();
 
     int8_t              can_self_insert() const noexcept { return m_can_self_insert; }
@@ -98,6 +110,9 @@ public:
     auto                end() const noexcept { return m_bindings.cend(); }
     auto                cbegin() const noexcept { return m_bindings.cbegin(); }
     auto                cend() const noexcept { return m_bindings.cend(); }
+
+private:
+    static int          sort_predicate(const key_binding& candidate, const key_binding& binding);
 
 private:
     std::vector<key_binding> m_bindings;
@@ -127,7 +142,7 @@ public:
     //  2.  A key_table has self-insert enabled and the input sequence is a
     //      single self-insert character, in which case binding is nullptr and
     //      key is the character to be inserted.
-    virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding) noexcept = 0;
+    virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept = 0;
 
 private:
     std::shared_ptr<const key_table_list> m_bindings;
@@ -144,6 +159,7 @@ struct resolved_binding
     const binding_target* binding_target = nullptr; // REVIEW: binding_target_copy?
     std::weak_ptr<dispatcher_target> dispatcher_target;
     dispatch_outcome    outcome = dispatch_outcome::miss;
+    binding_params      params;
 };
 
 class binding_resolver

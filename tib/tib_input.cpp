@@ -182,6 +182,13 @@ static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
     return false;
 }
 
+static bool generate_mouse_sequence(const MOUSE_EVENT_RECORD& record, cstring& out)
+{
+    // TODO: generate xterm mouse sequences; might need additional state about
+    // the previous mouse input status.
+    return false;
+}
+
 int32_t term_in()
 {
 #ifdef _WIN32
@@ -224,7 +231,8 @@ again:
         DWORD num_read;
 #define USE_READCONSOLEINPUT
 #ifdef USE_READCONSOLEINPUT
-        // TODO: conditionally use ENABLE_MOUSE_INPUT like Clink does?
+        // FUTURE: add a mode that conditionally applies/removes
+        // ENABLE_MOUSE_INPUT like Clink does?
         INPUT_RECORD record;
         if (!ReadConsoleInputW(h, &record, 1, &num_read) || 1 != num_read)
             return -1;
@@ -235,8 +243,15 @@ again:
                 goto again;
             break;
         case MOUSE_EVENT:
-            // TODO: mouse handling for legacy console?
-            assert(false);
+            {
+                cstring seq;
+                if (generate_mouse_sequence(record.Event.MouseEvent, seq))
+                {
+                    for (const char* s = seq.c_str(); *s; ++s)
+                        s_pushed.push(*s);
+                    return true;
+                }
+            }
             goto again;
         case WINDOW_BUFFER_SIZE_EVENT:
             return c_input_terminal_resize;
@@ -369,10 +384,15 @@ bool term_in_avail(const DWORD _timeout)
             break;
 
         case MOUSE_EVENT:
-            // REVIEW: should not happen with ENABLE_MOUSE_INPUT missing, and
-            // using ReadConsoleW claims to not return them (mouse support is
-            // not implemented by ENABLE_VIRTUAL_TERMINAL_PROCESSING?).
-            assert(false);
+            {
+                cstring seq;
+                if (generate_mouse_sequence(record.Event.MouseEvent, seq))
+                {
+                    for (const char* s = seq.c_str(); *s; ++s)
+                        s_pushed.push(*s);
+                    ret = true;
+                }
+            }
             break;
 
         case WINDOW_BUFFER_SIZE_EVENT:
@@ -411,6 +431,25 @@ bool term_push_macro_text(const char* text, size_t len)
     m->m_next = s_macro_playback;
     s_macro_playback = m;
     return true;
+}
+
+void enable_mouse_input(bool enable)
+{
+#ifdef _WIN32
+    DWORD old_mode;
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    if (GetConsoleMode(hin, &old_mode))
+    {
+        DWORD new_mode = old_mode;
+        if (enable)
+            new_mode |= ENABLE_MOUSE_INPUT;
+        else
+            new_mode &= ~ENABLE_MOUSE_INPUT;
+        SetConsoleMode(hin, new_mode);
+    }
+#else
+    // TODO-LINUX: alternative implementation using escape codes to enable mouse input.
+#endif
 }
 
 } // namespace tib

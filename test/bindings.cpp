@@ -113,6 +113,45 @@ TEST_CASE("Key bindings")
                 REQUIRE(resolved.binding_target->is_func_name("command-two"));
             }
         }
+
+        SECTION("Pattern bindings")
+        {
+            REQUIRE(base->add({ "\x1b[<%#;%#m", tib::binding_target_func("mouse-release"), true }));
+            REQUIRE(base->add({ "\x1b[<%#;%#M", tib::binding_target_func("mouse-press"), true }));
+            resolver.add_target(tester);
+
+            {
+                const char sequence[] = "\x1b[<12;34m";
+                tib::resolved_binding resolved;
+                for (const char* p = sequence; *p; ++p)
+                {
+                    resolved = resolver.step(*p);
+                    REQUIRE(!p[1] || resolved.more());
+                }
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("mouse-release"));
+                REQUIRE(resolved.params.size() == 2);
+                REQUIRE(resolved.params[0] == tib::cstring("12"));
+                REQUIRE(resolved.params[1] == tib::cstring("34"));
+            }
+
+            {
+                const char sequence[] = "\x1b[<56;78M";
+                tib::resolved_binding resolved;
+                for (const char* p = sequence; *p; ++p)
+                {
+                    resolved = resolver.step(*p);
+                    REQUIRE(!p[1] || resolved.more());
+                }
+                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+                REQUIRE(resolved.binding_target);
+                REQUIRE(resolved.binding_target->is_func_name("mouse-press"));
+                REQUIRE(resolved.params.size() == 2);
+                REQUIRE(resolved.params[0] == tib::cstring("56"));
+                REQUIRE(resolved.params[1] == tib::cstring("78"));
+            }
+        }
     }
 }
 

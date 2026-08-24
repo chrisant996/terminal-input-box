@@ -15,7 +15,7 @@ namespace tib {
 
 //------------------------------------------------------------------------------
 
-int32_t accept_line(editor_context& ctx, int32_t key, const char* name)
+int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.set_done();
     return 0;
@@ -23,37 +23,37 @@ int32_t accept_line(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t begin_of_line(editor_context& ctx, int32_t key, const char* name)
+int32_t begin_of_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.begin_of_input();
     return 0;
 }
 
-int32_t end_of_line(editor_context& ctx, int32_t key, const char* name)
+int32_t end_of_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.end_of_input();
     return 0;
 }
 
-int32_t backward_char(editor_context& ctx, int32_t key, const char* name)
+int32_t backward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_left();
     return 0;
 }
 
-int32_t forward_char(editor_context& ctx, int32_t key, const char* name)
+int32_t forward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right();
     return 0;
 }
 
-int32_t backward_word(editor_context& ctx, int32_t key, const char* name)
+int32_t backward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_left(true/*word*/);
     return 0;
 }
 
-int32_t forward_word(editor_context& ctx, int32_t key, const char* name)
+int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right(true/*word*/);
     return 0;
@@ -61,25 +61,25 @@ int32_t forward_word(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t del_char_left(editor_context& ctx, int32_t key, const char* name)
+int32_t del_char_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.backspace();
     return 0;
 }
 
-int32_t del_char_right(editor_context& ctx, int32_t key, const char* name)
+int32_t del_char_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.del();
     return 0;
 }
 
-int32_t del_word_left(editor_context& ctx, int32_t key, const char* name)
+int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.backspace(true/*word*/);
     return 0;
 }
 
-int32_t del_word_right(editor_context& ctx, int32_t key, const char* name)
+int32_t del_word_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.del(true/*word*/);
     return 0;
@@ -87,13 +87,13 @@ int32_t del_word_right(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t redo(editor_context& ctx, int32_t key, const char* name)
+int32_t redo(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.redo();
     return 0;
 }
 
-int32_t undo(editor_context& ctx, int32_t key, const char* name)
+int32_t undo(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.undo();
     return 0;
@@ -101,43 +101,43 @@ int32_t undo(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t select_all(editor_context& ctx, int32_t key, const char* name)
+int32_t select_all(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.set_selection(0, uint16_t(ctx.get_text().length()));
     return 0;
 }
 
-int32_t cua_begin_of_line(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_begin_of_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.begin_of_input(true/*select*/);
     return 0;
 }
 
-int32_t cua_end_of_line(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_end_of_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.end_of_input(true/*select*/);
     return 0;
 }
 
-int32_t cua_backward_char(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_backward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_left(false/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_forward_char(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_forward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right(false/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_left(true/*word*/, true/*select*/);
     return 0;
 }
 
-int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name)
+int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right(true/*word*/, true/*select*/);
     return 0;
@@ -145,19 +145,19 @@ int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t cut(editor_context& ctx, int32_t key, const char* name)
+int32_t cut(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.cut_to_clipboard();
     return 0;
 }
 
-int32_t copy(editor_context& ctx, int32_t key, const char* name)
+int32_t copy(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.copy_to_clipboard();
     return 0;
 }
 
-int32_t paste(editor_context& ctx, int32_t key, const char* name)
+int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.paste_from_clipboard();
     return 0;
@@ -165,7 +165,7 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name)
+int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.insert_text(
         "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
@@ -180,7 +180,7 @@ int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name)
 
 //------------------------------------------------------------------------------
 
-int32_t self_insert(editor_context& ctx, int32_t key, const char* name) noexcept
+int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     if (key < 0)
         return -1;

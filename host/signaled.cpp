@@ -51,7 +51,6 @@ no_cleanup:
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
-    // TODO: a function to enable mouse input; ENABLE_MOUSE_INPUT but also the xterm escape sequences...
     SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT|ENABLE_WINDOW_INPUT));
     SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);

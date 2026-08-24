@@ -826,7 +826,7 @@ void editor_context::transfer_text(cstring& out)
     initialize();
 }
 
-int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const binding_target* binding) noexcept
+int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept
 {
     if (binding)
     {
@@ -843,7 +843,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 return -1;
             }
 
-            return func(*this, key, name);
+            return func(*this, key, name, params);
         }
     }
     else
