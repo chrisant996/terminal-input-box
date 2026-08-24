@@ -131,16 +131,17 @@ static void capture_display_output(const char* text, size_t length)
 class display_test_fixture
 {
 public:
-    display_test_fixture()
+    display_test_fixture(uint16_t max_width=10, bool horiz_scroll_markers=false, uint16_t max_height=1)
     {
         m_old_hook = tib::hook_term_out;
         m_old_coalesce = tib::g_coalesce_output;
         tib::hook_term_out = capture_display_output;
         tib::g_coalesce_output = true;
 
-        m_layout.max_width = 10;
+        m_layout.max_width = max_width;
+        m_layout.max_height = max_height;
         m_style.border = &m_border;
-        m_style.horiz_scroll_markers = false;
+        m_style.horiz_scroll_markers = horiz_scroll_markers;
         m_display.init_layout(&m_layout);
         m_display.init_buffer(&m_buffer);
         m_display.init_style(&m_style);
@@ -219,6 +220,50 @@ TEST_CASE("Display differential updates")
         REQUIRE(strstr(s_display_output.c_str(), "b\xcc\x81") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
     }
+}
+
+TEST_CASE("Display horizontal scrolling")
+{
+    display_test_fixture fixture(40, true);
+    tib::cstring text;
+    text.set("x\xe2\x9c\x94\xef\xb8\x8fy"); // x + U+2714 U+FE0F + y.
+    for (uint32_t i = 0; i < 35; ++i)
+        text.append("x");
+
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_left() == 1);
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 37);
+
+    text.append("x");
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_left() == 1);
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 38);
+
+    text.append("x");
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_left() == 7);
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 38);
+}
+
+TEST_CASE("Display multiline wrapping")
+{
+    display_test_fixture fixture(40, false, 2);
+    tib::cstring text;
+    for (uint32_t i = 0; i < 39; ++i)
+        text.append("x");
+    text.append("\xe2\x9c\x94\xef\xb8\x8f"); // U+2714 U+FE0F.
+
+    fixture.display_initial(text.c_str(), 39);
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 0);
+    REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
+
+    fixture.display_initial(text.c_str(), 42);
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 0);
+    REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
+
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_relative_cursor().x == 2);
+    REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
 }
 
 static void make_matching_display_line_data(tib::cstring& text, tib::cstring& matching_text,

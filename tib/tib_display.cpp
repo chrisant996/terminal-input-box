@@ -55,6 +55,13 @@ const uint16_t c_horz_scroll_indicator_chars = 2;
 const uint16_t c_horz_scroll_indicator_chars = 1;
 #endif
 
+static int16_t get_horiz_scrolled_width(uint16_t width, uint16_t replaced_width)
+{
+    if (width < replaced_width)
+        return width;
+    return width - replaced_width + c_horz_scroll_indicator_chars;
+}
+
 display_line::display_line(uint16_t x1)
 : m_x1(x1)
 , m_x2(x1)
@@ -335,11 +342,18 @@ void display_manager::ensure_left()
 
     // Auto-scroll horizontally forward.
     parse_graphemes(text.c_str() + m_left, selection.get_caret() - m_left, 0, m_tmp_graphemes);
-    uint32_t width = 0;
+    int16_t width = 0;
     for (const auto& g : m_tmp_graphemes)
         width += g.width;
-    for (auto g = m_tmp_graphemes.cbegin(); width >= uint32_t(max_size.x); ++g)
+    for (auto g = m_tmp_graphemes.cbegin(); true; ++g)
     {
+        int16_t display_width = width;
+        if (m_left && m_style->horiz_scroll_markers && g != m_tmp_graphemes.cend())
+            display_width = get_horiz_scrolled_width(width, g->width);
+        if (display_width < max_size.x)
+            break;
+
+        assert(g != m_tmp_graphemes.cend());
         width -= g->width;
         m_left += g->length;
     }
@@ -760,7 +774,7 @@ bool display_manager::build(display_lines& out)
     // extra phantom row is needed for the cursor to land in.
     std::vector<row_start> rows;
     rows.push_back({ left, false });
-    uint32_t row_width = 0;
+    uint16_t row_width = 0;
     int32_t y_extent = max_size.y;
     wcwidth_iter scan(text.c_str() + left, text.length() - left);
     const char* const cursor_ptr = text.c_str() + pos;
@@ -770,15 +784,16 @@ bool display_manager::build(display_lines& out)
         const char* const p = scan.character_pointer();
         const uint32_t clen = scan.character_length();
         const textpos_t offset = textpos_t(p - text.c_str());
-
-        if (p <= cursor_ptr && cursor_ptr < p + clen)
-        {
-            tmp.m_cursor.x = int16_t(row_width);
-            tmp.m_cursor.y = int16_t(rows.size() - 1);
-        }
+        const bool cursor_in_character = (p <= cursor_ptr && cursor_ptr < p + clen);
 
         if (scan.character_wcwidth_signed() < 0)
         {
+            if (cursor_in_character)
+            {
+                tmp.m_cursor.x = row_width;
+                tmp.m_cursor.y = int16_t(rows.size() - 1);
+            }
+
             // Newlines in multiline mode are literal line breaks.
             if (*p == '\n' && multiline)
             {
@@ -789,7 +804,7 @@ bool display_manager::build(display_lines& out)
 
             // Otherwise control characters take two cells:  e.g. "^X".
             assert(clen == 1);
-            if (row_width + 1 > uint32_t(max_size.x))
+            if (row_width + 1 > uint16_t(max_size.x))
             {
                 if (!multiline)
                     break;
@@ -797,7 +812,7 @@ bool display_manager::build(display_lines& out)
                 row_width = 0;
             }
             ++row_width;
-            if (row_width + 1 > uint32_t(max_size.x))
+            if (row_width + 1 > uint16_t(max_size.x))
             {
                 if (!multiline)
                     break;
@@ -808,13 +823,18 @@ bool display_manager::build(display_lines& out)
         }
         else
         {
-            const uint32_t cwidth = scan.character_wcwidth_twoctrl();
-            if (row_width + cwidth > uint32_t(max_size.x))
+            const uint16_t cwidth = scan.character_wcwidth_twoctrl();
+            if (row_width + cwidth > uint16_t(max_size.x))
             {
                 if (!multiline)
                     break;
                 rows.push_back({ offset, false });
                 row_width = 0;
+            }
+            if (cursor_in_character)
+            {
+                tmp.m_cursor.x = row_width;
+                tmp.m_cursor.y = int16_t(rows.size() - 1);
             }
             row_width += cwidth;
         }
@@ -823,8 +843,17 @@ bool display_manager::build(display_lines& out)
     // Determine cursor position.
     if (tmp.m_cursor.x < 0)
     {
-        tmp.m_cursor.x = int16_t(row_width);
+        tmp.m_cursor.x = row_width;
         tmp.m_cursor.y = int16_t(rows.size() - 1);
+    }
+    if (!multiline && left && m_style->horiz_scroll_markers)
+    {
+        // The leading scroll marker replaces a whole grapheme, so account
+        // for the difference between their displayed widths.
+        wcwidth_iter iter(text.c_str() + left, text.length() - left);
+        iter.next();
+        const int16_t replaced_width = iter.character_wcwidth_twoctrl();
+        tmp.m_cursor.x = get_horiz_scrolled_width(tmp.m_cursor.x, replaced_width);
     }
     if (tmp.m_cursor.x >= max_size.x)
     {

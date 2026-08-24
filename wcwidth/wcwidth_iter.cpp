@@ -196,10 +196,6 @@ char32_t wcwidth_iter::next()
     m_chr_end = m_iter.get_pointer();
     m_next = m_iter.next();
 
-// TODO: filling a single line input box with "✔️" graphemes results in two
-// problems -- (1) the cursor position is wrong and (2) the spaces for padding
-// look odd (but maybe only because the cursor position is wrong).
-
     // In the Windows console subsystem, combining marks may have a column
     // width of 0 or 1, depending on the OS version and what codepoints
     // precede the combining mark (esp. when a combining mark or variant
@@ -235,7 +231,7 @@ char32_t wcwidth_iter::next()
                 m_next = m_iter.next();
 fully_qualified:
                 assert(m_chr_wcwidth == 1 || m_chr_wcwidth == 2);
-                m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);
+                m_chr_wcwidth = std::max<uint16_t>(m_chr_wcwidth, 2);
             }
             else if (c == 0x3030 || c == 0x303d || c == 0x3297 || c == 0x3299)
             {
@@ -254,7 +250,7 @@ emoji_sequence:
         else if (is_variant_selector(c))
         {
             assert(m_chr_wcwidth == 1 || m_chr_wcwidth == 2);
-            m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);
+            m_chr_wcwidth = std::max<uint16_t>(m_chr_wcwidth, 2);
             goto emoji_sequence;
         }
     }
@@ -270,7 +266,7 @@ emoji_sequence:
             if (g_color_emoji && is_variant_selector(m_next))
             {
                 assert(m_chr_wcwidth == 1 || m_chr_wcwidth == 2);
-                m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);
+                m_chr_wcwidth = std::max<uint16_t>(m_chr_wcwidth, 2);
                 m_emoji = true; // These essentially make it an emoji, even if the base character isn't an emoji.
             }
             else
@@ -296,7 +292,7 @@ void wcwidth_iter::consume_emoji_sequence()
             m_next = m_iter.next();
             // Variant selector implies full width emoji (2 cells).
             assert(m_chr_wcwidth >= 0 && m_chr_wcwidth <= 2);
-            m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);
+            m_chr_wcwidth = std::max<uint16_t>(m_chr_wcwidth, 2);
         }
         else if (m_next == 0x200d)
         {
@@ -304,7 +300,7 @@ void wcwidth_iter::consume_emoji_sequence()
             m_next = m_iter.next();
             // ZWJ implies full width emoji (2 cells).
             assert(m_chr_wcwidth == 1 || m_chr_wcwidth == 2);
-            m_chr_wcwidth = std::max<char32_t>(m_chr_wcwidth, 2);
+            m_chr_wcwidth = std::max<uint16_t>(m_chr_wcwidth, 2);
             // Stop parsing if the next character is not an emoji.
             if (!is_emoji(m_next) &&
                 !is_possible_unqualified_half_width(m_next) &&

@@ -48,10 +48,10 @@ public:
     void            unnext();
     const char*     character_pointer() const { return m_chr_ptr; }
     uint32_t        character_length() const { return uint32_t(m_chr_end - m_chr_ptr); }
-    int32_t         character_wcwidth_signed() const { return m_chr_wcwidth; }
-    uint32_t        character_wcwidth_zeroctrl() const { return (m_chr_wcwidth < 0) ? 0 : m_chr_wcwidth; }
-    uint32_t        character_wcwidth_onectrl() const { return (m_chr_wcwidth < 0) ? 1 : m_chr_wcwidth; }
-    uint32_t        character_wcwidth_twoctrl() const { return (m_chr_wcwidth < 0) ? 2 : m_chr_wcwidth; }
+    int16_t         character_wcwidth_signed() const { return m_chr_wcwidth; }
+    uint16_t        character_wcwidth_zeroctrl() const { return (m_chr_wcwidth < 0) ? 0 : m_chr_wcwidth; }
+    uint16_t        character_wcwidth_onectrl() const { return (m_chr_wcwidth < 0) ? 1 : m_chr_wcwidth; }
+    uint16_t        character_wcwidth_twoctrl() const { return (m_chr_wcwidth < 0) ? 2 : m_chr_wcwidth; }
     bool            character_is_emoji() const { return m_emoji; }
     const char*     get_pointer() const;
     void            reset_pointer(const char* s);
@@ -66,7 +66,7 @@ private:
     char32_t        m_next;
     const char*     m_chr_ptr;
     const char*     m_chr_end;
-    int32_t         m_chr_wcwidth = 0;
+    int16_t         m_chr_wcwidth = 0;
     bool            m_emoji = false;
 };
 
