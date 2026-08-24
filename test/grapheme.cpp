@@ -31,7 +31,15 @@ static void check_back_one_grapheme(const grapheme_sample* samples, size_t count
         uint16_t width = 0;
         caret = backward_one_grapheme(text.c_str(), text.length(), caret, &width);
         REQUIRE(caret == positions[count]);
-        REQUIRE(width == samples[count].width);
+        REQUIRE(width == samples[count].width, [&](){
+            tib::cstring_t<WCHAR> ws;
+            to_utf16(samples[count].text, tib::c_auto_length, ws);
+            tib::cstring_t<WCHAR> msg;
+            msg.printf(L"index     %u\ngrapheme  '%s'\nexpected  %u\nwidth     %u",
+                       count, ws.c_str(), samples[count].width, width);
+            DWORD written;
+            WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), msg.c_str(), DWORD(msg.length()), &written, nullptr);
+        });
     }
 
     uint16_t width = 1;

@@ -42,6 +42,8 @@ int main(int argc, char** argv)
     // Override self-insert optimization, for stable test outcomes.
     tib::g_optimize_self_insert = false;
 
+    reset_wcwidths();
+
     bool list = false;
     bool times = false;
 
