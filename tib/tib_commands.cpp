@@ -305,6 +305,10 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // opt to provide a fallback handler).
         if (key == 'M')
         {
+            // TODO: the blinking cursor flashes many times on each mouse
+            // input; presumably the cursor hide/show logic is kicking in too
+            // aggressively (i.e. simplistic scoping) and needs to be
+            // controlled more judiciously.
             if (!ctx.set_caret_from_screen(x, y))
             {
                 ctx.clear_named_value(operation_name);
