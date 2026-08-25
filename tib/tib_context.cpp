@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib.h"
 #include "wcwidth.h"
+#include <cwctype>
 #include <assert.h>
 
 namespace tib {
@@ -45,10 +46,17 @@ void undo_entry::unlink(undo_entry*& head, undo_entry*& tail)
     m_next = nullptr;
 }
 
-static bool is_space(char c)
+static bool is_word_char(const char* s, textpos_t len, textpos_t pos)
 {
-    // REVIEW: Various other appropriate Unicode blank space codepoints?
-    return (c == ' ' || c == '\t' || c == '\r' || c == '\n');
+    assert(pos >= 0);
+    assert(pos <= len);
+    str_iter iter(s + pos, len - pos);
+
+    const char32_t c = iter.next();
+    if (c >= 0xd800)
+        return true;
+
+    return std::iswalnum(uint16_t(c));
 }
 
 textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word)
@@ -90,14 +98,14 @@ textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool
                 while (pos < len)
                 {
                     const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
-                    if ( ! (test_pos - pos == 1 && is_space(s[pos])))
+                    if ( ! (test_pos - pos == 1 && !is_word_char(s, len, pos)))
                         break;
                     pos = test_pos;
                 }
                 while (pos < len)
                 {
                     const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
-                    if (   (test_pos - pos == 1 && is_space(s[pos])))
+                    if (   (test_pos - pos == 1 && !is_word_char(s, len, pos)))
                         break;
                     pos = test_pos;
                 }
@@ -120,14 +128,14 @@ textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool
                 while (pos > 0)
                 {
                     const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
-                    if ( ! (pos - test_pos == 1 && is_space(s[test_pos])))
+                    if ( ! (pos - test_pos == 1 && !is_word_char(s, len, test_pos)))
                         break;
                     pos = test_pos;
                 }
                 while (pos > 0)
                 {
                     const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
-                    if (   (pos - test_pos == 1 && is_space(s[test_pos])))
+                    if (   (pos - test_pos == 1 && !is_word_char(s, len, test_pos)))
                         break;
                     pos = test_pos;
                 }
