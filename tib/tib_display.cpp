@@ -325,7 +325,7 @@ void display_manager::clear_scroll_offsets()
 {
     m_top = 0;
     m_left = 0;
-    m_manual_horiz_scroll = false;
+    m_hwheel_exclusion = false;
 }
 
 bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection)
@@ -382,9 +382,6 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
         }
     }
 
-    if (left == m_left)
-        return false;
-
     textpos_t caret = left;
     uint32_t screen_column = 0;
     if (left && m_style->horiz_scroll_markers)
@@ -403,10 +400,14 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
         screen_column += width;
     }
 
+    const bool changed = left != m_left || caret != selection.get_caret();
     m_left = left;
-    m_manual_horiz_scroll = true;
     selection.set_caret(caret);
-    return true;
+    m_hwheel_exclusion = true;
+    m_hwheel_exclusion_left = m_left;
+    m_hwheel_exclusion_caret = caret;
+    m_hwheel_exclusion_change_counter = m_buffer->get_change_counter();
+    return changed;
 }
 
 void display_manager::ensure_left()
@@ -420,6 +421,17 @@ void display_manager::ensure_left()
 
     const cstring& text = m_buffer->get_text();
     const selection_state& selection = m_buffer->get_selection_state();
+    if (m_hwheel_exclusion)
+    {
+        if (m_left == m_hwheel_exclusion_left &&
+            selection.get_caret() == m_hwheel_exclusion_caret &&
+            m_buffer->get_change_counter() == m_hwheel_exclusion_change_counter)
+        {
+            return;
+        }
+        m_hwheel_exclusion = false;
+    }
+
     m_left = min(m_left, selection.get_caret());
 
     // Auto-scroll horizontally forward.
@@ -438,12 +450,6 @@ void display_manager::ensure_left()
         assert(g != m_tmp_graphemes.cend());
         width -= g->width;
         m_left += g->length;
-    }
-
-    if (m_manual_horiz_scroll)
-    {
-        m_manual_horiz_scroll = false;
-        return;
     }
 
     // Auto-scroll horizontally backward.

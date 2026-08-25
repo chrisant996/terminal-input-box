@@ -188,7 +188,10 @@ private:
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.
     bool                m_border_dirty = false;
-    bool                m_manual_horiz_scroll = false;
+    bool                m_hwheel_exclusion = false;
+    textpos_t           m_hwheel_exclusion_left = 0;
+    textpos_t           m_hwheel_exclusion_caret = 0;
+    uint32_t            m_hwheel_exclusion_change_counter = 0;
     coord               m_relative_cursor = { -1, -1 };
 
     cstring             m_accumulator;
