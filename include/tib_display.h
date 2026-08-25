@@ -105,6 +105,12 @@ struct display_line
     uint8_t             m_trail_scroller_len_displayed = 0;
 };
 
+struct display_row_start
+{
+    textpos_t           offset;
+    bool                pending;
+};
+
 struct display_lines
 {
     void                clear();
@@ -117,6 +123,7 @@ struct display_lines
     uint32_t            m_change_counter = 0;
 
     std::vector<std::unique_ptr<display_line>> m_lines;
+    std::vector<display_row_start> m_rows;
     coord               m_cursor = { -1, -1 };  // Offset from m_inner_offset.
 
     coord               m_inner_offset = { 0, 0 };
@@ -154,6 +161,7 @@ public:
     void                set_scroll_offsets(textpos_t left, uint32_t top);
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection);
+    bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection);
 
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }

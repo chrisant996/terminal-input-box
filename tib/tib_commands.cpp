@@ -167,6 +167,8 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: add documentation explaining how the mouse_input_operation is
+    // used, and why.
     static const char operation_name[] = "mouse_input_operation";
     static const char column_name[] = "mouse_hwheel_column";
 
@@ -217,16 +219,21 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     // the caret up/down through the display lines, and reset it when wheel
     // input was not the previous action.
 
-    // TODO: Handle mouse input sequence for left mouse button single click.
-    // This should position the caret at the offset inside the buffer that
-    // corresponds to the mouse click position.  Clicking outside the inner
-    // extents should be ignored, but it needs to indicate that the command
-    // short circuited (which will enable a `dispatch()` override method to
-    // optionally decide to take an alternative action in response to the
-    // click) -- maybe commands can return negative to indicate "not handled",
-    // and the meaning of returning 0 or a positive integer can mean
-    // "handled".  And the specific negative values or zero/positive values
-    // can have arbitrary custom meaning on a per-command basis.
+    // Left click.  Clicking within the inner extents sets the caret; clicking
+    // outside is ignored (and returns -1 so something else can opt to provide
+    // a fallback handler).
+// TODO: need to normalize when/which commands return -1, as now it means
+// "unhandled; someone else can add fallback handling".
+    if (params && params->size() >= 3 && key == 'M')
+    {
+        const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
+        if ((button & ~uint32_t(4 | 8 | 16)) == 0)
+        {
+            const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
+            const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
+            return ctx.set_caret_from_screen(x, y) ? 0 : -1;
+        }
+    }
 
     // TODO: Handle mouse input sequence for left mouse button double click.
     // This requires adding some ability to track elapsed time between

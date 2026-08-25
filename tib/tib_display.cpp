@@ -116,6 +116,7 @@ void display_lines::clear()
     m_change_counter = 0;
 
     m_lines.clear();
+    m_rows.clear();
     m_cursor = { -1, -1 };
 
     m_inner_offset = { 0, 0 };
@@ -413,6 +414,78 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
     m_hwheel_exclusion_caret = caret;
     m_hwheel_exclusion_change_counter = m_buffer->get_change_counter();
     return changed;
+}
+
+bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection)
+{
+    if (!m_displayed.m_change_counter)
+        return false;
+
+    const border_definition* const border = m_style ? m_style->border : nullptr;
+    int32_t screen_origin_x = m_origin.x;
+    int32_t screen_origin_y = m_origin.y;
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        return false;
+    screen_origin_x = csbi.dwCursorPosition.X - csbi.srWindow.Left + 1 - m_relative_cursor.x;
+    screen_origin_y = csbi.dwCursorPosition.Y - csbi.srWindow.Top + 1 - m_relative_cursor.y;
+#else
+    if (screen_origin_y <= 0)
+        return false;
+#endif
+    const int32_t left = screen_origin_x + m_displayed.m_inner_offset.x;
+    const int32_t top = screen_origin_y + m_displayed.m_inner_offset.y;
+    const int32_t width = m_displayed.m_extent.x - m_displayed.m_inner_offset.x - border->get_right_width();
+    const int32_t height = m_displayed.m_extent.y - m_displayed.m_inner_offset.y - !!border->has_bottom();
+    const bool multiline = get_effective_max_size().y > 1;
+    const int32_t column = int32_t(x) - left;
+    const int32_t row = int32_t(y) - top;
+    if (column < 0 || column >= width || row < 0 || row >= height || size_t(row) >= m_displayed.m_rows.size())
+        return false;
+
+    const cstring& text = m_buffer->get_text();
+    const display_row_start& start = m_displayed.m_rows[row];
+    textpos_t caret = start.offset;
+    uint32_t screen_column = 0;
+
+    if (start.pending)
+    {
+        if (!column)
+        {
+            selection.set_caret(caret);
+            return true;
+        }
+        caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
+        screen_column = 1;
+    }
+    else if (m_left && m_style && m_style->horiz_scroll_markers)
+    {
+        if (column < c_horz_scroll_indicator_chars)
+        {
+            selection.set_caret(caret);
+            return true;
+        }
+        caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
+        screen_column = c_horz_scroll_indicator_chars;
+    }
+
+    while (caret < text.length() && screen_column <= uint32_t(column))
+    {
+        wcwidth_iter iter(text.c_str() + caret, text.length() - caret);
+        const char32_t c = iter.next();
+        if (c == '\n' && multiline)
+            break;
+
+        const uint32_t char_width = iter.character_wcwidth_twoctrl();
+        if (screen_column + char_width > uint32_t(column) || screen_column + char_width > uint32_t(width))
+            break;
+        caret += iter.character_length();
+        screen_column += char_width;
+    }
+
+    selection.set_caret(caret);
+    return true;
 }
 
 void display_manager::ensure_left()
@@ -792,12 +865,6 @@ const char* display_manager::get_face_def(char face) const
     return def->second;
 }
 
-struct row_start
-{
-    textpos_t           offset;
-    bool                pending;
-};
-
 bool display_manager::build(display_lines& out)
 {
     assert(m_layout);
@@ -871,7 +938,7 @@ bool display_manager::build(display_lines& out)
     // Special cases:  (1) a control character can wrap between its '^' and
     // its second displayed byte, and (2) if the final row is full then an
     // extra phantom row is needed for the cursor to land in.
-    std::vector<row_start> rows;
+    std::vector<display_row_start> rows;
     rows.push_back({ left, false });
     uint16_t row_width = 0;
     int32_t y_extent = max_size.y;
@@ -984,7 +1051,7 @@ bool display_manager::build(display_lines& out)
     bool expanding = false;
     auto build_row = [&](size_t index)
     {
-        const row_start& start = rows[index];
+        const display_row_start& start = rows[index];
         auto line = std::make_unique<display_line>(m_origin.x);
         wcwidth_iter iter(text.c_str() + start.offset, text.length() - start.offset);
         const char* face = faces.c_str() + start.offset;
@@ -1126,7 +1193,10 @@ again:
     // Build only the rows that will be visible.
     const int32_t end = min<int32_t>(tmp.m_top + y_extent, total_rows);
     for (int32_t i = tmp.m_top; i < end; ++i)
+    {
         tmp.m_lines.emplace_back(build_row(i));
+        tmp.m_rows.emplace_back(rows[i]);
+    }
 
     // Adjust the cursor to be relative to the origin.
     tmp.m_cursor.y -= tmp.m_top;
@@ -1136,7 +1206,10 @@ again:
 
     // Handle fixed height mode.
     while (tmp.m_lines.size() < y_extent)
+    {
         tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
+        tmp.m_rows.push_back({ textpos_t(text.length()), false });
+    }
 
     assert(implies(!multiline, !tmp.m_top));
     assert(implies(!multiline, y_extent == 1));
