@@ -872,7 +872,9 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                     insert_char(c);
                     while (is_self_insertable(peek))
                     {
-                        assert(term_in() == peek);
+                        const int32_t cin = term_in();
+                        assert(cin == peek);
+                        (void)cin;
                         insert_char(char(peek));
                         peek = term_in_peek();
                     }

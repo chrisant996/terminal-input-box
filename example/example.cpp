@@ -494,6 +494,8 @@ no_border:
                 /*Custom*/  show_sequence_after_display();
 
         const int32_t c = tib::term_in();                   // Required.
+        if (c == tib::c_input_terminal_eof)
+            break;
 
                 /*Custom*/  update_sequence_before_step(c);
 

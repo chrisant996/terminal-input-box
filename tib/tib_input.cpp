@@ -16,8 +16,10 @@
 namespace tib {
 
 // Some internal magic values, leveraging invalid UTF8 bytes.
+constexpr char c_input_terminal_eof_magic_char = char(c_input_terminal_eof);
 constexpr char c_input_terminal_resize_magic_char = char(c_input_terminal_resize);
-static_assert(uint8_t(c_input_terminal_resize_magic_char) == 0xfe);
+static_assert(uint8_t(c_input_terminal_eof_magic_char) == 0xfe);
+static_assert(uint8_t(c_input_terminal_resize_magic_char) == 0xfd);
 
 hook_term_in_func_t hook_term_in = nullptr;
 hook_term_in_avail_func_t hook_term_in_avail = nullptr;
@@ -435,7 +437,7 @@ int32_t term_in()
 
     assert(s_term_began);
     if (!s_term_began || !s_hin)
-        return -1;
+        return c_input_terminal_eof;
 
     if (!s_pushed.empty())
         return s_pushed.read();
@@ -526,7 +528,7 @@ int32_t term_in_peek()
 
     assert(s_term_began);
     if (!s_term_began || !s_hin)
-        return -1;
+        return c_input_terminal_eof;
 
     if (!s_pushed.empty())
         return s_pushed.peek();

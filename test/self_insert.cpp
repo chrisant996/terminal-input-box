@@ -32,6 +32,7 @@ static void dispatch_macro(const char* text, std::shared_ptr<self_insert_tester>
     for (;;)
     {
         const int32_t c = tib::term_in();
+        REQUIRE(c >= 0);
         if (c == '\r')
             break;
 
