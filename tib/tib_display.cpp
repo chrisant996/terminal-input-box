@@ -348,7 +348,7 @@ void display_manager::set_scroll_offsets(textpos_t left, uint32_t top)
     m_hwheel_exclusion = false;
 }
 
-bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection)
+bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection, bool exclude_auto_scroll)
 {
     if (!columns || get_effective_max_size().y != 1)
         return false;
@@ -423,11 +423,20 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
     const bool changed = left != m_left || caret != selection.get_caret();
     m_left = left;
     selection.set_caret(caret);
+    if (exclude_auto_scroll)
+        suppress_auto_horizontal_scroll(selection);
+    return changed;
+}
+
+void display_manager::suppress_auto_horizontal_scroll(const selection_state& selection)
+{
+    if (get_effective_max_size().y != 1)
+        return;
+
     m_hwheel_exclusion = true;
     m_hwheel_exclusion_left = m_left;
-    m_hwheel_exclusion_caret = caret;
+    m_hwheel_exclusion_caret = selection.get_caret();
     m_hwheel_exclusion_change_counter = m_buffer->get_change_counter();
-    return changed;
 }
 
 bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection)
@@ -532,7 +541,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     return changed;
 }
 
-bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection)
+bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars, bool word_drag)
 {
     if (!m_displayed.m_change_counter)
         return false;
@@ -555,12 +564,52 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     const int32_t width = m_displayed.m_extent.x - m_displayed.m_inner_offset.x - border->get_right_width();
     const int32_t height = m_displayed.m_extent.y - m_displayed.m_inner_offset.y - !!border->has_bottom();
     const bool multiline = get_effective_max_size().y > 1;
+    const bool drag = drag_scroll_chars != 0;
     const int32_t column = int32_t(x) - left;
-    const int32_t row = int32_t(y) - top;
+    const int32_t row = (!multiline && drag) ? 0 : int32_t(y) - top;
+    if (drag)
+    {
+        if (multiline && (row < 0 || row >= height))
+        {
+            const int32_t cursor_column = clamp(column, 0, width - 1) + m_displayed.m_inner_offset.x;
+            const int32_t current_row = m_displayed.m_top + m_displayed.m_cursor.y;
+            const int32_t target_row = row < 0 ? m_displayed.m_top - 1 : m_displayed.m_top + height;
+            return move_caret_vertically(target_row - current_row, cursor_column, selection);
+        }
+        if (!multiline)
+        {
+            const bool over_left_indicator = m_left && m_style && m_style->horiz_scroll_markers &&
+                                             column < c_horz_scroll_indicator_chars;
+            if (column < 0 || over_left_indicator)
+            {
+                scroll_horizontally(-int32_t(drag_scroll_chars), m_displayed.m_inner_offset.x,
+                                    selection, !word_drag);
+                if (word_drag)
+                    selection.set_caret(m_left);
+                return true;
+            }
+            const display_line* const line = m_displayed.m_lines.empty() ? nullptr : m_displayed.m_lines[0].get();
+            const bool has_right_indicator = line && line->m_faces.length() &&
+                                             line->m_faces.c_str()[line->m_faces.length() - 1] == FACE_SCROLLER;
+            const bool over_right_indicator = has_right_indicator &&
+                                              column >= width - c_horz_scroll_indicator_chars;
+            if (column >= width || over_right_indicator)
+            {
+                scroll_horizontally(int32_t(drag_scroll_chars),
+                                    m_displayed.m_inner_offset.x + width - 1, selection, !word_drag);
+                return true;
+            }
+        }
+    }
     if (column < 0 || column >= width || row < 0 || row >= height || size_t(row) >= m_displayed.m_rows.size())
         return false;
 
     const cstring& text = m_buffer->get_text();
+    const auto set_screen_caret = [&](textpos_t caret)
+    {
+        selection.set_caret(caret);
+        return true;
+    };
     const display_row_start& start = m_displayed.m_rows[row];
     textpos_t caret = start.offset;
     uint32_t screen_column = 0;
@@ -568,20 +617,14 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     if (start.pending)
     {
         if (!column)
-        {
-            selection.set_caret(caret);
-            return true;
-        }
+            return set_screen_caret(caret);
         caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
         screen_column = 1;
     }
     else if (m_left && m_style && m_style->horiz_scroll_markers)
     {
         if (column < c_horz_scroll_indicator_chars)
-        {
-            selection.set_caret(caret);
-            return true;
-        }
+            return set_screen_caret(caret);
         caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
         screen_column = c_horz_scroll_indicator_chars;
     }
@@ -600,8 +643,7 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
         screen_column += char_width;
     }
 
-    selection.set_caret(caret);
-    return true;
+    return set_screen_caret(caret);
 }
 
 void display_manager::ensure_left()

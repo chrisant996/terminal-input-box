@@ -117,7 +117,8 @@ public:
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column) { return m_display.move_caret_vertically(rows, cursor_column, m_selection); }
-    bool                set_caret_from_screen(uint32_t x, uint32_t y) { return m_display.set_caret_from_screen(x, y, m_selection); }
+    bool                set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars=0, bool word_drag=false) { return m_display.set_caret_from_screen(x, y, m_selection, drag_scroll_chars, word_drag); }
+    void                suppress_auto_horizontal_scroll() { m_display.suppress_auto_horizontal_scroll(m_selection); }
 
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);

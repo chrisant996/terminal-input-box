@@ -161,9 +161,10 @@ public:
     uint32_t            get_top() const { return m_top; }
     void                set_scroll_offsets(textpos_t left, uint32_t top);
     void                clear_scroll_offsets();
-    bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection);
+    bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection, bool exclude_auto_scroll=true);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection);
-    bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection);
+    bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars=0, bool word_drag=false);
+    void                suppress_auto_horizontal_scroll(const selection_state& selection);
 
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }

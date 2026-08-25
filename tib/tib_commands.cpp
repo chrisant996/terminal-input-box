@@ -345,13 +345,14 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     case 32:
         if (key == 'M' && s_drag.context == &ctx)
         {
-            if (!ctx.set_caret_from_screen(x, y))
+            if (!ctx.set_caret_from_screen(x, y, get_scroll_chars(ctx), s_drag.word))
                 return -1;
 
             const textpos_t pos = ctx.get_caret();
             if (!s_drag.word)
             {
                 ctx.set_selection(s_drag.begin, pos);
+                ctx.suppress_auto_horizontal_scroll();
             }
             else
             {
