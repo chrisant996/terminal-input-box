@@ -165,6 +165,60 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 //------------------------------------------------------------------------------
 
+int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    // TODO: Handle mouse hwheel input in single line mode; it should scroll
+    // the input box horizonally per SPI_GETWHEELSCROLLCHARS, and try to keep
+    // the cursor at the same screen column while scrolling the input box
+    // content.  Since there may be "rounding errors" per se due to grapheme
+    // width boundaries, it should reset the remembered screen column when
+    // hwheel scrolling was not the previous action.  get_last_command() can
+    // report whether mouse_input() was the last command, but it needs to
+    // also remember when the hwheel sub-operation was the last sub-operation.
+    // In order to remember the screen column, editor_context should provide
+    // public methods to get_named_value(), set_named_value(), and
+    // clear_named_value().  To keep things simple, the value type can simply
+    // always be a char string; use a std::map<cstring, cstring> and if
+    // possible support looking up via a const char*.
+
+    // TODO: Handle mouse wheel input in multiline mode; it should move the
+    // caret up or down by SPI_GETWHEELSCROLLLINES lines.  Similar to the
+    // hwheel handling, it should remember the target screen column for moving
+    // the caret up/down through the display lines, and reset it when wheel
+    // input was not the previous action.
+
+    // TODO: Handle mouse input sequence for left mouse button single click.
+    // This should position the caret at the offset inside the buffer that
+    // corresponds to the mouse click position.  Clicking outside the inner
+    // extents should be ignored, but it needs to indicate that the command
+    // short circuited (which will enable a `dispatch()` override method to
+    // optionally decide to take an alternative action in response to the
+    // click) -- maybe commands can return negative to indicate "not handled",
+    // and the meaning of returning 0 or a positive integer can mean
+    // "handled".  And the specific negative values or zero/positive values
+    // can have arbitrary custom meaning on a per-command basis.
+
+    // TODO: Handle mouse input sequence for left mouse button double click.
+    // This requires adding some ability to track elapsed time between
+    // dispatches, and remembering the last click position (and which button),
+    // so that a double click can be inferred.  Double-click should select the
+    // word at the mouse click position, and remember that double-click mode
+    // was used, so that dragging can extend the selection by word bounaries.
+
+    // TODO: Handle mouse input sequence for right mouse button single click;
+    // if there's a selection copy it to the clipboard and clear the
+    // selection, or if there's no selection then paste from the clipboard.
+
+    // TODO: Handle mouse drag while left button is down.  This requires
+    // remembering the textpos_t of the initial click, so that dragging can
+    // extend the selection to the textpos_t of the drag position (or on word
+    // boundaries if double-click was used before dragging).
+
+    return -1;
+}
+
+//------------------------------------------------------------------------------
+
 int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.insert_text(
@@ -263,6 +317,9 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\033[3~", binding_target_func("del-char-right") });
     t->add({ "\033[3;5~", binding_target_func("del-word-right") });
 
+    t->add({ "\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/ });
+    t->add({ "\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/ });
+
     auto tables = std::make_shared<key_table_list>();
     tables->emplace_back(std::move(t));
     return tables;
@@ -292,6 +349,7 @@ static const editor_command c_commands[] =
     { "forward-char", forward_char },
     { "forward-word", forward_word },
     { "lorem-ipsum", lorem_ipsum },
+    { "mouse-input", mouse_input },
     { "paste", paste },
     { "redo", redo },
     { "select-all", select_all },

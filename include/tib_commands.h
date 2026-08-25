@@ -39,6 +39,8 @@ int32_t cut(tib::editor_context& ctx, int32_t key, const char* name, const bindi
 int32_t copy(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t paste(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
+int32_t mouse_input(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+
 int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 std::shared_ptr<tib::key_table_list> make_default_key_table();
