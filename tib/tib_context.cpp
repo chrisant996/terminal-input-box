@@ -195,6 +195,7 @@ void editor_context::initialize(const char* text, size_t len)
     insert_text(text, len);
     m_selection.clear_dirty();
     m_display.clear_scroll_offsets();
+    m_named_values.clear();
     init_undo();
 
     assert(!m_selection.is_dirty());
@@ -575,6 +576,31 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
 void editor_context::set_last_command(const char* name)
 {
     m_last_command.set(name);
+}
+
+const char* editor_context::get_named_value(const char* name) const
+{
+    const auto found = m_named_values.find(name);
+    return (found == m_named_values.end()) ? nullptr : found->second.c_str();
+}
+
+void editor_context::set_named_value(const char* name, const char* value)
+{
+    auto found = m_named_values.find(name);
+    if (found == m_named_values.end())
+        m_named_values.emplace(cstring(name), cstring(value));
+    else
+        found->second.set(value);
+}
+
+void editor_context::clear_named_value(const char* name)
+{
+    m_named_values.erase(name);
+}
+
+bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
+{
+    return m_display.scroll_horizontally(columns, cursor_column, m_selection);
 }
 
 void editor_context::insert_char(char c)

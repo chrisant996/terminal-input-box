@@ -10,6 +10,7 @@
 #include "tib_buffer.h"
 #include "tib_colors.h"
 #include "tib_display.h"
+#include <map>
 #include <vector>
 
 struct grapheme_info;
@@ -105,6 +106,9 @@ public:
 
     const char*         get_last_command() const noexcept { return m_last_command.c_str(); }
     void                set_last_command(const char* name);
+    const char*         get_named_value(const char* name) const;
+    void                set_named_value(const char* name, const char* value);
+    void                clear_named_value(const char* name);
 
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);
@@ -148,6 +152,14 @@ private:
     static void         ensure_commands_sorted();
 
 private:
+    struct cstring_less
+    {
+        using is_transparent = void;
+        bool operator()(const cstring& lhs, const cstring& rhs) const { return strcmp(lhs.c_str(), rhs.c_str()) < 0; }
+        bool operator()(const cstring& lhs, const char* rhs) const { return strcmp(lhs.c_str(), rhs) < 0; }
+        bool operator()(const char* lhs, const cstring& rhs) const { return strcmp(lhs, rhs.c_str()) < 0; }
+    };
+
     // NOTE:  Content and selection are contained in the base class.
 
     // Configuration.
@@ -165,6 +177,7 @@ private:
     bool                m_can_drag = false;
     bool                m_allow_optimized_self_insert = true;
     cstring             m_last_command;
+    std::map<cstring, cstring, cstring_less> m_named_values;
 
     // Display.
     display_manager     m_display;
