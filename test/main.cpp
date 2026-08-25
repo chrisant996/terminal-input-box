@@ -44,6 +44,8 @@ int main(int argc, char** argv)
 
     reset_wcwidths();
 
+    tib::term_begin();
+
     bool list = false;
     bool times = false;
 

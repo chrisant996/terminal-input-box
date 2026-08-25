@@ -21,8 +21,6 @@ public:
                         ~auto_terminal_init();
                         auto_terminal_init();
 
-    void                set_no_exit_cleanup() { m_exit_cleanup = false; }
-
 private:
     void                restore();
 
@@ -37,7 +35,6 @@ private:
 #else
     // TODO-LINUX: POSIX sigaction alternative.
 #endif
-    bool                m_exit_cleanup = true;
 };
 
 } // namespace tib_host

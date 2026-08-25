@@ -217,6 +217,8 @@ int main(int argc, const char** argv)
     tib_host::set_console_vt_input();
     reset_wcwidths();
 
+    tib::term_begin();
+
     std::shared_ptr<custom_input_box> tib = std::make_shared<custom_input_box>();
     tib->set_bindings(make_key_tables());
     tib->set_max_width(40);

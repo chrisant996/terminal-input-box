@@ -8,6 +8,8 @@
 #include "tib_base.h"
 #include "tib_input.h"
 #include "tib_output.h"
+#include "tib_termcap.h"
+#include <memory>
 #include <conio.h>
 #include <assert.h>
 
@@ -30,22 +32,13 @@ struct macro_playback
 static macro_playback* s_macro_playback = nullptr;
 static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
 static bool s_mouse_sgr_encoding = true;
-static DWORD s_prev_mouse_button_state = 0;
-static DWORD s_prev_input_mode = 0;
-static int32_t s_term_began = 0;
 
-static DWORD get_original_console_input_mode()
-{
-    DWORD mode;
-    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-    if (!GetConsoleMode(hin, &mode))
-        return (ENABLE_AUTO_POSITION|ENABLE_EXTENDED_FLAGS|
-                ENABLE_QUICK_EDIT_MODE|ENABLE_INSERT_MODE|
-                ENABLE_MOUSE_INPUT|ENABLE_ECHO_INPUT|
-                ENABLE_LINE_INPUT|ENABLE_PROCESSED_INPUT);
-    return mode;
-}
-static DWORD s_original_console_input_mode = get_original_console_input_mode();
+static int32_t s_term_began = 0;
+static HANDLE s_hin = 0;
+static HANDLE s_hout = 0;
+static DWORD s_prev_input_mode = 0;
+static DWORD s_prev_output_mode = 0;
+static DWORD s_prev_mouse_button_state = 0;
 
 #ifdef _WIN32
 #ifdef DEBUG
@@ -189,6 +182,12 @@ int32_t pushed_input::read()
 
 void term_begin()
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
     assert(s_term_began >= 0);
     if (s_term_began < 0)
         s_term_began = 0;
@@ -200,15 +199,33 @@ void term_begin()
         // missed.
 
         HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-        GetConsoleMode(hin, &s_prev_input_mode);
+        if (GetConsoleMode(hin, &s_prev_input_mode))
+        {
+            s_hin = hin;
+            s_prev_mouse_button_state = 0;
+            if (GetKeyState(VK_LBUTTON) < 0)
+                s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
+            if (GetKeyState(VK_MBUTTON) < 0)
+                s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
+            if (GetKeyState(VK_RBUTTON) < 0)
+                s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
+        }
+        else
+        {
+            assert(!s_hin);
+            s_hin = 0;
+        }
 
-        s_prev_mouse_button_state = 0;
-        if (GetKeyState(VK_LBUTTON) < 0)
-            s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
-        if (GetKeyState(VK_MBUTTON) < 0)
-            s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
-        if (GetKeyState(VK_RBUTTON) < 0)
-            s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
+        HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (GetConsoleMode(hout, &s_prev_output_mode))
+        {
+            s_hout = hout;
+        }
+        else
+        {
+            assert(!s_hout);
+            s_hout = 0;
+        }
     }
 
     ++s_term_began;
@@ -216,17 +233,55 @@ void term_begin()
 
 void term_end()
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
     assert(s_term_began > 0);
     if (s_term_began <= 0)
         return;
 
-    --s_term_began;
-    if (!s_term_began)
+    if (s_term_began == 1)
     {
-        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-        SetConsoleMode(hin, s_prev_input_mode);
+        if (s_hout)
+        {
+            term_out(c_show_cursor);
+            // FUTURE: cursor shape.
+            term_out("\x1b[m");
+
+            if (s_mouse_input_mode != mouse_input_mode::none)
+                enable_mouse_input(mouse_input_mode::none, false);
+        }
+
+        if (s_hin)
+            SetConsoleMode(s_hin, s_prev_input_mode);
+        if (s_hout)
+            SetConsoleMode(s_hout, s_prev_output_mode);
+
+        s_hin = 0;
+        s_hout = 0;
+    }
+
+    --s_term_began;
+}
+
+void term_sigint()
+{
+    if (s_term_began)
+    {
+        s_term_began = 1;
+        term_end();
     }
 }
+
+class auto_term_end
+{
+public:
+    ~auto_term_end() { term_sigint(); }
+};
+static auto_term_end s_auto_term_end;
 
 #ifdef _WIN32
 static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
@@ -378,6 +433,10 @@ int32_t term_in()
 #endif
 #endif
 
+    assert(s_term_began);
+    if (!s_term_began || !s_hin)
+        return -1;
+
     if (!s_pushed.empty())
         return s_pushed.read();
 
@@ -404,66 +463,53 @@ int32_t term_in()
 #ifdef _WIN32
     static cstring s_tmp_utf8;
 
-    DWORD mode;
-    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
-    if (GetConsoleMode(h, &mode))
-    {
 again:
-        DWORD num_read;
+    DWORD num_read;
 #define USE_READCONSOLEINPUT
 #ifdef USE_READCONSOLEINPUT
-        // FUTURE: add a mode that conditionally applies/removes
-        // ENABLE_MOUSE_INPUT like Clink does?
-        INPUT_RECORD record;
-        if (!ReadConsoleInputW(h, &record, 1, &num_read) || 1 != num_read)
-            return -1;
-        switch (record.EventType)
+    // FUTURE: add a mode that conditionally applies/removes
+    // ENABLE_MOUSE_INPUT like Clink does?
+    INPUT_RECORD record;
+    if (!ReadConsoleInputW(s_hin, &record, 1, &num_read) || 1 != num_read)
+        return -1;
+    switch (record.EventType)
+    {
+    case KEY_EVENT:
+        if (is_invalid_keyevent(record.Event.KeyEvent))
+            goto again;
+        break;
+    case MOUSE_EVENT:
         {
-        case KEY_EVENT:
-            if (is_invalid_keyevent(record.Event.KeyEvent))
-                goto again;
-            break;
-        case MOUSE_EVENT:
+            cstring seq;
+            if (generate_mouse_sequences(record.Event.MouseEvent, seq))
             {
-                cstring seq;
-                if (generate_mouse_sequences(record.Event.MouseEvent, seq))
-                {
-                    for (size_t i = 0; i < seq.length(); ++i)
-                        s_pushed.push(seq.c_str()[i]);
-                    return s_pushed.read();
-                }
+                for (size_t i = 0; i < seq.length(); ++i)
+                    s_pushed.push(seq.c_str()[i]);
+                return s_pushed.read();
             }
-            goto again;
-        case WINDOW_BUFFER_SIZE_EVENT:
-            return c_input_terminal_resize;
-        default:
-            assert(false);
-        case MENU_EVENT:
-        case FOCUS_EVENT:
-            goto again;
         }
-        assert(record.EventType == KEY_EVENT);
+        goto again;
+    case WINDOW_BUFFER_SIZE_EVENT:
+        return c_input_terminal_resize;
+    default:
+        assert(false);
+    case MENU_EVENT:
+    case FOCUS_EVENT:
+        goto again;
+    }
+    assert(record.EventType == KEY_EVENT);
 #define tmp_input record.Event.KeyEvent.uChar.UnicodeChar
 #else
-        WCHAR tmp;
-        if (!ReadConsoleW(h, &tmp, 1, &num_read, nullptr) || 1 != num_read)
-            return -1;
+    WCHAR tmp;
+    if (!ReadConsoleW(h, &tmp, 1, &num_read, nullptr) || 1 != num_read)
+        return -1;
 #define tmp_input tmp
 #endif
-        const int32_t pushed = s_pushed.push_utf16(tmp_input);
-        if (pushed < 0)
-            goto again;
-        return s_pushed.read();
+    const int32_t pushed = s_pushed.push_utf16(tmp_input);
+    if (pushed < 0)
+        goto again;
+    return s_pushed.read();
 #undef tmp_input
-    }
-    else
-    {
-        char c;
-        DWORD num_read;
-        if (!ReadFile(h, &c, 1, &num_read, nullptr) || !num_read)
-            return -1;
-        return uint8_t(c);
-    }
 #else
     // TODO-LINUX: Use fgetc?
     // TODO-LINUX: What to do upon EOF?
@@ -472,6 +518,16 @@ again:
 
 int32_t term_in_peek()
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_term_began || !s_hin)
+        return -1;
+
     if (!s_pushed.empty())
         return s_pushed.peek();
 
@@ -504,9 +560,18 @@ bool term_in_avail(const DWORD _timeout)
 {
 #ifdef _WIN32
 #ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_term_began || !s_hin)
+        return false;
+
+#ifdef _WIN32
+#ifdef DEBUG
     DWORD mode;
-    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
-    assert(GetConsoleMode(h, &mode));
+    assert(GetConsoleMode(s_hin, &mode));
 #endif
 #endif
 
@@ -522,7 +587,6 @@ bool term_in_avail(const DWORD _timeout)
     bool ret = !s_pushed.empty();
     bool sleep_on_error = false;
     const DWORD stop = GetTickCount() + _timeout;
-    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
     while (!ret)
     {
         DWORD timeout = stop - GetTickCount();
@@ -537,13 +601,13 @@ bool term_in_avail(const DWORD _timeout)
             timeout -= sleep;
         }
 
-        const DWORD waited = WaitForSingleObject(hin, timeout);
+        const DWORD waited = WaitForSingleObject(s_hin, timeout);
         if (waited == WAIT_TIMEOUT)
             break;
 
         DWORD count;
         INPUT_RECORD record;
-        if (!ReadConsoleInputW(hin, &record, 1, &count) || 1 != count)
+        if (!ReadConsoleInputW(s_hin, &record, 1, &count) || 1 != count)
         {
             // Handle's probably invalid if ReadConsoleInput() failed.
             sleep_on_error = true;
@@ -599,6 +663,12 @@ bool term_in_avail(const DWORD _timeout)
 
 bool term_push_macro_text(const char* text, size_t len)
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
     macro_playback* m = new macro_playback;
     if (!m)
         return false;
@@ -616,6 +686,16 @@ bool term_push_macro_text(const char* text, size_t len)
 
 void enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
 {
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_term_began || !s_hin || !s_hout)
+        return;
+
     // https://tintin.mudhalla.net/info/xterm/
     //
     // XTERM MOUSE TRACKING
@@ -646,27 +726,23 @@ void enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
         if (mode != mouse_input_mode::none)
             new_console_mode |= ENABLE_MOUSE_INPUT;
         else
-            new_console_mode |= (s_original_console_input_mode & ENABLE_QUICK_EDIT_MODE);
+            new_console_mode |= (s_prev_input_mode & ENABLE_QUICK_EDIT_MODE);
         if (old_console_mode != new_console_mode)
             SetConsoleMode(hin, new_console_mode);
     }
     else
 #endif
     {
-        // TODO: on both graceful and abnormal termination, for both Windows
-        // and Linux, restore the original mouse input mode (which might be
-        // impossible, so maybe always turn off mouse input?).
         switch (mode)
         {
-        case mouse_input_mode::none:    term_out("\x1b[?1000l"); break;
+        case mouse_input_mode::none:    term_out("\x1b[?1000l\x1b[?1002l\x1b[?1003l"); break;
         case mouse_input_mode::VT200:   term_out("\x1b[?1000h"); break;
         case mouse_input_mode::DRAG:    term_out("\x1b[?1002h"); break;
         case mouse_input_mode::ANY:     term_out("\x1b[?1003h"); break;
         default:                        assert(false); break;
         }
 
-        if (mode != mouse_input_mode::none)
-            term_out(sgr_encoding ? "\x1b[?1006h" : "\x1b[?1006l");
+        term_out(sgr_encoding ? "\x1b[?1006h" : "\x1b[?1006l");
     }
 
     s_mouse_input_mode = mode;

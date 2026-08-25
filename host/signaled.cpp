@@ -30,11 +30,7 @@ auto_terminal_init::~auto_terminal_init()
 auto_terminal_init::auto_terminal_init()
 {
     if (!tib::is_console())
-    {
-no_cleanup:
-        m_exit_cleanup = false;
         return;
-    }
 
 #ifdef _WIN32
     HANDLE handles[3] = {};
@@ -42,9 +38,9 @@ no_cleanup:
     {
         handles[i] = GetStdHandle(STD_INPUT_HANDLE - i);
         if (!handles[i])
-            goto no_cleanup;
+            return;
         if (!GetConsoleMode(handles[i], &m_orig_modes[i]))
-            goto no_cleanup;
+            return;
     }
 
     m_restore_modes = true;
@@ -61,12 +57,6 @@ no_cleanup:
 
 void auto_terminal_init::restore()
 {
-    if (m_exit_cleanup)
-    {
-        tib::term_out("\x1b[m", 3);
-        m_exit_cleanup = false;
-    }
-
 #ifdef _WIN32
     if (m_restore_modes)
     {

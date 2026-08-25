@@ -13,6 +13,7 @@ constexpr int32_t c_input_terminal_resize = -2;
 
 void term_begin();
 void term_end();
+void term_sigint();
 
 int32_t term_in();
 int32_t term_in_peek();
