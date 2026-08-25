@@ -190,96 +190,95 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
 
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    // TODO: add documentation explaining how the mouse_input_operation is
-    // used, and why.
+// TODO: broader topic -- need to normalize when/which commands return -1, as
+// now it means "unhandled; someone else can add fallback handling".
+
+    if (!params || params->size() < 3)
+    {
+        ctx.clear_named_value(operation_name);
+        return -1;
+    }
+
     static const char hwheel_column_name[] = "mouse_hwheel_column";
     static const char wheel_column_name[] = "mouse_wheel_column";
 
-    if (params && params->size() >= 3)
+    const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
+    const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
+    switch (base_button)
     {
-        const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
-        const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
-        switch (base_button)
+    case 64:
+    case 65:
+        // Mouse WHEEL.
         {
-        case 64:
-        case 65:
-            // Mouse WHEEL.
-            {
-                const int16_t cursor_column = cursor_column_continuation(ctx, name, wheel_column_name);
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, wheel_column_name);
 
-                UINT scroll_lines = 3;
+            UINT scroll_lines = 3;
 #ifdef _WIN32
-                SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
 #endif
-                if (scroll_lines == UINT_MAX)
-                {
-                    // Page scrolling.
-                    scroll_lines = uint32_t(max(ctx.get_inner_extent().y - 1, 1));
-                }
-                else
-                {
-                    // Constrain to one less than the number of visible rows.
-                    scroll_lines = uint32_t(max(min<int32_t>(ctx.get_inner_extent().y - 1, scroll_lines), 1));
-                }
-                if (scroll_lines)
-                    ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
-                return 0;
-            }
-
-        case 66:
-        case 67:
-            // Mouse HWHEEL.
+            if (scroll_lines == UINT_MAX)
             {
-                const int16_t cursor_column = cursor_column_continuation(ctx, name, hwheel_column_name);
-
-                UINT scroll_chars = 3;
-#ifdef _WIN32
-                SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
-#endif
-                if (scroll_chars == UINT_MAX)
-                    scroll_chars = uint32_t(max(ctx.get_inner_extent().x - 1, 1));
-                if (scroll_chars)
-                    ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
-                return 0;
+                // Page scrolling.
+                scroll_lines = uint32_t(max(ctx.get_inner_extent().y - 1, 1));
             }
+            else
+            {
+                // Constrain to one less than the number of visible rows.
+                scroll_lines = uint32_t(max(min<int32_t>(ctx.get_inner_extent().y - 1, scroll_lines), 1));
+            }
+            if (scroll_lines)
+                ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
+            return 0;
         }
-    }
 
-    ctx.clear_named_value(operation_name);
-
-    // Left click.  Clicking within the inner extents sets the caret; clicking
-    // outside is ignored (and returns -1 so something else can opt to provide
-    // a fallback handler).
-// TODO: need to normalize when/which commands return -1, as now it means
-// "unhandled; someone else can add fallback handling".
-    if (params && params->size() >= 3 && key == 'M')
-    {
-        const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
-        const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
-        switch (base_button)
+    case 66:
+    case 67:
+        // Mouse HWHEEL.
         {
-        case 0:
-            // Left button.
-            {
-                const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
-                const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
-                return ctx.set_caret_from_screen(x, y) ? 0 : -1;
-            }
-        case 2:
-            // Right button.
-            {
-                if (ctx.get_selection_state().has_selection())
-                {
-                    ctx.copy_to_clipboard();
-                    ctx.set_selection(ctx.get_caret(), ctx.get_caret());
-                }
-                else
-                {
-                    ctx.paste_from_clipboard();
-                }
-                return 0;
-            }
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, hwheel_column_name);
+
+            UINT scroll_chars = 3;
+#ifdef _WIN32
+            SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
+#endif
+            if (scroll_chars == UINT_MAX)
+                scroll_chars = uint32_t(max(ctx.get_inner_extent().x - 1, 1));
+            if (scroll_chars)
+                ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
+            return 0;
         }
+
+    case 0:
+        // Left click.  Clicking within the inner extents sets the caret;
+        // clicking outside is ignored (and returns -1 so something else can
+        // opt to provide a fallback handler).
+        if (key == 'M')
+        {
+            ctx.clear_named_value(operation_name);
+            const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
+            const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
+            return ctx.set_caret_from_screen(x, y) ? 0 : -1;
+        }
+        break;
+
+    case 2:
+        // Right click.  Copies and clears any selection to the clipboard,
+        // otherwise it pastes from the clipboard.
+        if (key == 'M')
+        {
+            ctx.clear_named_value(operation_name);
+            if (ctx.get_selection_state().has_selection())
+            {
+                ctx.copy_to_clipboard();
+                ctx.set_selection(ctx.get_caret(), ctx.get_caret());
+            }
+            else
+            {
+                ctx.paste_from_clipboard();
+            }
+            return 0;
+        }
+        break;
     }
 
     // TODO: Handle mouse input sequence for left mouse button double click.
@@ -295,6 +294,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     // extend the selection to the textpos_t of the drag position (or on word
     // boundaries if double-click was used before dragging).
 
+    ctx.clear_named_value(operation_name);
     return -1;
 }
 
