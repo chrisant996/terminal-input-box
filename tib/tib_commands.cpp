@@ -166,7 +166,7 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 //------------------------------------------------------------------------------
 
-static const char operation_name[] = "mouse_input_operation";
+static const char c_operation_name[] = "mouse_input_operation";
 
 static uint32_t get_scroll_lines(const editor_context& ctx)
 {
@@ -207,7 +207,7 @@ static uint32_t get_scroll_chars(const editor_context& ctx)
 
 static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* var_name)
 {
-    const char* const operation = ctx.get_named_value(operation_name);
+    const char* const operation = ctx.get_named_value(c_operation_name);
     const bool continuing = !strcmp(ctx.get_last_command(), command_name) && operation && !strcmp(operation, "hwheel");
 
     int32_t cursor_column;
@@ -221,7 +221,7 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
         ctx.set_named_value_int(var_name, cursor_column);
     }
 
-    ctx.set_named_value(operation_name, "hwheel");
+    ctx.set_named_value(c_operation_name, "hwheel");
 
     return int16_t(cursor_column);
 }
@@ -233,12 +233,12 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
 
     if (!params || params->size() < 3)
     {
-        ctx.clear_named_value(operation_name);
+        ctx.clear_named_value(c_operation_name);
         return -1;
     }
 
-    static const char hwheel_column_name[] = "mouse_hwheel_column";
-    static const char wheel_column_name[] = "mouse_wheel_column";
+    static const char c_hwheel_column_name[] = "mouse_hwheel_column";
+    static const char c_wheel_column_name[] = "mouse_wheel_column";
 
     struct mouse_click_state
     {
@@ -248,7 +248,16 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         uint32_t x = 0;
         uint32_t y = 0;
     };
-    static mouse_click_state last_click;
+    static mouse_click_state s_last_click;
+
+    struct mouse_drag_state
+    {
+        const void* context = nullptr;
+        textpos_t begin = 0;
+        textpos_t end = 0;
+        bool word = false;
+    };
+    static mouse_drag_state s_drag;
 
     const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
     const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
@@ -264,15 +273,15 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
 #else
         constexpr auto double_click_time = std::chrono::milliseconds(500);
 #endif
-        double_click = (base_button == 0 && last_click.context == &ctx &&
-                        last_click.button == base_button &&
-                        last_click.x == x && last_click.y == y &&
-                        now - last_click.time <= double_click_time);
-        last_click.time = now;
-        last_click.context = &ctx;
-        last_click.button = base_button;
-        last_click.x = x;
-        last_click.y = y;
+        double_click = (base_button == 0 && s_last_click.context == &ctx &&
+                        s_last_click.button == base_button &&
+                        s_last_click.x == x && s_last_click.y == y &&
+                        now - s_last_click.time <= double_click_time);
+        s_last_click.time = now;
+        s_last_click.context = &ctx;
+        s_last_click.button = base_button;
+        s_last_click.x = x;
+        s_last_click.y = y;
     }
 
     switch (base_button)
@@ -281,7 +290,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     case 65:
         // Mouse WHEEL.
         {
-            const int16_t cursor_column = cursor_column_continuation(ctx, name, wheel_column_name);
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, c_wheel_column_name);
             const uint32_t scroll_lines = get_scroll_lines(ctx);
             if (scroll_lines)
                 ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
@@ -292,7 +301,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     case 67:
         // Mouse HWHEEL.
         {
-            const int16_t cursor_column = cursor_column_continuation(ctx, name, hwheel_column_name);
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, c_hwheel_column_name);
             const uint32_t scroll_chars = get_scroll_chars(ctx);
             if (scroll_chars)
                 ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
@@ -311,17 +320,47 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
             // controlled more judiciously.
             if (!ctx.set_caret_from_screen(x, y))
             {
-                ctx.clear_named_value(operation_name);
+                s_drag.context = nullptr;
+                ctx.clear_named_value(c_operation_name);
                 return -1;
             }
             if (double_click)
             {
                 ctx.select_word();
-                ctx.set_named_value(operation_name, "double_click");
+                ctx.set_named_value(c_operation_name, "double_click");
             }
             else
             {
-                ctx.clear_named_value(operation_name);
+                ctx.clear_named_value(c_operation_name);
+            }
+            const auto& selection = ctx.get_selection_state();
+            s_drag.context = &ctx;
+            s_drag.begin = selection.get_sel_begin();
+            s_drag.end = selection.get_sel_end();
+            s_drag.word = double_click;
+            return 0;
+        }
+        break;
+
+    case 32:
+        if (key == 'M' && s_drag.context == &ctx)
+        {
+            if (!ctx.set_caret_from_screen(x, y))
+                return -1;
+
+            const textpos_t pos = ctx.get_caret();
+            if (!s_drag.word)
+            {
+                ctx.set_selection(s_drag.begin, pos);
+            }
+            else
+            {
+                ctx.select_word();
+                const auto& selection = ctx.get_selection_state();
+                if (pos < s_drag.begin)
+                    ctx.set_selection(s_drag.end, selection.get_sel_begin());
+                else
+                    ctx.set_selection(s_drag.begin, selection.get_sel_end());
             }
             return 0;
         }
@@ -332,7 +371,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // otherwise it pastes from the clipboard.
         if (key == 'M')
         {
-            ctx.clear_named_value(operation_name);
+            ctx.clear_named_value(c_operation_name);
             if (ctx.get_selection_state().has_selection())
             {
                 ctx.copy_to_clipboard();
@@ -347,12 +386,9 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         break;
     }
 
-    // TODO: Handle mouse drag while left button is down.  This requires
-    // remembering the textpos_t of the initial click, so that dragging can
-    // extend the selection to the textpos_t of the drag position (or on word
-    // boundaries if double-click was used before dragging).
-
-    ctx.clear_named_value(operation_name);
+    if (key == 'm' && s_drag.context == &ctx)
+        s_drag.context = nullptr;
+    ctx.clear_named_value(c_operation_name);
     return -1;
 }
 
