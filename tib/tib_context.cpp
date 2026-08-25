@@ -860,16 +860,17 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
         if (binding->get_type() == binding_type::func)
         {
             const char* const name = binding->get_text();
-            set_last_command(name);
-
             editor_command_func_t func = lookup_command(name);
             if (!func)
             {
+                set_last_command(name);
                 ding();
                 return -1;
             }
 
-            return func(*this, key, name, params);
+            const int32_t result = func(*this, key, name, params);
+            set_last_command(name);
+            return result;
         }
     }
     else
