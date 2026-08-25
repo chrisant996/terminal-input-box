@@ -167,14 +167,15 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    static const char operation_name[] = "mouse_input_operation";
+    static const char column_name[] = "mouse_hwheel_column";
+
     if (params && params->size() >= 3)
     {
         const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
         const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
         if (base_button == 66 || base_button == 67)
         {
-            static const char operation_name[] = "mouse_input_operation";
-            static const char column_name[] = "mouse_hwheel_column";
             const char* const operation = ctx.get_named_value(operation_name);
             // TODO: need an is_same_command() helper to compare the resolved
             // function pointer, not the command name, otherwise things will
@@ -208,7 +209,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         }
     }
 
-    ctx.clear_named_value("mouse_input_operation");
+    ctx.clear_named_value(operation_name);
 
     // TODO: Handle mouse wheel input in multiline mode; it should move the
     // caret up or down by SPI_GETWHEELSCROLLLINES lines.  Similar to the
