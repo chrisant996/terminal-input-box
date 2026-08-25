@@ -322,6 +322,20 @@ coord display_manager::get_extent() const
     return m_displayed.m_extent;
 }
 
+coord display_manager::get_inner_extent() const
+{
+    const border_definition* b = m_style ? m_style->border : nullptr;
+    const uint16_t b_left_width = b->get_left_width();
+    const uint16_t b_right_width = b->get_right_width();
+    const uint16_t extra_border_width = b_left_width + b_right_width;
+    const uint16_t b_height = !!b->has_top() + !!b->has_bottom();
+
+    coord inner_extent = m_displayed.m_extent;
+    inner_extent.x -= extra_border_width;
+    inner_extent.y -= b_height;
+    return inner_extent;
+}
+
 void display_manager::clear_scroll_offsets()
 {
     set_scroll_offsets(0, 0);
@@ -413,6 +427,108 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
     m_hwheel_exclusion_left = m_left;
     m_hwheel_exclusion_caret = caret;
     m_hwheel_exclusion_change_counter = m_buffer->get_change_counter();
+    return changed;
+}
+
+bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection)
+{
+    // TODO: probably part of this can be refactored into a helper function
+    // that serves both this and also moving the caret up/down one display
+    // line.
+    const coord max_size = get_effective_max_size();
+    if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
+        return false;
+
+    const int32_t current_row = m_displayed.m_top + m_displayed.m_cursor.y;
+    const int32_t wanted_row = max(current_row + rows, 0);
+    const cstring& text = m_buffer->get_text();
+    display_row_start target = { 0, false };
+    display_row_start last = target;
+    int32_t row = 0;
+    uint16_t row_width = 0;
+    wcwidth_iter scan(text.c_str(), text.length());
+
+    while (scan.more() && row < wanted_row)
+    {
+        scan.next();
+        const char* const p = scan.character_pointer();
+        const textpos_t offset = textpos_t(p - text.c_str());
+        if (scan.character_wcwidth_signed() < 0)
+        {
+            if (*p == '\n')
+            {
+                last = { textpos_t(offset + scan.character_length()), false };
+                ++row;
+                row_width = 0;
+                continue;
+            }
+            if (row_width + 1 > uint16_t(max_size.x))
+            {
+                last = { offset, false };
+                ++row;
+                row_width = 0;
+                if (row >= wanted_row)
+                    break;
+            }
+            ++row_width;
+            if (row_width + 1 > uint16_t(max_size.x))
+            {
+                last = { offset, true };
+                ++row;
+                row_width = 0;
+                if (row >= wanted_row)
+                    break;
+            }
+            ++row_width;
+        }
+        else
+        {
+            const uint16_t width = scan.character_wcwidth_twoctrl();
+            if (row_width + width > uint16_t(max_size.x))
+            {
+                last = { offset, false };
+                ++row;
+                row_width = 0;
+                if (row >= wanted_row)
+                    break;
+            }
+            row_width += width;
+        }
+    }
+
+    target = last;
+    if (row < wanted_row && row_width == uint16_t(max_size.x))
+    {
+        target = { textpos_t(text.length()), false };
+        ++row;
+    }
+
+    cursor_column = max(cursor_column - m_displayed.m_inner_offset.x, 0);
+    textpos_t caret = target.offset;
+    uint32_t screen_column = 0;
+    if (target.pending)
+    {
+        if (cursor_column)
+        {
+            caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
+            screen_column = 1;
+        }
+    }
+    while (caret < text.length() && screen_column < uint32_t(cursor_column))
+    {
+        wcwidth_iter iter(text.c_str() + caret, text.length() - caret);
+        const char32_t c = iter.next();
+        if (c == '\n')
+            break;
+        const uint32_t width = iter.character_wcwidth_twoctrl();
+        if (screen_column + width > uint32_t(cursor_column))
+            break;
+        caret += iter.character_length();
+        screen_column += width;
+    }
+
+    const bool changed = caret != selection.get_caret();
+    selection.set_caret(caret);
     return changed;
 }
 

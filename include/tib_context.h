@@ -75,6 +75,7 @@ public:
     void                set_origin(int16_t x=-1, int16_t y=-1) { m_display.set_origin(x, y); }
     coord               get_relative_cursor() const { return m_display.get_relative_cursor(); }
     coord               get_extent() const { return m_display.get_extent(); }
+    coord               get_inner_extent() const { return m_display.get_inner_extent(); }
 
     void                set_callbacks(editor_callbacks* callbacks);
     std::shared_ptr<const color_table> get_color_table() const;
@@ -109,10 +110,13 @@ public:
     const char*         get_last_command() const noexcept { return m_last_command.c_str(); }
     void                set_last_command(const char* name);
     const char*         get_named_value(const char* name) const;
+    int32_t             get_named_value_int(const char* name) const;
     void                set_named_value(const char* name, const char* value);
+    void                set_named_value_int(const char* name, int32_t value);
     void                clear_named_value(const char* name);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
+    bool                move_caret_vertically(int32_t rows, int32_t cursor_column) { return m_display.move_caret_vertically(rows, cursor_column, m_selection); }
     bool                set_caret_from_screen(uint32_t x, uint32_t y) { return m_display.set_caret_from_screen(x, y, m_selection); }
 
 #if 0

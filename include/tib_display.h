@@ -155,12 +155,14 @@ public:
     coord               get_effective_max_size(bool omit_scroll_markers=false);
     coord               get_relative_cursor() const { return m_relative_cursor; }
     coord               get_extent() const;
+    coord               get_inner_extent() const;
 
     textpos_t           get_left() const { return m_left; }
     uint32_t            get_top() const { return m_top; }
     void                set_scroll_offsets(textpos_t left, uint32_t top);
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection);
+    bool                move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection);
     bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection);
 
     void                invalidate() { m_displayed.m_change_counter = 0; }

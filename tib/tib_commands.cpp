@@ -165,59 +165,87 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 //------------------------------------------------------------------------------
 
+static const char operation_name[] = "mouse_input_operation";
+
+static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* var_name)
+{
+    const char* const operation = ctx.get_named_value(operation_name);
+    const bool continuing = !strcmp(ctx.get_last_command(), command_name) && operation && !strcmp(operation, "hwheel");
+
+    int32_t cursor_column;
+    if (continuing)
+    {
+        cursor_column = ctx.get_named_value_int(var_name);
+    }
+    else
+    {
+        cursor_column = ctx.get_relative_cursor().x;
+        ctx.set_named_value_int(var_name, cursor_column);
+    }
+
+    ctx.set_named_value(operation_name, "hwheel");
+
+    return int16_t(cursor_column);
+}
+
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     // TODO: add documentation explaining how the mouse_input_operation is
     // used, and why.
-    static const char operation_name[] = "mouse_input_operation";
-    static const char column_name[] = "mouse_hwheel_column";
+    static const char hwheel_column_name[] = "mouse_hwheel_column";
+    static const char wheel_column_name[] = "mouse_wheel_column";
 
     if (params && params->size() >= 3)
     {
         const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
         const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
-        if (base_button == 66 || base_button == 67)
+        switch (base_button)
         {
-            const char* const operation = ctx.get_named_value(operation_name);
-            // TODO: need an is_same_command() helper to compare the resolved
-            // function pointer, not the command name, otherwise things will
-            // go wrong when two different command names resolve to the same
-            // function pointer.
-            const bool continuing = !strcmp(ctx.get_last_command(), name) && operation && !strcmp(operation, "hwheel");
-
-            int32_t cursor_column;
-            if (continuing)
+        case 64:
+        case 65:
+            // Mouse WHEEL.
             {
-                cursor_column = atoi(ctx.get_named_value(column_name));
-            }
-            else
-            {
-                cursor_column = ctx.get_relative_cursor().x;
-                char value[16];
-                snprintf(value, sizeof(value), "%d", cursor_column);
-                ctx.set_named_value(column_name, value);
-            }
-            ctx.set_named_value(operation_name, "hwheel");
+                const int16_t cursor_column = cursor_column_continuation(ctx, name, wheel_column_name);
 
-            UINT scroll_chars = 3;
+                UINT scroll_lines = 3;
 #ifdef _WIN32
-            SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
+                SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
 #endif
-            if (scroll_chars == UINT_MAX)
-                scroll_chars = uint32_t(max(ctx.get_extent().x - 1, 1));
-            if (scroll_chars)
-                ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
-            return 0;
+                if (scroll_lines == UINT_MAX)
+                {
+                    // Page scrolling.
+                    scroll_lines = uint32_t(max(ctx.get_inner_extent().y - 1, 1));
+                }
+                else
+                {
+                    // Constrain to one less than the number of visible rows.
+                    scroll_lines = uint32_t(max(min<int32_t>(ctx.get_inner_extent().y - 1, scroll_lines), 1));
+                }
+                if (scroll_lines)
+                    ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
+                return 0;
+            }
+
+        case 66:
+        case 67:
+            // Mouse HWHEEL.
+            {
+                const int16_t cursor_column = cursor_column_continuation(ctx, name, hwheel_column_name);
+
+                UINT scroll_chars = 3;
+#ifdef _WIN32
+                SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
+#endif
+                if (scroll_chars == UINT_MAX)
+                    scroll_chars = uint32_t(max(ctx.get_inner_extent().x - 1, 1));
+                if (scroll_chars)
+                    ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
+                return 0;
+            }
         }
     }
 
     ctx.clear_named_value(operation_name);
-
-    // TODO: Handle mouse wheel input in multiline mode; it should move the
-    // caret up or down by SPI_GETWHEELSCROLLLINES lines.  Similar to the
-    // hwheel handling, it should remember the target screen column for moving
-    // the caret up/down through the display lines, and reset it when wheel
-    // input was not the previous action.
 
     // Left click.  Clicking within the inner extents sets the caret; clicking
     // outside is ignored (and returns -1 so something else can opt to provide
@@ -227,7 +255,8 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     if (params && params->size() >= 3 && key == 'M')
     {
         const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
-        switch (button & ~uint32_t(4 | 8 | 16))
+        const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
+        switch (base_button)
         {
         case 0:
             // Left button.

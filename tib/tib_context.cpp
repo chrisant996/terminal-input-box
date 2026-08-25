@@ -584,6 +584,14 @@ const char* editor_context::get_named_value(const char* name) const
     return (found == m_named_values.end()) ? nullptr : found->second.c_str();
 }
 
+int32_t editor_context::get_named_value_int(const char* name) const
+{
+    const char* value = get_named_value(name);
+    if (!value)
+        return 0;
+    return atoi(value);
+}
+
 void editor_context::set_named_value(const char* name, const char* value)
 {
     auto found = m_named_values.find(name);
@@ -591,6 +599,18 @@ void editor_context::set_named_value(const char* name, const char* value)
         m_named_values.emplace(cstring(name), cstring(value));
     else
         found->second.set(value);
+}
+
+void editor_context::set_named_value_int(const char* name, int32_t value)
+{
+    cstring tmp;
+    tmp.printf("%d", value);
+
+    auto found = m_named_values.find(name);
+    if (found == m_named_values.end())
+        m_named_values.emplace(cstring(name), std::move(tmp));
+    else
+        found->second = std::move(tmp);
 }
 
 void editor_context::clear_named_value(const char* name)
