@@ -167,19 +167,48 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    // TODO: Handle mouse hwheel input in single line mode; it should scroll
-    // the input box horizonally per SPI_GETWHEELSCROLLCHARS, and try to keep
-    // the cursor at the same screen column while scrolling the input box
-    // content.  Since there may be "rounding errors" per se due to grapheme
-    // width boundaries, it should reset the remembered screen column when
-    // hwheel scrolling was not the previous action.  get_last_command() can
-    // report whether mouse_input() was the last command, but it needs to
-    // also remember when the hwheel sub-operation was the last sub-operation.
-    // In order to remember the screen column, editor_context should provide
-    // public methods to get_named_value(), set_named_value(), and
-    // clear_named_value().  To keep things simple, the value type can simply
-    // always be a char string; use a std::map<cstring, cstring> and if
-    // possible support looking up via a const char*.
+    if (params && params->size() >= 3)
+    {
+        const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
+        const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
+        if (base_button == 66 || base_button == 67)
+        {
+            static const char operation_name[] = "mouse_input_operation";
+            static const char column_name[] = "mouse_hwheel_column";
+            const char* const operation = ctx.get_named_value(operation_name);
+            // TODO: need an is_same_command() helper to compare the resolved
+            // function pointer, not the command name, otherwise things will
+            // go wrong when two different command names resolve to the same
+            // function pointer.
+            const bool continuing = !strcmp(ctx.get_last_command(), name) && operation && !strcmp(operation, "hwheel");
+
+            int32_t cursor_column;
+            if (continuing)
+            {
+                cursor_column = atoi(ctx.get_named_value(column_name));
+            }
+            else
+            {
+                cursor_column = ctx.get_relative_cursor().x;
+                char value[16];
+                snprintf(value, sizeof(value), "%d", cursor_column);
+                ctx.set_named_value(column_name, value);
+            }
+            ctx.set_named_value(operation_name, "hwheel");
+
+            UINT scroll_chars = 3;
+#ifdef _WIN32
+            SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
+#endif
+            if (scroll_chars == UINT_MAX)
+                scroll_chars = uint32_t(max(ctx.get_extent().x - 1, 1));
+            if (scroll_chars)
+                ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
+            return 0;
+        }
+    }
+
+    ctx.clear_named_value("mouse_input_operation");
 
     // TODO: Handle mouse wheel input in multiline mode; it should move the
     // caret up or down by SPI_GETWHEELSCROLLLINES lines.  Similar to the

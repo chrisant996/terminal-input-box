@@ -110,6 +110,8 @@ public:
     void                set_named_value(const char* name, const char* value);
     void                clear_named_value(const char* name);
 
+    bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
+
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);
 #endif

@@ -151,6 +151,7 @@ public:
 
     textpos_t           get_left() const { return m_left; }
     void                clear_scroll_offsets();
+    bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection);
 
     void                invalidate() { m_displayed.m_change_counter = 0; }
     void                invalidate_border() { m_border_dirty = true; }
@@ -187,6 +188,7 @@ private:
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.
     bool                m_border_dirty = false;
+    bool                m_manual_horiz_scroll = false;
     coord               m_relative_cursor = { -1, -1 };
 
     cstring             m_accumulator;

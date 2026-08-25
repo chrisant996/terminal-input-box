@@ -325,6 +325,88 @@ void display_manager::clear_scroll_offsets()
 {
     m_top = 0;
     m_left = 0;
+    m_manual_horiz_scroll = false;
+}
+
+bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection)
+{
+    if (!columns || get_effective_max_size().y != 1)
+        return false;
+
+    cursor_column -= m_displayed.m_inner_offset.x;
+
+    const cstring& text = m_buffer->get_text();
+    const textpos_t length = textpos_t(text.length());
+    textpos_t left = m_left;
+    uint32_t remaining = uint32_t(columns < 0 ? -columns : columns);
+
+    if (columns > 0)
+    {
+        while (left < length && remaining)
+        {
+            uint16_t width;
+            const textpos_t next = forward_one_grapheme(text.c_str(), text.length(), left, &width);
+            if (next >= length || remaining < width)
+                break;
+
+            textpos_t test = next;
+            uint32_t available = 0;
+            if (m_style->horiz_scroll_markers)
+            {
+                test = forward_one_grapheme(text.c_str(), text.length(), test, nullptr);
+                available = c_horz_scroll_indicator_chars;
+            }
+            while (test < length && available < uint32_t(max(cursor_column, 0)))
+            {
+                uint16_t test_width;
+                test = forward_one_grapheme(text.c_str(), text.length(), test, &test_width);
+                available += test_width;
+            }
+            if (available < uint32_t(max(cursor_column, 0)))
+                break;
+
+            left = next;
+            remaining -= width;
+        }
+    }
+    else
+    {
+        while (left > 0 && remaining)
+        {
+            uint16_t width;
+            const textpos_t prev = backward_one_grapheme(text.c_str(), text.length(), left, &width);
+            if (remaining < width)
+                break;
+            left = prev;
+            remaining -= width;
+        }
+    }
+
+    if (left == m_left)
+        return false;
+
+    textpos_t caret = left;
+    uint32_t screen_column = 0;
+    if (left && m_style->horiz_scroll_markers)
+    {
+        caret = forward_one_grapheme(text.c_str(), text.length(), left, nullptr);
+        screen_column = c_horz_scroll_indicator_chars;
+    }
+
+    while (caret < length && screen_column < uint32_t(max(cursor_column, 0)))
+    {
+        uint16_t width;
+        const textpos_t next = forward_one_grapheme(text.c_str(), text.length(), caret, &width);
+        if (screen_column + width > uint32_t(cursor_column))
+            break;
+        caret = next;
+        screen_column += width;
+    }
+
+    m_left = left;
+    m_manual_horiz_scroll = true;
+    selection.set_caret(caret);
+    return true;
 }
 
 void display_manager::ensure_left()
@@ -356,6 +438,12 @@ void display_manager::ensure_left()
         assert(g != m_tmp_graphemes.cend());
         width -= g->width;
         m_left += g->length;
+    }
+
+    if (m_manual_horiz_scroll)
+    {
+        m_manual_horiz_scroll = false;
+        return;
     }
 
     // Auto-scroll horizontally backward.
