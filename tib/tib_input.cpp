@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_input.h"
+#include "tib_output.h"
 #include <conio.h>
 #include <assert.h>
 
@@ -27,6 +28,24 @@ struct macro_playback
 };
 
 static macro_playback* s_macro_playback = nullptr;
+static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
+static bool s_mouse_sgr_encoding = true;
+static DWORD s_prev_mouse_button_state = 0;
+static DWORD s_prev_input_mode = 0;
+static int32_t s_term_began = 0;
+
+static DWORD get_original_console_input_mode()
+{
+    DWORD mode;
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    if (!GetConsoleMode(hin, &mode))
+        return (ENABLE_AUTO_POSITION|ENABLE_EXTENDED_FLAGS|
+                ENABLE_QUICK_EDIT_MODE|ENABLE_INSERT_MODE|
+                ENABLE_MOUSE_INPUT|ENABLE_ECHO_INPUT|
+                ENABLE_LINE_INPUT|ENABLE_PROCESSED_INPUT);
+    return mode;
+}
+static DWORD s_original_console_input_mode = get_original_console_input_mode();
 
 #ifdef _WIN32
 #ifdef DEBUG
@@ -48,6 +67,20 @@ static int32_t translate_special(char c)
 
 class pushed_input
 {
+    // The data size was originally 16, but it needs to be able to hold at
+    // least as many mouse click/release events as can be generated from a
+    // single MOUSE_EVENT_RECORD.
+    //
+    // One event could be `CSI < 255 ; 9999 ; 9999 M` so call that 17 bytes,
+    // and round up to 20.
+    //
+    // One MOUSE_EVENT_RECORD could generate one event per button state
+    // change, and it supports 3 buttons plus potentially wheel and hwheel, so
+    // call that 5 events per record.
+    //
+    // So call it 20 * 5 = 100, then round up to a power of two = 128 bytes.
+    enum : uint16_t { c_data_size = 128 };
+
 public:
                         pushed_input() = default;
     bool                empty() const { return !m_count; }
@@ -61,7 +94,7 @@ public:
     int32_t             read();
 
 private:
-    uint8_t             m_data[16];
+    uint8_t             m_data[c_data_size];
     uint16_t            m_head = 0;
     uint16_t            m_count = 0;
 
@@ -154,6 +187,48 @@ int32_t pushed_input::read()
     return translate_special(c);
 }
 
+void term_begin()
+{
+    assert(s_term_began >= 0);
+    if (s_term_began < 0)
+        s_term_began = 0;
+
+    if (!s_term_began)
+    {
+        // TODO: Remember terminal size, for triggering inferred resize
+        // notifications even if/when an explicit WINDOW_BUFFER_SIZE_EVENT is
+        // missed.
+
+        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+        GetConsoleMode(hin, &s_prev_input_mode);
+
+        s_prev_mouse_button_state = 0;
+        if (GetKeyState(VK_LBUTTON) < 0)
+            s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
+        if (GetKeyState(VK_MBUTTON) < 0)
+            s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
+        if (GetKeyState(VK_RBUTTON) < 0)
+            s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
+    }
+
+    ++s_term_began;
+}
+
+void term_end()
+{
+    assert(s_term_began > 0);
+    if (s_term_began <= 0)
+        return;
+
+    --s_term_began;
+    if (!s_term_began)
+    {
+        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+        SetConsoleMode(hin, s_prev_input_mode);
+    }
+}
+
+#ifdef _WIN32
 static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
 {
     // Only respond to key down events.
@@ -182,12 +257,118 @@ static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
     return false;
 }
 
-static bool generate_mouse_sequence(const MOUSE_EVENT_RECORD& record, cstring& out)
+static bool append_one_mouse_sequence(uint8_t flags, uint16_t x, uint16_t y, bool release, cstring& out)
 {
-    // TODO: generate xterm mouse sequences; might need additional state about
-    // the previous mouse input status.
+    if (s_mouse_sgr_encoding)
+    {
+        // SGR Encoding.
+        const char op = release ? 'm' : 'M';
+        out.printf("\x1b[<%u;%u;%u%c", flags, x, y, op);
+        return true;
+    }
+    else
+    {
+        // DEFAULT Encoding.
+        if (release)
+            flags = uint8_t((flags & 0x1c) | 3); // Generic release.
+        const uint8_t Cb = uint8_t(0x20 + flags);
+        const uint8_t Cx = (x < 1 || x > 223) ? 0 : uint8_t(x + 0x20);
+        const uint8_t Cy = (y < 1 || y > 223) ? 0 : uint8_t(y + 0x20);
+        out.append("\x1b[M");
+        out.append(reinterpret_cast<const char*>(&Cb), 1);
+        out.append(reinterpret_cast<const char*>(&Cx), 1);
+        out.append(reinterpret_cast<const char*>(&Cy), 1);
+        return true;
+    }
+
     return false;
 }
+
+static bool generate_mouse_sequences(const MOUSE_EVENT_RECORD& record, cstring& out)
+{
+    // The implementation here supports these protocols:  VT200, DRAG, ANY.
+    // It does not support SGR Pixels Encoding.
+    //
+    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Mouse-Tracking
+
+    out.clear();
+
+    // Remember the button state, to differentiate press vs release.
+    const auto prv = s_prev_mouse_button_state;
+    s_prev_mouse_button_state = record.dwButtonState;
+
+    // Xterm generates a separate sequence per button event.  Attempt to
+    // emulate that reasonably well.
+    const auto btn = record.dwButtonState;
+    const bool left_held = !!(btn & FROM_LEFT_1ST_BUTTON_PRESSED);
+    const bool middle_held = !!(btn & FROM_LEFT_2ND_BUTTON_PRESSED);
+    const bool right_held = !!(btn & RIGHTMOST_BUTTON_PRESSED);
+    const bool left_button_change = left_held != !!(prv & FROM_LEFT_1ST_BUTTON_PRESSED);
+    const bool middle_button_change = middle_held != !!(prv & FROM_LEFT_2ND_BUTTON_PRESSED);
+    const bool right_button_change = right_held != !!(prv & RIGHTMOST_BUTTON_PRESSED);
+    const bool wheel = !!(record.dwEventFlags & MOUSE_WHEELED) && (s_mouse_input_mode >= mouse_input_mode::VT200);
+    const bool hwheel = !!(record.dwEventFlags & MOUSE_HWHEELED) && (s_mouse_input_mode >= mouse_input_mode::VT200);
+
+    constexpr DWORD ALT_PRESSED = LEFT_ALT_PRESSED|RIGHT_ALT_PRESSED;
+    constexpr DWORD CTRL_PRESSED = LEFT_CTRL_PRESSED|RIGHT_CTRL_PRESSED;
+
+    uint8_t flags = 0;
+    if (record.dwControlKeyState & SHIFT_PRESSED)  flags |= 4;      // MB+S
+    if (record.dwControlKeyState & ALT_PRESSED)    flags |= 8;      // MB+A (also MB4)
+    if (record.dwControlKeyState & CTRL_PRESSED)   flags |= 16;     // MB+C
+
+    const uint16_t x = record.dwMousePosition.X + 1;
+    const uint16_t y = record.dwMousePosition.Y + 1;
+
+    bool ret = false;
+
+    // Left click/release.
+    if (left_button_change)
+        ret |= append_one_mouse_sequence(flags + 0, x, y, !left_held, out); // MB1
+
+    // Middle click/release.
+    if (middle_button_change)
+        ret |= append_one_mouse_sequence(flags + 1, x, y, !middle_held, out); // MB2
+
+    // Right click/release.
+    if (right_button_change)
+        ret |= append_one_mouse_sequence(flags + 2, x, y, !right_held, out); // MB3
+
+    // Mouse wheel.
+    if (wheel)
+    {
+        const auto direction = int16_t(0 - int16_t(HIWORD(record.dwButtonState))) / 120;
+        ret |= append_one_mouse_sequence(flags + ((direction < 0) ? 64 : 65), x, y, false, out); // MB4/MB5
+    }
+
+    // Mouse horizontal wheel.
+    if (hwheel)
+    {
+        const auto direction = int16_t(int16_t(HIWORD(record.dwButtonState)) / 120);
+        ret |= append_one_mouse_sequence(flags + ((direction < 0) ? 66 : 67), x, y, false, out); // MB6/MB7
+    }
+
+    // Drag.
+    if (!ret && (record.dwEventFlags & MOUSE_MOVED))
+    {
+assert(!left_held);
+assert(!middle_held);
+assert(!right_held);
+        if ((s_mouse_input_mode == mouse_input_mode::ANY) ||
+            (s_mouse_input_mode == mouse_input_mode::DRAG && (left_held || middle_held || right_held)))
+        {
+            uint8_t drag_flags = (flags & 0x1c) | 32;               // Motion
+            if (left_held)         drag_flags += 0;                 // MB1
+            else if (middle_held)  drag_flags += 1;                 // MB2
+            else if (right_held)   drag_flags += 2;                 // MB3
+            else                   drag_flags += 3;                 // None
+            ret |= append_one_mouse_sequence(drag_flags, x, y, false, out);
+        }
+    }
+
+    return ret;
+}
+#endif // _WIN32
 
 int32_t term_in()
 {
@@ -245,11 +426,11 @@ again:
         case MOUSE_EVENT:
             {
                 cstring seq;
-                if (generate_mouse_sequence(record.Event.MouseEvent, seq))
+                if (generate_mouse_sequences(record.Event.MouseEvent, seq))
                 {
-                    for (const char* s = seq.c_str(); *s; ++s)
-                        s_pushed.push(*s);
-                    return true;
+                    for (size_t i = 0; i < seq.length(); ++i)
+                        s_pushed.push(seq.c_str()[i]);
+                    return s_pushed.read();
                 }
             }
             goto again;
@@ -386,10 +567,10 @@ bool term_in_avail(const DWORD _timeout)
         case MOUSE_EVENT:
             {
                 cstring seq;
-                if (generate_mouse_sequence(record.Event.MouseEvent, seq))
+                if (generate_mouse_sequences(record.Event.MouseEvent, seq))
                 {
-                    for (const char* s = seq.c_str(); *s; ++s)
-                        s_pushed.push(*s);
+                    for (size_t i = 0; i < seq.length(); ++i)
+                        s_pushed.push(seq.c_str()[i]);
                     ret = true;
                 }
             }
@@ -433,23 +614,63 @@ bool term_push_macro_text(const char* text, size_t len)
     return true;
 }
 
-void enable_mouse_input(bool enable)
+void enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
 {
+    // https://tintin.mudhalla.net/info/xterm/
+    //
+    // XTERM MOUSE TRACKING
+    //
+    // Code             Effect  Note
+    // ----             ------  ----
+    // CSI ? 1000 h     MTM     Enable Mouse Tracking Mode (VT200 Protocol; press, release, wheel)
+    // CSI ? 1001 h     HMTM    Set Highlight Mouse Tracking Mode
+    // CSI ? 1002 h     BMMTM   Set Button Motion Mouse Tracking Mode (DRAG Protocol; press, release, wheel, drag while button down)
+    // CSI ? 1003 h             (ANY Protocol; all mouse events)
+    // CSI ? 1004 h     WFTM    Enable Window Focus Tracking Mode
+    // CSI ? 1006 h     DMTM    Set Decimal Mouse Tracking Mode (SGR Encoding)
+    // CSI ? 1016 h             (SGR Pixels Encoding)
+    //
+    // NOTE:  The Win32 implementation in generate_mouse_sequences() supports
+    // these protocols:  VT200, DRAG, ANY.  It supports both DEFAULT and SGR
+    // encodings for each protocol.  It does not support SGR Pixels encoding
+    // or Window Focus Tracking Mode.
+
 #ifdef _WIN32
-    DWORD old_mode;
+    DWORD old_console_mode;
     HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-    if (GetConsoleMode(hin, &old_mode))
+    if (GetConsoleMode(hin, &old_console_mode) &&
+        !(old_console_mode & ENABLE_VIRTUAL_TERMINAL_INPUT))
     {
-        DWORD new_mode = old_mode;
-        if (enable)
-            new_mode |= ENABLE_MOUSE_INPUT;
+        DWORD new_console_mode = old_console_mode;
+        new_console_mode &= ~(ENABLE_MOUSE_INPUT|ENABLE_QUICK_EDIT_MODE);
+        if (mode != mouse_input_mode::none)
+            new_console_mode |= ENABLE_MOUSE_INPUT;
         else
-            new_mode &= ~ENABLE_MOUSE_INPUT;
-        SetConsoleMode(hin, new_mode);
+            new_console_mode |= (s_original_console_input_mode & ENABLE_QUICK_EDIT_MODE);
+        if (old_console_mode != new_console_mode)
+            SetConsoleMode(hin, new_console_mode);
     }
-#else
-    // TODO-LINUX: alternative implementation using escape codes to enable mouse input.
+    else
 #endif
+    {
+        // TODO: on both graceful and abnormal termination, for both Windows
+        // and Linux, restore the original mouse input mode (which might be
+        // impossible, so maybe always turn off mouse input?).
+        switch (mode)
+        {
+        case mouse_input_mode::none:    term_out("\x1b[?1000l"); break;
+        case mouse_input_mode::VT200:   term_out("\x1b[?1000h"); break;
+        case mouse_input_mode::DRAG:    term_out("\x1b[?1002h"); break;
+        case mouse_input_mode::ANY:     term_out("\x1b[?1003h"); break;
+        default:                        assert(false); break;
+        }
+
+        if (mode != mouse_input_mode::none)
+            term_out(sgr_encoding ? "\x1b[?1006h" : "\x1b[?1006l");
+    }
+
+    s_mouse_input_mode = mode;
+    s_mouse_sgr_encoding = sgr_encoding;
 }
 
 } // namespace tib

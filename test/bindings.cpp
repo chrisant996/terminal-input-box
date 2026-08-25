@@ -116,40 +116,70 @@ TEST_CASE("Key bindings")
 
         SECTION("Pattern bindings")
         {
-            REQUIRE(base->add({ "\x1b[<%#;%#m", tib::binding_target_func("mouse-release"), true }));
-            REQUIRE(base->add({ "\x1b[<%#;%#M", tib::binding_target_func("mouse-press"), true }));
-            resolver.add_target(tester);
+            const auto resolve_mouse = [&](const char* pattern,
+                                           const char* target,
+                                           const char* sequence,
+                                           size_t sequence_length,
+                                           std::initializer_list<const char*> expected_params) {
+                REQUIRE(base->add({ pattern, tib::binding_target_func(target), true }));
+                resolver.add_target(tester);
 
-            {
-                const char sequence[] = "\x1b[<12;34m";
                 tib::resolved_binding resolved;
-                for (const char* p = sequence; *p; ++p)
+                for (size_t i = 0; i < sequence_length; ++i)
                 {
-                    resolved = resolver.step(*p);
-                    REQUIRE(!p[1] || resolved.more());
+                    resolved = resolver.step(uint8_t(sequence[i]));
+                    REQUIRE(i + 1 == sequence_length || resolved.more());
                 }
                 REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
                 REQUIRE(resolved.binding_target);
-                REQUIRE(resolved.binding_target->is_func_name("mouse-release"));
-                REQUIRE(resolved.params.size() == 2);
-                REQUIRE(resolved.params[0] == tib::cstring("12"));
-                REQUIRE(resolved.params[1] == tib::cstring("34"));
+                REQUIRE(resolved.binding_target->is_func_name(target));
+                REQUIRE(resolved.params.size() == expected_params.size());
+
+                size_t i = 0;
+                for (const char* expected : expected_params)
+                    REQUIRE(resolved.params[i++] == tib::cstring(expected));
+            };
+
+            SECTION("VT200, default encoding")
+            {
+                const char sequence[] = "\x1b[M\x23\x58\x6e";
+                resolve_mouse("\x1b[M%!%!%!", "vt200-default", sequence, sizeof(sequence) - 1,
+                              { "3", "56", "78" });
             }
 
+            SECTION("VT200, SGR encoding")
             {
-                const char sequence[] = "\x1b[<56;78M";
-                tib::resolved_binding resolved;
-                for (const char* p = sequence; *p; ++p)
-                {
-                    resolved = resolver.step(*p);
-                    REQUIRE(!p[1] || resolved.more());
-                }
-                REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
-                REQUIRE(resolved.binding_target);
-                REQUIRE(resolved.binding_target->is_func_name("mouse-press"));
-                REQUIRE(resolved.params.size() == 2);
-                REQUIRE(resolved.params[0] == tib::cstring("56"));
-                REQUIRE(resolved.params[1] == tib::cstring("78"));
+                const char sequence[] = "\x1b[<2;56;78m";
+                resolve_mouse("\x1b[<%#;%#;%#m", "vt200-sgr", sequence, sizeof(sequence) - 1,
+                              { "2", "56", "78" });
+            }
+
+            SECTION("DRAG, default encoding")
+            {
+                const char sequence[] = "\x1b[M\x42\x20\x2a";
+                resolve_mouse("\x1b[M%!%!%!", "drag-default", sequence, sizeof(sequence) - 1,
+                              { "34", "0", "10" });
+            }
+
+            SECTION("DRAG, SGR encoding")
+            {
+                const char sequence[] = "\x1b[<34;9;10M";
+                resolve_mouse("\x1b[<%#;%#;%#M", "drag-sgr", sequence, sizeof(sequence) - 1,
+                              { "34", "9", "10" });
+            }
+
+            SECTION("ANY, default encoding")
+            {
+                const char sequence[] = { '\x1b', '[', 'M', '\x43', char(0xff), '\0' };
+                resolve_mouse("\x1b[M%!%!%!", "any-default", sequence, sizeof(sequence),
+                              { "35", "223", "" });
+            }
+
+            SECTION("ANY, SGR encoding")
+            {
+                const char sequence[] = "\x1b[<35;223;224M";
+                resolve_mouse("\x1b[<%#;%#;%#M", "any-sgr", sequence, sizeof(sequence) - 1,
+                              { "35", "223", "224" });
             }
         }
     }

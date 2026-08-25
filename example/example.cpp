@@ -236,6 +236,10 @@ int main(int argc, const char** argv)
     face_defs.emplace(FACE_CTRL, "0;36;44");
 
     const tib::border_definition* border = nullptr;
+    tib::mouse_input_mode mode = tib::mouse_input_mode::none;
+    bool sgr_encoding = true;
+    bool set_mouse_input_mode = false;
+
     for (int i = 0; i < argc; ++i)
     {
         if (_stricmp(argv[i], "--single") == 0)
@@ -314,6 +318,54 @@ no_border:
         {
             s_show_keys = true;
         }
+        else if (_stricmp(argv[i], "--mouse") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                set_mouse_input_mode = true;
+                if (_stricmp(argv[i], "none") == 0)
+                    mode = tib::mouse_input_mode::none;
+                else if (_stricmp(argv[i], "vt200") == 0)
+                    mode = tib::mouse_input_mode::VT200;
+                else if (_stricmp(argv[i], "drag") == 0)
+                    mode = tib::mouse_input_mode::DRAG;
+                else if (_stricmp(argv[i], "any") == 0)
+                    mode = tib::mouse_input_mode::ANY;
+                else
+                {
+                    fputs("Unrecognized mouse input mode.\n", stderr);
+                    return 1;
+                }
+            }
+            else
+            {
+                fputs("Missing mouse input mode.\n", stderr);
+                return 1;
+            }
+        }
+        else if (_stricmp(argv[i], "--enc") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                set_mouse_input_mode = true;
+                if (_stricmp(argv[i], "default") == 0)
+                    sgr_encoding = false;
+                else if (_stricmp(argv[i], "sgr") == 0)
+                    sgr_encoding = true;
+                else
+                {
+                    fputs("Unrecognized mouse input encoding.\n", stderr);
+                    return 1;
+                }
+            }
+            else
+            {
+                fputs("Missing mouse input encoding.\n", stderr);
+                return 1;
+            }
+        }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
         {
@@ -325,6 +377,15 @@ no_border:
             fprintf(stderr, "Unrecognized %s '%s'.\n", (argv[i][0] == '-') ? "flag" : "argument", argv[i]);
             return 1;
         }
+    }
+
+    if (set_mouse_input_mode)
+    {
+        tib::enable_mouse_input(mode, sgr_encoding);
+        // tib::term_out("\x1b[?1000h");   // VT200 Protocol for mouse input.
+        // tib::term_out("\x1b[?1000l");
+        // tib::term_out("\x1b[?1006h");   // SGR Encoding for mouse input.
+        // tib::term_out("\x1b[?1006l");
     }
 
     face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));

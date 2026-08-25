@@ -85,6 +85,10 @@ struct key_binding
     //  %%              Matches literal '%' character.
     //  %#              Matches one or more digits, which are captured into
     //                  the params member of resolved_binding.
+    //  %!              Matches one default-encoded mouse byte.  Bytes in the
+    //                  range 0x20..0xff are decoded by subtracting 0x20; NUL
+    //                  is decoded as zero.  The resulting value is captured
+    //                  into the params member of resolved_binding.
     //  anything else   Matches itself.
     //
     // Pattern bindings are mainly intended for matching mouse input.

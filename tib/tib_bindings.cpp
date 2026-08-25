@@ -338,25 +338,62 @@ resolved_binding binding_resolver::step(uint8_t c)
 
                     while (input_pos < input_length && sequence_pos < sequence_length)
                     {
-                        if (sequence[sequence_pos] == '%' && sequence_pos + 1 < sequence_length)
+                        if (sequence[sequence_pos] == '%')
                         {
-                            const char op = sequence[sequence_pos + 1];
-                            if (op == '#')
+                            if (sequence_pos + 1 >= sequence_length)
                             {
-                                if (input[input_pos] < '0' || input[input_pos] > '9')
-                                    break;
-
-                                const size_t param_begin = input_pos;
-                                do
-                                {
-                                    ++input_pos;
-                                } while (input_pos < input_length && input[input_pos] >= '0' && input[input_pos] <= '9');
-                                params.emplace_back(input + param_begin, input_pos - param_begin);
-                                sequence_pos += 2;
-                                continue;
+                                // Malformed pattern string.
+                                assert(false);
+                                goto continue_label;
                             }
-                            if (op == '%')
+
+                            const char op = sequence[sequence_pos + 1];
+                            switch (op)
+                            {
+                            case '#':
+                                // Match 1 or more digits.
+                                if (input[input_pos] >= '0' && input[input_pos] <= '9')
+                                {
+                                    const size_t param_begin = input_pos;
+                                    do
+                                    {
+                                        ++input_pos;
+                                    } while (input_pos < input_length && input[input_pos] >= '0' && input[input_pos] <= '9');
+                                    params.emplace_back(input + param_begin, input_pos - param_begin);
+                                    sequence_pos += 2;
+                                    continue;
+                                }
+                                else
+                                {
+                                    // Not a digit; pattern does not match.
+                                    goto continue_label;
+                                }
+                                break;
+                            case '!':
+                                // Match 1 character in the range 0x20..0xff or
+                                // 0x00.  If >= 0x20 then subtract 0x20 and
+                                // convert it to a numeric string.  If 0x00 then
+                                // convert 0 to a numeric string.  This lets
+                                // consumers of tib support the default mouse
+                                // encoding without
+                                // needing to parse the raw bytes themselves.
+                                if (!input[input_pos] || uint8_t(input[input_pos]) >= 0x20)
+                                {
+                                    cstring param;
+                                    const uint8_t value = uint8_t(input[input_pos]);
+                                    if (value >= 0x20)
+                                        param.printf("%u", value - 0x20);
+                                    params.emplace_back(std::move(param));
+                                    sequence_pos += 2;
+                                    ++input_pos;
+                                    continue;
+                                }
+                                goto continue_label;
+                            case '%':
+                            default:
                                 ++sequence_pos;
+                                break;
+                            }
                         }
 
                         if (input[input_pos] != sequence[sequence_pos])
@@ -381,6 +418,9 @@ resolved_binding binding_resolver::step(uint8_t c)
                         }
                         is_prefix = true;
                     }
+
+continue_label:
+                    ;
                 }
             }
 
