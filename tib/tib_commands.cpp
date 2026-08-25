@@ -227,11 +227,29 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     if (params && params->size() >= 3 && key == 'M')
     {
         const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
-        if ((button & ~uint32_t(4 | 8 | 16)) == 0)
+        switch (button & ~uint32_t(4 | 8 | 16))
         {
-            const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
-            const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
-            return ctx.set_caret_from_screen(x, y) ? 0 : -1;
+        case 0:
+            // Left button.
+            {
+                const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
+                const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
+                return ctx.set_caret_from_screen(x, y) ? 0 : -1;
+            }
+        case 2:
+            // Right button.
+            {
+                if (ctx.get_selection_state().has_selection())
+                {
+                    ctx.copy_to_clipboard();
+                    ctx.set_selection(ctx.get_caret(), ctx.get_caret());
+                }
+                else
+                {
+                    ctx.paste_from_clipboard();
+                }
+                return 0;
+            }
         }
     }
 
@@ -240,11 +258,8 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     // dispatches, and remembering the last click position (and which button),
     // so that a double click can be inferred.  Double-click should select the
     // word at the mouse click position, and remember that double-click mode
-    // was used, so that dragging can extend the selection by word bounaries.
-
-    // TODO: Handle mouse input sequence for right mouse button single click;
-    // if there's a selection copy it to the clipboard and clear the
-    // selection, or if there's no selection then paste from the clipboard.
+    // was used (until release), so that dragging can extend the selection by
+    // word bounaries.
 
     // TODO: Handle mouse drag while left button is down.  This requires
     // remembering the textpos_t of the initial click, so that dragging can
