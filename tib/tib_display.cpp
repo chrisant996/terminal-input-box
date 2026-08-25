@@ -323,8 +323,13 @@ coord display_manager::get_extent() const
 
 void display_manager::clear_scroll_offsets()
 {
-    m_top = 0;
-    m_left = 0;
+    set_scroll_offsets(0, 0);
+}
+
+void display_manager::set_scroll_offsets(textpos_t left, uint32_t top)
+{
+    m_left = left;
+    m_top = top;
     m_hwheel_exclusion = false;
 }
 

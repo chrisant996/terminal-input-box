@@ -44,6 +44,8 @@ struct undo_entry
     cstring             m_text;
     selection_state     m_sel_before;
     selection_state     m_sel_after;
+    textpos_t           m_left = 0;
+    uint32_t            m_top = 0;
 
     undo_entry*         m_prev = nullptr;
     undo_entry*         m_next = nullptr;

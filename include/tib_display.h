@@ -150,6 +150,8 @@ public:
     coord               get_extent() const;
 
     textpos_t           get_left() const { return m_left; }
+    uint32_t            get_top() const { return m_top; }
+    void                set_scroll_offsets(textpos_t left, uint32_t top);
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection);
 

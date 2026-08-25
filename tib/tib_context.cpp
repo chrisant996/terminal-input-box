@@ -735,6 +735,8 @@ void editor_context::init_undo()
     m_undo_tail->m_text = m_text;
     m_undo_tail->m_sel_before = m_selection;
     m_undo_tail->m_sel_after = m_selection;
+    m_undo_tail->m_left = m_display.get_left();
+    m_undo_tail->m_top = m_display.get_top();
     m_defer_init_undo = false;
 }
 
@@ -766,6 +768,10 @@ void editor_context::begin_undo_group(bool merge)
         if (m_defer_init_undo)
             init_undo();
 
+        undo_entry* current = m_undo_current ? m_undo_current : m_undo_tail;
+        current->m_left = m_display.get_left();
+        current->m_top = m_display.get_top();
+
         if (m_undo_current)
         {
             // Keep current, discard everything after current.
@@ -784,6 +790,8 @@ void editor_context::begin_undo_group(bool merge)
         {
             undo_entry* p = new undo_entry;
             p->m_sel_before = m_selection;
+            p->m_left = m_display.get_left();
+            p->m_top = m_display.get_top();
             p->link_at_tail(m_undo_head, m_undo_tail);
             assert(p == m_undo_tail);
         }
@@ -815,6 +823,8 @@ void editor_context::undo()
 
     if (!m_undo_current)
         m_undo_current = m_undo_tail;
+    m_undo_current->m_left = m_display.get_left();
+    m_undo_current->m_top = m_display.get_top();
     undo_entry* p = m_undo_current->m_prev;
     if (!p)
         return;
@@ -823,6 +833,7 @@ void editor_context::undo()
     m_text.set(p->m_text);
     m_selection = m_undo_current->m_sel_before;
     m_undo_current = p;
+    m_display.set_scroll_offsets(p->m_left, p->m_top);
 }
 
 void editor_context::redo()
@@ -836,6 +847,8 @@ void editor_context::redo()
     if (!m_undo_current || m_undo_current == m_undo_tail)
         return;
 
+    m_undo_current->m_left = m_display.get_left();
+    m_undo_current->m_top = m_display.get_top();
     undo_entry* r = m_undo_current->m_next;
     assert(r);
 
@@ -844,6 +857,7 @@ void editor_context::redo()
     m_selection = r->m_sel_after;
 
     m_undo_current = r;
+    m_display.set_scroll_offsets(r->m_left, r->m_top);
 }
 
 void editor_context::transfer_text(cstring& out)
