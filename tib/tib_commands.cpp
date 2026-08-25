@@ -10,6 +10,7 @@
 #include "tib_context.h"
 #include <algorithm>
 #include <assert.h>
+#include <chrono>
 
 namespace tib {
 
@@ -167,6 +168,43 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 static const char operation_name[] = "mouse_input_operation";
 
+static uint32_t get_scroll_lines(const editor_context& ctx)
+{
+    uint32_t scroll_lines = 3;
+
+#ifdef _WIN32
+    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
+    if (scroll_lines == UINT_MAX)
+    {
+        // Page scrolling.
+        scroll_lines = uint32_t(max(ctx.get_inner_extent().y - 1, 1));
+        return scroll_lines;
+    }
+#endif
+
+    // Constrain to one less than the number of visible rows.
+    scroll_lines = uint32_t(max(min<int32_t>(ctx.get_inner_extent().y - 1, scroll_lines), 1));
+    return scroll_lines;
+}
+
+static uint32_t get_scroll_chars(const editor_context& ctx)
+{
+    uint32_t scroll_chars = 3;
+
+#ifdef _WIN32
+    SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
+    if (scroll_chars == UINT_MAX)
+    {
+        scroll_chars = uint32_t(max(ctx.get_inner_extent().x - 1, 1));
+        return scroll_chars;
+    }
+#endif
+
+    // Constrain to half the number of visible columns.
+    scroll_chars = uint32_t(max(min<int32_t>(ctx.get_inner_extent().x / 2, scroll_chars), 1));
+    return scroll_chars;
+}
+
 static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* var_name)
 {
     const char* const operation = ctx.get_named_value(operation_name);
@@ -202,8 +240,41 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     static const char hwheel_column_name[] = "mouse_hwheel_column";
     static const char wheel_column_name[] = "mouse_wheel_column";
 
+    struct mouse_click_state
+    {
+        std::chrono::steady_clock::time_point time;
+        const void* context = nullptr;
+        uint32_t button = UINT32_MAX;
+        uint32_t x = 0;
+        uint32_t y = 0;
+    };
+    static mouse_click_state last_click;
+
     const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
     const uint32_t base_button = button & ~uint32_t(4 | 8 | 16);
+    const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
+    const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
+
+    bool double_click = false;
+    if (key == 'M')
+    {
+        const auto now = std::chrono::steady_clock::now();
+#ifdef _WIN32
+        const auto double_click_time = std::chrono::milliseconds(GetDoubleClickTime());
+#else
+        constexpr auto double_click_time = std::chrono::milliseconds(500);
+#endif
+        double_click = (base_button == 0 && last_click.context == &ctx &&
+                        last_click.button == base_button &&
+                        last_click.x == x && last_click.y == y &&
+                        now - last_click.time <= double_click_time);
+        last_click.time = now;
+        last_click.context = &ctx;
+        last_click.button = base_button;
+        last_click.x = x;
+        last_click.y = y;
+    }
+
     switch (base_button)
     {
     case 64:
@@ -211,21 +282,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // Mouse WHEEL.
         {
             const int16_t cursor_column = cursor_column_continuation(ctx, name, wheel_column_name);
-
-            UINT scroll_lines = 3;
-#ifdef _WIN32
-            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
-#endif
-            if (scroll_lines == UINT_MAX)
-            {
-                // Page scrolling.
-                scroll_lines = uint32_t(max(ctx.get_inner_extent().y - 1, 1));
-            }
-            else
-            {
-                // Constrain to one less than the number of visible rows.
-                scroll_lines = uint32_t(max(min<int32_t>(ctx.get_inner_extent().y - 1, scroll_lines), 1));
-            }
+            const uint32_t scroll_lines = get_scroll_lines(ctx);
             if (scroll_lines)
                 ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
             return 0;
@@ -236,13 +293,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // Mouse HWHEEL.
         {
             const int16_t cursor_column = cursor_column_continuation(ctx, name, hwheel_column_name);
-
-            UINT scroll_chars = 3;
-#ifdef _WIN32
-            SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
-#endif
-            if (scroll_chars == UINT_MAX)
-                scroll_chars = uint32_t(max(ctx.get_inner_extent().x - 1, 1));
+            const uint32_t scroll_chars = get_scroll_chars(ctx);
             if (scroll_chars)
                 ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
             return 0;
@@ -254,10 +305,21 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // opt to provide a fallback handler).
         if (key == 'M')
         {
-            ctx.clear_named_value(operation_name);
-            const uint32_t x = uint32_t(strtoul((*params)[1].c_str(), nullptr, 10));
-            const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
-            return ctx.set_caret_from_screen(x, y) ? 0 : -1;
+            if (!ctx.set_caret_from_screen(x, y))
+            {
+                ctx.clear_named_value(operation_name);
+                return -1;
+            }
+            if (double_click)
+            {
+                ctx.select_word();
+                ctx.set_named_value(operation_name, "double_click");
+            }
+            else
+            {
+                ctx.clear_named_value(operation_name);
+            }
+            return 0;
         }
         break;
 
@@ -280,14 +342,6 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         }
         break;
     }
-
-    // TODO: Handle mouse input sequence for left mouse button double click.
-    // This requires adding some ability to track elapsed time between
-    // dispatches, and remembering the last click position (and which button),
-    // so that a double click can be inferred.  Double-click should select the
-    // word at the mouse click position, and remember that double-click mode
-    // was used (until release), so that dragging can extend the selection by
-    // word bounaries.
 
     // TODO: Handle mouse drag while left button is down.  This requires
     // remembering the textpos_t of the initial click, so that dragging can
