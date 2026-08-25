@@ -68,15 +68,18 @@ void term_out(const char* s, size_t len)
         return hook_term_out(s, len);
 
 #ifdef _WIN32
-    static cstring_t<WCHAR> s_buffer;
-    if (!to_utf16(s, len, s_buffer))
-        return;
-
     DWORD written;
     if (is_console())
+    {
+        static cstring_t<WCHAR> s_buffer;
+        if (!to_utf16(s, len, s_buffer))
+            return;
         WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
+    }
     else
-        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
+    {
+        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, DWORD(len), &written, nullptr);
+    }
 #else
     fwrite(s, resolve_auto_length(len, s), 1, stdout);
 #endif
