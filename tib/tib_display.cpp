@@ -720,11 +720,29 @@ bool display_manager::display()
 
     ensure_left();
 
-    // Format content into display structures.
     // TODO: allow host to add their own display_line rows; that will simplify
     // showing/clearing its extra rows (something Clink still struggles with).
     // That will also let the example program eliminate the cursor flicker
-    // when using its --show-keys flag.
+    // when using its --show-keys flag.  Add a method on editor_context to let
+    // a host (or subclass) set a list of additional lines to display below
+    // the input box.  The editor_context can forward the lines to the
+    // display_manager, which will be responsible for doing optimized minimal
+    // redisplay of the lines, e.g. either when adding/removing lines or when
+    // the vertical extent of the input box changes.  The caller should be
+    // able to provide a vector of a struct that defines each additional line.
+    // The struct should have a cstring for the line text, a width of the line
+    // text in columns, and a boolean saying whether the additional line
+    // should be bounded by the horizontal extent (and origin) of the input
+    // box (versus starting at column 1 and owning the full terminal width for
+    // the line).  The display_manager can optimize display be remembering
+    // whether/where it has displayed each line (i.e. vertical and horizontal
+    // position and horizontal extent for each line), and only display/erase
+    // changed additional lines.  When displaying these additional lines, if
+    // the boolean says the line should be bounded by the horizonal extent,
+    // then the display_manager will pad to the horizontal extent, otherwise
+    // it will clear to the end of that line.
+
+    // Format content into display structures.
     display_lines tmp;
     if (!build(tmp))
         return false;   // Nothing changed since list display (or OOM error).

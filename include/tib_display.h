@@ -23,6 +23,9 @@ extern bool g_show_hide_cursor;
 
 struct border_definition
 {
+    // FUTURE: Allow callback functions for header and footer, or for building
+    // a custom strings for the top and bottom borders?
+
     bool                has_top() const { return this && top && *top; }
     bool                has_bottom() const { return this && bottom && *bottom; }
     bool                has_left() const { return this && left && *left; }
