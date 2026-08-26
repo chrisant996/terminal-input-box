@@ -19,6 +19,9 @@ namespace tib {
 
 extern bool g_optimize_self_insert;
 
+// Returning negative from an editor_command_func_t signals that the binding
+// was not handled and implies permission for something else to choose to
+// handle the binding.
 typedef int32_t (*editor_command_func_t)(editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 struct editor_command

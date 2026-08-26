@@ -146,6 +146,10 @@ public:
     //  2.  A key_table has self-insert enabled and the input sequence is a
     //      single self-insert character, in which case binding is nullptr and
     //      key is the character to be inserted.
+    //
+    // Returning negative means the input sequence was not handled, and
+    // implies permission for something else to choose to handle the input
+    // sequence.
     virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept = 0;
 
 private:

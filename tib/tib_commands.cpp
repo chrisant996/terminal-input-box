@@ -228,9 +228,6 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
 
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-// TODO: broader topic -- need to normalize when/which commands return -1, as
-// now it means "unhandled; someone else can add fallback handling".
-
     if (!params || params->size() < 3)
     {
         ctx.clear_named_value(c_operation_name);
