@@ -441,9 +441,6 @@ void display_manager::suppress_auto_horizontal_scroll(const selection_state& sel
 
 bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection)
 {
-    // TODO: probably part of this can be refactored into a helper function
-    // that serves both this and also moving the caret up/down one display
-    // line.
     const coord max_size = get_effective_max_size();
     if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
         return false;

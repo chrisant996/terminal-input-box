@@ -14,6 +14,33 @@
 
 namespace tib {
 
+static const char c_cursor_column_operation_var_name[] = "cursor_column_operation";
+
+static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* operation, const char* alt_command_name=nullptr)
+{
+    static const char c_continuation_var_name[] = "cursor_column_continuation";
+
+    const char* const have_operation = ctx.get_named_value(c_cursor_column_operation_var_name);
+    const bool continuing = ((!operation || (operation && have_operation && !strcmp(have_operation, operation))) &&
+                             (!strcmp(ctx.get_last_command(), command_name) ||
+                              (alt_command_name && !strcmp(ctx.get_last_command(), alt_command_name))));
+
+    int32_t cursor_column;
+    if (continuing)
+    {
+        cursor_column = ctx.get_named_value_int(c_continuation_var_name);
+    }
+    else
+    {
+        cursor_column = ctx.get_relative_cursor().x;
+        ctx.set_named_value_int(c_continuation_var_name, cursor_column);
+    }
+
+    ctx.set_named_value(c_cursor_column_operation_var_name, operation);
+
+    return int16_t(cursor_column);
+}
+
 //------------------------------------------------------------------------------
 
 int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
@@ -57,6 +84,18 @@ int32_t backward_word(editor_context& ctx, int32_t key, const char* name, const 
 int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right(true/*word*/);
+    return 0;
+}
+
+int32_t screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, "screen-line-up"));
+    return 0;
+}
+
+int32_t screen_line_up(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, "screen-line-down"));
     return 0;
 }
 
@@ -166,8 +205,6 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 //------------------------------------------------------------------------------
 
-static const char c_operation_name[] = "mouse_input_operation";
-
 static uint32_t get_scroll_lines(const editor_context& ctx)
 {
     uint32_t scroll_lines = 3;
@@ -205,37 +242,13 @@ static uint32_t get_scroll_chars(const editor_context& ctx)
     return scroll_chars;
 }
 
-static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* var_name)
-{
-    const char* const operation = ctx.get_named_value(c_operation_name);
-    const bool continuing = !strcmp(ctx.get_last_command(), command_name) && operation && !strcmp(operation, "hwheel");
-
-    int32_t cursor_column;
-    if (continuing)
-    {
-        cursor_column = ctx.get_named_value_int(var_name);
-    }
-    else
-    {
-        cursor_column = ctx.get_relative_cursor().x;
-        ctx.set_named_value_int(var_name, cursor_column);
-    }
-
-    ctx.set_named_value(c_operation_name, "hwheel");
-
-    return int16_t(cursor_column);
-}
-
 int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     if (!params || params->size() < 3)
     {
-        ctx.clear_named_value(c_operation_name);
+        ctx.clear_named_value(c_cursor_column_operation_var_name);
         return -1;
     }
-
-    static const char c_hwheel_column_name[] = "mouse_hwheel_column";
-    static const char c_wheel_column_name[] = "mouse_wheel_column";
 
     struct mouse_click_state
     {
@@ -287,7 +300,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     case 65:
         // Mouse WHEEL.
         {
-            const int16_t cursor_column = cursor_column_continuation(ctx, name, c_wheel_column_name);
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, "wheel");
             const uint32_t scroll_lines = get_scroll_lines(ctx);
             if (scroll_lines)
                 ctx.move_caret_vertically((base_button == 64 ? -1 : 1) * int32_t(scroll_lines), cursor_column);
@@ -298,7 +311,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     case 67:
         // Mouse HWHEEL.
         {
-            const int16_t cursor_column = cursor_column_continuation(ctx, name, c_hwheel_column_name);
+            const int16_t cursor_column = cursor_column_continuation(ctx, name, "hwheel");
             const uint32_t scroll_chars = get_scroll_chars(ctx);
             if (scroll_chars)
                 ctx.scroll_horizontally((base_button == 66 ? -1 : 1) * int32_t(scroll_chars), cursor_column);
@@ -314,17 +327,17 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
             if (!ctx.set_caret_from_screen(x, y))
             {
                 s_drag.context = nullptr;
-                ctx.clear_named_value(c_operation_name);
+                ctx.clear_named_value(c_cursor_column_operation_var_name);
                 return -1;
             }
             if (double_click)
             {
                 ctx.select_word();
-                ctx.set_named_value(c_operation_name, "double_click");
+                ctx.set_named_value(c_cursor_column_operation_var_name, "double_click");
             }
             else
             {
-                ctx.clear_named_value(c_operation_name);
+                ctx.clear_named_value(c_cursor_column_operation_var_name);
             }
             const auto& selection = ctx.get_selection_state();
             s_drag.context = &ctx;
@@ -365,7 +378,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         // otherwise it pastes from the clipboard.
         if (key == 'M')
         {
-            ctx.clear_named_value(c_operation_name);
+            ctx.clear_named_value(c_cursor_column_operation_var_name);
             if (ctx.get_selection_state().has_selection())
             {
                 ctx.copy_to_clipboard();
@@ -382,7 +395,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
 
     if (key == 'm' && s_drag.context == &ctx)
         s_drag.context = nullptr;
-    ctx.clear_named_value(c_operation_name);
+    ctx.clear_named_value(c_cursor_column_operation_var_name);
     return -1;
 }
 
@@ -475,6 +488,8 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\033[C", binding_target_func("forward-char") });
     t->add({ "\033[1;5D", binding_target_func("backward-word") });
     t->add({ "\033[1;5C", binding_target_func("forward-word") });
+    t->add({ "\033[B", binding_target_func("screen-line-down") });
+    t->add({ "\033[A", binding_target_func("screen-line-up") });
 
     t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });
     t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });
@@ -521,6 +536,8 @@ static const editor_command c_commands[] =
     { "mouse-input", mouse_input },
     { "paste", paste },
     { "redo", redo },
+    { "screen-line-down", screen_line_down },
+    { "screen-line-up", screen_line_up },
     { "select-all", select_all },
     { "undo", undo },
 };
