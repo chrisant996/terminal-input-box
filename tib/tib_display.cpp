@@ -726,6 +726,8 @@ bool display_manager::display()
     // Format content into display structures.
     // TODO: allow host to add their own display_line rows; that will simplify
     // showing/clearing its extra rows (something Clink still struggles with).
+    // That will also let the example program eliminate the cursor flicker
+    // when using its --show-keys flag.
     display_lines tmp;
     if (!build(tmp))
         return false;   // Nothing changed since list display (or OOM error).
