@@ -298,7 +298,7 @@ nope:
     coord max_size;
     max_size.x = m_layout->max_width;
     max_size.y = clamp<int16_t>(m_layout->max_height, 0, m_term_size.y - b_height);
-    if (m_origin.x + max_size.x + extra_border_width >= m_term_size.x)
+    if (m_origin.x + max_size.x + extra_border_width > m_term_size.x)
     {
         if (m_term_size.x <= m_origin.x + extra_border_width)
             goto nope;
