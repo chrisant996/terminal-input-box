@@ -184,7 +184,7 @@ private:
 };
 
 std::shared_ptr<tib::key_table_list> make_default_key_table();
-inline bool is_self_insertable(char c) { return (c < 0 || c >= ' '); }
-inline bool is_self_insertable(int32_t key) { return (key >= ' ' && key <= 0xff); }
+bool is_self_insertable(char c);
+bool is_self_insertable(int32_t key);
 
 } // namespace tib

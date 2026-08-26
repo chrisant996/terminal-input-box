@@ -9,8 +9,9 @@
 
 namespace tib {
 
-constexpr int32_t c_input_terminal_eof = -2;
-constexpr int32_t c_input_terminal_resize = -3;
+// Use some invalid UTF8 bytes for special meanings.
+constexpr uint8_t c_input_terminal_resize = 0xfe;
+constexpr uint8_t c_input_terminal_eof = 0xfd;
 
 void term_begin();
 void term_end();

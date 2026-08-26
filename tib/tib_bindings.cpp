@@ -466,4 +466,14 @@ continue_label:
     return resolved;
 }
 
+bool is_self_insertable(char c)
+{
+    return (c < 0 || c >= ' ') && !(uint8_t(c) == c_input_terminal_eof || uint8_t(c) == c_input_terminal_resize);
+}
+
+bool is_self_insertable(int32_t key)
+{
+    return (key >= ' ' && key <= 0xff && key != c_input_terminal_eof && key != c_input_terminal_resize);
+}
+
 } // namespace tib

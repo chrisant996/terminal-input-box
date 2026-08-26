@@ -15,12 +15,6 @@
 
 namespace tib {
 
-// Some internal magic values, leveraging invalid UTF8 bytes.
-constexpr char c_input_terminal_eof_magic_char = char(c_input_terminal_eof);
-constexpr char c_input_terminal_resize_magic_char = char(c_input_terminal_resize);
-static_assert(uint8_t(c_input_terminal_eof_magic_char) == 0xfe);
-static_assert(uint8_t(c_input_terminal_resize_magic_char) == 0xfd);
-
 hook_term_in_func_t hook_term_in = nullptr;
 hook_term_in_avail_func_t hook_term_in_avail = nullptr;
 
@@ -36,6 +30,7 @@ static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
 static bool s_mouse_sgr_encoding = true;
 
 static int32_t s_term_began = 0;
+static coord s_last_term_size { -1, -1 };
 static HANDLE s_hin = 0;
 static HANDLE s_hout = 0;
 static DWORD s_prev_input_mode = 0;
@@ -47,18 +42,6 @@ static DWORD s_prev_mouse_button_state = 0;
 static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 #endif
-
-static int32_t translate_special(char c)
-{
-    // Handle special internal values.
-    switch (c)
-    {
-    case c_input_terminal_resize_magic_char:
-        return c_input_terminal_resize;
-    }
-
-    return uint8_t(c);
-}
 
 class pushed_input
 {
@@ -169,7 +152,7 @@ int32_t pushed_input::peek() const
 {
     assert(!empty());
     const char c = m_data[m_head];
-    return translate_special(c);
+    return c;
 }
 
 int32_t pushed_input::read()
@@ -179,7 +162,7 @@ int32_t pushed_input::read()
     ++m_head;
     --m_count;
     m_head %= std::size(m_data);
-    return translate_special(c);
+    return c;
 }
 
 void term_begin()
@@ -196,9 +179,7 @@ void term_begin()
 
     if (!s_term_began)
     {
-        // TODO: Remember terminal size, for triggering inferred resize
-        // notifications even if/when an explicit WINDOW_BUFFER_SIZE_EVENT is
-        // missed.
+        s_last_term_size = get_terminal_size();
 
         HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
         if (GetConsoleMode(hin, &s_prev_input_mode))
@@ -455,6 +436,13 @@ int32_t term_in()
         return uint8_t(c);
     }
 
+    const coord term_size = get_terminal_size();
+    if (s_last_term_size != term_size)
+    {
+        s_last_term_size = term_size;
+        return uint8_t(c_input_terminal_resize);
+    }
+
     if (hook_term_in)
     {
         const int32_t c = hook_term_in();
@@ -492,7 +480,15 @@ again:
         }
         goto again;
     case WINDOW_BUFFER_SIZE_EVENT:
-        return c_input_terminal_resize;
+        {
+            const coord term_size = get_terminal_size();
+            if (s_last_term_size != term_size)
+            {
+                s_last_term_size = term_size;
+                return c_input_terminal_resize;
+            }
+        }
+        goto again;
     default:
         assert(false);
     case MENU_EVENT:
@@ -582,6 +578,14 @@ bool term_in_avail(const DWORD _timeout)
     if (s_macro_playback)
         return true;
 
+    const coord term_size = get_terminal_size();
+    if (s_last_term_size != term_size)
+    {
+        s_last_term_size = term_size;
+        s_pushed.push(c_input_terminal_resize);
+        return true;
+    }
+
     if (hook_term_in_avail)
         return hook_term_in_avail(_timeout);
 
@@ -644,7 +648,7 @@ bool term_in_avail(const DWORD _timeout)
 
         case WINDOW_BUFFER_SIZE_EVENT:
 #ifdef USE_READCONSOLEINPUT
-            if (s_pushed.push(int8_t(c_input_terminal_resize)))
+            if (s_pushed.push(c_input_terminal_resize))
                 ret = true;
 #else
             // REVIEW: can't really do anything with this unless term_in()
