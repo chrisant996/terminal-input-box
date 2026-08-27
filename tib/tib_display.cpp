@@ -831,14 +831,15 @@ bool display_manager::display_internal(display_lines& lines)
             const auto& displayed = m_displayed.m_lines[i];
             if (displayed->m_x1 == line->m_x1)
             {
-                reuse_displayed_line = true;
-
                 // First do a simple memcmp comparison to check if the new
                 // line exactly matches the previously displayed line.  The
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
                 if (line->m_text.equals(displayed->m_text) && line->m_faces.equals(displayed->m_faces))
+                {
+                    reuse_displayed_line = true;
                     continue;
+                }
 
                 const size_t limit_forward_skip = min(displayed->m_text.length(), line->m_text.length());
 
@@ -893,15 +894,12 @@ bool display_manager::display_internal(display_lines& lines)
                         end = previous;
                         displayed_end = displayed_previous;
                     }
-
-                    // If the new line exactly matches the previously
-                    // displayed line, then there's nothing to do for that
-                    // line.
-                    if (reuse_displayed_line && begin == end && displayed->m_x2 == line->m_x2)
-                        continue;
                 }
             }
         }
+
+        if (reuse_displayed_line)
+            continue;
 
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
@@ -941,8 +939,7 @@ bool display_manager::display_internal(display_lines& lines)
         // Fill remaining width.
         if (line->width() < max_size.x)
         {
-            if (reuse_displayed_line)
-                move_to_column(cursor, line->width(), lines.m_inner_offset.x);
+            move_to_column(cursor, line->width(), lines.m_inner_offset.x);
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
             erase_row(max_size.x - line->width());
         }
