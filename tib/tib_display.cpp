@@ -19,6 +19,8 @@ namespace tib {
 bool g_coalesce_output = true;
 bool g_show_hide_cursor = true;
 
+constexpr uint16_t c_right_text_padding = 2;
+
 const border_definition c_light_border =
 {
     "┌",    "─",    "┐",
@@ -137,6 +139,8 @@ void display_lines::clear()
 
     m_lines.clear();
     m_rows.clear();
+    m_right_text.clear();
+    m_right_width = 0;
     m_additional_lines.clear();
     m_cursor = { -1, -1 };
 
@@ -299,6 +303,13 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     m_colors = colors;
     invalidate();
     invalidate_border();
+}
+
+void display_manager::set_right_text(const char* right, uint16_t width)
+{
+    m_right_text = right;
+    m_right_width = width;
+    invalidate();
 }
 
 void display_manager::set_additional_lines(const std::vector<additional_display_line>& lines)
@@ -835,7 +846,9 @@ bool display_manager::display_internal(display_lines& lines)
                 // line exactly matches the previously displayed line.  The
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
-                if (line->m_text.equals(displayed->m_text) && line->m_faces.equals(displayed->m_faces))
+                if (line->m_text.equals(displayed->m_text) &&
+                    line->m_faces.equals(displayed->m_faces) &&
+                    (i || m_right_text.equals(m_displayed.m_right_text)))
                 {
                     reuse_displayed_line = true;
                     continue;
@@ -941,7 +954,15 @@ bool display_manager::display_internal(display_lines& lines)
         {
             move_to_column(cursor, line->width(), lines.m_inner_offset.x);
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
-            erase_row(max_size.x - line->width());
+            if (i == 0 && m_right_width && line->width() + c_right_text_padding + m_right_width <= max_size.x)
+            {
+                erase_row(max_size.x - (line->width() + m_right_width));
+                output(m_right_text.c_str(), m_right_text.length());
+            }
+            else
+            {
+                erase_row(max_size.x - line->width());
+            }
         }
     }
 
@@ -1438,6 +1459,12 @@ again:
                         line->append(">", 1, 1, FACE_SCROLLER);
                 }
             }
+        }
+
+        if (index == 0 && m_right_width && line->width() + c_right_text_padding + m_right_width <= max_size.x)
+        {
+            tmp.m_right_text = m_right_text;
+            tmp.m_right_width = m_right_width;
         }
 
         return line;
