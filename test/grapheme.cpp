@@ -177,6 +177,27 @@ private:
 
 TEST_CASE("Display differential updates")
 {
+    SECTION("Reuses a line only when all displayed text matches")
+    {
+        display_test_fixture fixture;
+        fixture.m_display.set_right_text("xyz", 3);
+        fixture.display_initial("abc", 0);
+
+        // Moving the caret forces a rebuild with an unchanged line.  Reusing
+        // the displayed line must avoid outputting either part of that line.
+        fixture.m_buffer.set_selection(1, 1);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strpbrk(s_display_output.c_str(), "abc") == nullptr);
+        REQUIRE(strpbrk(s_display_output.c_str(), "xyz") == nullptr);
+
+        // Right text is part of the first displayed line, so changing it
+        // must prevent reuse even though the input text is unchanged.
+        s_display_output.clear();
+        fixture.m_display.set_right_text("xyz", 3);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "xyz") != nullptr);
+    }
+
     SECTION("Skips matching leading and trailing text")
     {
         display_test_fixture fixture;
