@@ -1309,8 +1309,9 @@ bool display_manager::build(display_lines& out)
     assert(y_extent > 0);
 
     // Calculate the visible range before constructing its display lines.
-    tmp.m_top = clamp<int32_t>(m_top, tmp.m_cursor.y - (y_extent - 1), tmp.m_cursor.y);
-    tmp.m_top = max<int32_t>(tmp.m_top, 0);
+    const int32_t min_top = max<int32_t>(tmp.m_cursor.y - (y_extent - 1), 0);
+    const int32_t max_top = min<int32_t>(tmp.m_cursor.y, max<int32_t>(total_rows - y_extent, 0));
+    tmp.m_top = clamp<int32_t>(m_top, min_top, max_top);
 
     // Lambda for building a display line.
     char pending = 0;

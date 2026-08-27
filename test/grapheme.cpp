@@ -131,7 +131,8 @@ static void capture_display_output(const char* text, size_t length)
 class display_test_fixture
 {
 public:
-    display_test_fixture(uint16_t max_width=10, bool horiz_scroll_markers=false, uint16_t max_height=1)
+    display_test_fixture(uint16_t max_width=10, bool horiz_scroll_markers=false,
+                         uint16_t max_height=1, bool variable_height=false)
     {
         m_old_hook = tib::hook_term_out;
         m_old_coalesce = tib::g_coalesce_output;
@@ -140,6 +141,7 @@ public:
 
         m_layout.max_width = max_width;
         m_layout.max_height = max_height;
+        m_layout.variable_height = variable_height;
         m_style.border = &m_border;
         m_style.horiz_scroll_markers = horiz_scroll_markers;
         m_display.init_layout(&m_layout);
@@ -264,6 +266,27 @@ TEST_CASE("Display multiline wrapping")
     fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
     REQUIRE(fixture.m_display.get_relative_cursor().x == 2);
     REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
+}
+
+TEST_CASE("Display variable height scrolling")
+{
+    display_test_fixture fixture(10, false, 3, true);
+    tib::cstring text;
+    text.append("xxxxxxxxxx", 10);
+    text.append("xxxxxxxxxx", 10);
+    text.append("xxxxxxxxxx", 10);
+    text.append("xxxxxxxxxx", 10);
+
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_top() == 2);
+
+    text.set_length(31);
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_top() == 1);
+
+    text.set_length(15);
+    fixture.display_initial(text.c_str(), tib::textpos_t(text.length()));
+    REQUIRE(fixture.m_display.get_top() == 0);
 }
 
 static void make_matching_display_line_data(tib::cstring& text, tib::cstring& matching_text,
