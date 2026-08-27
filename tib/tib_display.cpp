@@ -62,6 +62,11 @@ static int16_t get_horiz_scrolled_width(uint16_t width, uint16_t replaced_width)
     return width - replaced_width + c_horz_scroll_indicator_chars;
 }
 
+bool additional_display_line::operator==(const additional_display_line& other) const noexcept
+{
+    return width == other.width && bounded == other.bounded && text == other.text;
+}
+
 display_line::display_line(uint16_t x1)
 : m_x1(x1)
 , m_x2(x1)
@@ -117,6 +122,7 @@ void display_lines::clear()
 
     m_lines.clear();
     m_rows.clear();
+    m_additional_lines.clear();
     m_cursor = { -1, -1 };
 
     m_inner_offset = { 0, 0 };
@@ -280,6 +286,16 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     invalidate_border();
 }
 
+void display_manager::set_additional_lines(const std::vector<additional_display_line>& lines)
+{
+    m_additional_lines = lines;
+}
+
+void display_manager::clear_additional_lines()
+{
+    m_additional_lines.clear();
+}
+
 coord display_manager::get_effective_max_size(bool omit_scroll_markers)
 {
     assert(m_layout);
@@ -333,6 +349,9 @@ coord display_manager::get_inner_extent() const
     coord inner_extent = m_displayed.m_extent;
     inner_extent.x -= extra_border_width;
     inner_extent.y -= b_height;
+    inner_extent.y -= int32_t(m_displayed.m_additional_lines.size());
+    assert(inner_extent.x >= 0);
+    assert(inner_extent.y >= 0);
     return inner_extent;
 }
 
@@ -559,7 +578,8 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     const int32_t left = screen_origin_x + m_displayed.m_inner_offset.x;
     const int32_t top = screen_origin_y + m_displayed.m_inner_offset.y;
     const int32_t width = m_displayed.m_extent.x - m_displayed.m_inner_offset.x - border->get_right_width();
-    const int32_t height = m_displayed.m_extent.y - m_displayed.m_inner_offset.y - !!border->has_bottom();
+    const int32_t height = m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) -
+                           m_displayed.m_inner_offset.y - !!border->has_bottom();
     const bool multiline = get_effective_max_size().y > 1;
     const bool drag = drag_scroll_chars != 0;
     const int32_t column = int32_t(x) - left;
@@ -720,28 +740,6 @@ bool display_manager::display()
 
     ensure_left();
 
-    // TODO: Allow host to add their own display_line rows.  Add a method on
-    // editor_context to let a host (or subclass) set a list of additional
-    // lines to display below the input box.  The editor_context can forward
-    // the lines to the display_manager, which will be responsible for doing
-    // optimized minimal redisplay of the lines, e.g. either when
-    // adding/removing lines or when the vertical extent of the input box
-    // changes.  The caller should be able to provide a vector of a struct
-    // that defines each additional line.  The struct should have a cstring
-    // for the line text, a width of the line text in columns, and a boolean
-    // saying whether the additional line should be bounded by the horizontal
-    // extent (and origin) of the input box (versus starting at column 1 and
-    // owning the full terminal width for the line).  The display_manager can
-    // optimize display be remembering whether/where it has displayed each
-    // line (i.e. vertical and horizontal position and horizontal extent for
-    // each line), and only display/erase changed additional lines.  When
-    // displaying these additional lines, if the boolean says the line should
-    // be bounded by the horizonal extent, then the display_manager will pad
-    // to the horizontal extent, otherwise it will clear to the end of that
-    // line.  That will simplify the host showing/clearing its extra rows
-    // (something Clink still struggles with), and will also let the example
-    // program eliminate the cursor flicker when using its --show-keys flag.
-
     // Format content into display structures.
     display_lines tmp;
     if (!build(tmp))
@@ -755,12 +753,16 @@ bool display_manager::display_internal(display_lines& lines)
     if (lines.m_erase)
     {
         assert(lines.m_lines.empty());
+        assert(lines.m_additional_lines.empty());
         lines.m_extent.x = m_displayed.m_extent.x;
         lines.m_extent.y = 0;
     }
 
-    if (!m_displayed.m_change_counter ||
-        memcmp(&lines.m_extent, &m_displayed.m_extent, sizeof(lines.m_extent)) != 0)
+    const coord input_extent = { lines.m_extent.x, lines.m_extent.y - int32_t(lines.m_additional_lines.size()) };
+    const coord displayed_input_extent = { m_displayed.m_extent.x, m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) };
+    assert(input_extent.y >= 0);
+    assert(displayed_input_extent.y >= 0);
+    if (!m_displayed.m_change_counter || input_extent != displayed_input_extent)
         m_border_dirty = true;
 
     m_accumulator.clear();
@@ -777,7 +779,7 @@ bool display_manager::display_internal(display_lines& lines)
     {
         if (width <= 0)
             return;
-        if (m_origin.x + max_size.x - 1 == term_size.x)
+        if (m_origin.x + cursor.x + width - 1 >= term_size.x)
         {
             output(term_erase_to_eol());
         }
@@ -796,7 +798,7 @@ bool display_manager::display_internal(display_lines& lines)
     {
         move_to_row(cursor, 0, 0);
         move_to_column(cursor, 0, 0);
-        append_border(lines.m_extent);
+        append_border(input_extent);
     }
     m_border_dirty = false;
 
@@ -931,6 +933,72 @@ bool display_manager::display_internal(display_lines& lines)
         }
     }
 
+    // Display additional lines, comparing by terminal row rather than by
+    // vector index so lines can be reused when the input height changes.
+    const int32_t additional_begin = input_extent.y;
+    const int32_t displayed_additional_begin = displayed_input_extent.y;
+    for (size_t i = 0; i < lines.m_additional_lines.size(); ++i)
+    {
+        const int32_t row = additional_begin + int32_t(i);
+        const additional_display_line& line = lines.m_additional_lines[i];
+
+        // If the displayed line ends up the same then skip displaying it.
+        const additional_display_line* displayed = nullptr;
+        if (row >= displayed_additional_begin && row < m_displayed.m_extent.y)
+            displayed = &m_displayed.m_additional_lines[row - displayed_additional_begin];
+        if (m_displayed.m_change_counter)
+        {
+            const bool reuse_displayed_line = displayed && line == *displayed &&
+                (!line.bounded || input_extent.x == displayed_input_extent.x);
+            if (reuse_displayed_line)
+                continue;
+        }
+
+        // Move the cursor.
+        output_color("");
+        move_to_row(cursor, uint16_t(row), 0);
+        const bool erased_unbounded_line = line.bounded && displayed && !displayed->bounded;
+        if (erased_unbounded_line)
+        {
+            output(term_col(1));
+            cursor.x = 1 - m_origin.x;
+            output(term_erase_to_eol());
+        }
+        if (line.bounded)
+        {
+            move_to_column(cursor, 0, 0);
+        }
+        else
+        {
+            output(term_col(1));
+            cursor.x = 1 - m_origin.x;
+        }
+
+        // Print the line text if it fits.
+        const uint16_t max_width = (line.bounded) ? input_extent.x : term_size.x;
+        const bool line_overflow = line.width > max_width;
+        const uint16_t width = line_overflow ? 0 : line.width;
+        if (!line_overflow)
+        {
+            output(line.text.c_str(), line.text.length());
+            cursor.x += line.width;
+        }
+
+        // Pad/clear to the appropriate width.
+        if (line.bounded)
+        {
+            if (!line_overflow || !erased_unbounded_line)
+            {
+                output_spaces(input_extent.x - width);
+                cursor.x += input_extent.x - width;
+            }
+        }
+        else if (line.width < term_size.x)
+        {
+            output(term_erase_to_eol());
+        }
+    }
+
     // Erase rows in m_displayed but not in lines.
     if (lines.m_extent.y < m_displayed.m_extent.y)
     {
@@ -938,8 +1006,19 @@ bool display_manager::display_internal(display_lines& lines)
         for (uint16_t i = lines.m_extent.y; i < m_displayed.m_extent.y; ++i)
         {
             move_to_row(cursor, i, 0);
-            move_to_column(cursor, 0, 0);
-            erase_row(lines.m_extent.x);
+            const bool unbounded = i >= displayed_additional_begin &&
+                !m_displayed.m_additional_lines[i - displayed_additional_begin].bounded;
+            if (unbounded)
+            {
+                output(term_col(1));
+                cursor.x = 1 - m_origin.x;
+                output(term_erase_to_eol());
+            }
+            else
+            {
+                move_to_column(cursor, 0, 0);
+                erase_row(displayed_input_extent.x);
+            }
         }
     }
 
@@ -979,11 +1058,7 @@ void display_manager::move_to_end_of_display()
 {
     if (m_displayed.m_extent.y > 0)
     {
-        move_to_row(m_relative_cursor, m_displayed.m_extent.y - 1, 0);
-
-        output("\r\n", 2);
-        m_relative_cursor.x = 0;
-        ++m_relative_cursor.y;
+        move_to_row(m_relative_cursor, m_displayed.m_extent.y, 0);
     }
 }
 
@@ -999,17 +1074,32 @@ void display_manager::move_to_caret_position()
 void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset)
 {
     y += inner_offset;
-    if (m_origin.y > 0)
+    if (y < cursor.y)
     {
-        output(term_row_col(m_origin.y + y, 1));
-        cursor.x = 0; // REVIEW: is this accurate, or is this supposed to be relative to origin?
+        if (m_origin.y > 0)
+        {
+            output(term_row_col(m_origin.y + y, 1));
+            cursor.x = 1 - m_origin.x;
+        }
+        else
+        {
+            output(term_move_up(cursor.y - y));
+        }
     }
-    else if (y < cursor.y)
-        output(term_move_up(cursor.y - y));
     else if (y > cursor.y)
-        output(term_move_down(y - cursor.y));
+    {
+        for (uint16_t n = y - cursor.y; n--;)
+            output("\r\n", 2);
+        cursor.x = 1 - m_origin.x;
+        // REVIEW: AI thinks making m_origin.y go negative is appropriate
+        // when (m_origin.y > 0 && m_origin.y + cursor.y > m_term_size.y).
+        // But I'm not convinced yet...
+    }
     else
+    {
         return;
+    }
+
     cursor.y = y;
 }
 
@@ -1063,7 +1153,8 @@ bool display_manager::build(display_lines& out)
     if (change_counter == m_displayed.m_change_counter &&
         pos == m_displayed.m_pos &&
         left == m_displayed.m_left &&
-        sel_end - sel_begin == m_displayed.m_selection_length)
+        sel_end - sel_begin == m_displayed.m_selection_length &&
+        m_additional_lines == m_displayed.m_additional_lines)
         return false;
 
     const cstring& text = m_buffer->get_text();
@@ -1392,6 +1483,8 @@ again:
 
     tmp.m_extent.x += max_size.x;
     tmp.m_extent.y += y_extent;
+    tmp.m_additional_lines = m_additional_lines;
+    tmp.m_extent.y += int32_t(tmp.m_additional_lines.size());
 
     assert(tmp.m_cursor.y >= 0);
     assert(size_t(tmp.m_cursor.y) < tmp.m_lines.size());

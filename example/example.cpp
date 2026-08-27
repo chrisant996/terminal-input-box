@@ -160,45 +160,36 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
         }
     }
 }
+#pragma endregion // Example customizations.
 
+#pragma region Show input sequence.
 static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& show_sequence, const tib::coord* old_extent=nullptr)
 {
-    const tib::coord origin = ctx.get_origin();
-    const tib::coord cursor = ctx.get_relative_cursor();
-    const tib::coord extent = ctx.get_extent();
-    const int32_t vert = extent.y - cursor.y;
+    tib::additional_display_line line;
 
-    if (tib::g_show_hide_cursor)
-        tib::term_out(tib::c_hide_cursor);
-    ctx.move_to_end_of_display();
-
-    tib::cstring tmp;
     if (show_sequence.length())
     {
-        tmp.append_color("36");
-        tmp.append(tib::term_col(4));
-        tmp.append("keys:  ");
-        tmp.append(show_sequence.c_str(), show_sequence.length());
-        tmp.append_color("");
-    }
-    tmp.append(tib::term_erase_to_eol());
+        line.text.append_color("36");
+        const size_t begin_len = line.text.length();
 
-    if (old_extent && old_extent->y > extent.y)
+        line.text.append("  keys:  ");
+        line.text.append(show_sequence.c_str(), show_sequence.length());
+
+        const size_t end_len = line.text.length();
+        line.text.append_color("");
+        line.width = uint16_t(line.text.length() - (end_len - begin_len));
+        line.bounded = true;
+
+        std::vector<tib::additional_display_line> additional;
+        additional.emplace_back(std::move(line));
+        ctx.set_additional_lines(additional);
+    }
+    else
     {
-        const uint32_t delta = old_extent->y - extent.y;
-        for (uint32_t n = delta; n--;)
-            tmp.append("\n");
-        tmp.append(tib::term_erase_to_eol());
-        tmp.append(tib::term_move_up(delta));
+        ctx.clear_additional_lines();
     }
-
-    tib::term_out(tmp.c_str(), tmp.length());
-
-    ctx.move_to_caret_position();
-    if (tib::g_show_hide_cursor)
-        tib::term_out(tib::c_show_cursor);
 }
-#pragma endregion // Example customizations.
+#pragma endregion // Show input sequence.
 
 int main(int argc, const char** argv)
 {
@@ -433,11 +424,10 @@ no_border:
     tib::coord old_extent = tib->get_extent();
     double last_clock = tib::clock();
 
-    auto show_sequence_after_display = [&]()
+    auto add_sequence_to_display = [&]()
     {
-        if (!s_show_keys)
-            return;
-        display_key_sequence(*tib, show_sequence, &old_extent);
+        if (s_show_keys)
+            display_key_sequence(*tib, show_sequence, &old_extent);
     };
 
     auto update_sequence_before_step = [&](int32_t c)
@@ -489,9 +479,9 @@ no_border:
 
     while (!tib->done())                                    // Required.
     {
-        tib->display();                                     // Required.
+                /*Custom*/  add_sequence_to_display();
 
-                /*Custom*/  show_sequence_after_display();
+        tib->display();                                     // Required.
 
         const int32_t c = tib::term_in();                   // Required.
         if (c == tib::c_input_terminal_eof)
@@ -507,10 +497,7 @@ no_border:
 
 #pragma region Show input sequence.
     if (s_show_keys)
-    {
-        show_sequence.clear();
-        display_key_sequence(*tib, show_sequence);
-    }
+        tib->clear_additional_lines();
 #pragma endregion // Show input sequence.
 
     tib->erase_display();

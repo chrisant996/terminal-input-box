@@ -88,6 +88,15 @@ struct style_info
     char                empty_face = FACE_EMPTY;
 };
 
+struct additional_display_line
+{
+    bool                operator==(const additional_display_line& other) const noexcept;
+
+    cstring             text;
+    uint16_t            width = 0;
+    bool                bounded = true;
+};
+
 struct display_line
 {
                         ~display_line() = default;
@@ -127,6 +136,7 @@ struct display_lines
 
     std::vector<std::unique_ptr<display_line>> m_lines;
     std::vector<display_row_start> m_rows;
+    std::vector<additional_display_line> m_additional_lines;
     coord               m_cursor = { -1, -1 };  // Offset from m_inner_offset.
 
     coord               m_inner_offset = { 0, 0 };
@@ -154,6 +164,9 @@ public:
 
     std::shared_ptr<const color_table> get_color_table() const;
     void                set_color_table(std::shared_ptr<const color_table> colors);
+
+    void                set_additional_lines(const std::vector<additional_display_line>& lines);
+    void                clear_additional_lines();
 
     coord               get_effective_max_size(bool omit_scroll_markers=false);
     coord               get_relative_cursor() const { return m_relative_cursor; }
@@ -201,6 +214,7 @@ private:
     coord               m_term_size;
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
+    std::vector<additional_display_line> m_additional_lines;
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.
     bool                m_border_dirty = false;

@@ -37,10 +37,14 @@ const char* term_row_col(int32_t row, int32_t col)
 
 const char* term_col(int32_t col)
 {
-    static cstring s_buffer;
-    s_buffer.clear();
-    s_buffer.printf("\x1b[%dG", col);
-    return s_buffer.c_str();
+    if (col > 1)
+    {
+        static cstring s_buffer;
+        s_buffer.clear();
+        s_buffer.printf("\x1b[%dG", col);
+        return s_buffer.c_str();
+    }
+    return "\r";
 }
 
 const char* term_erase_to_eol()
