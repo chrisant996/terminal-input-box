@@ -6,6 +6,73 @@
 #include "test_util.h"
 #include "tib.h"
 
+#ifdef _WIN32
+TEST_CASE("Repeated key input")
+{
+    SECTION("Queues every repeat (ASCII)")
+    {
+        tib::pushed_input input;
+        KEY_EVENT_RECORD record {};
+        record.bKeyDown = true;
+        record.wRepeatCount = 3;
+        record.uChar.UnicodeChar = L'x';
+
+        REQUIRE(input.push_key_event(record) == 1);
+        REQUIRE(input.read() == 'x');
+        REQUIRE(input.read() == 'x');
+        REQUIRE(input.read() == 'x');
+        REQUIRE(input.empty());
+    }
+
+    SECTION("Queues every repeat (UTF16)")
+    {
+        tib::pushed_input input;
+        KEY_EVENT_RECORD record {};
+        record.bKeyDown = true;
+        record.wRepeatCount = 3;
+        record.uChar.UnicodeChar = 0x03c7; // Greek Small Letter Chi
+
+        REQUIRE(input.push_key_event(record) == 1);
+        REQUIRE(input.read() == 0xcf);
+        REQUIRE(input.read() == 0x87);
+        REQUIRE(input.read() == 0xcf);
+        REQUIRE(input.read() == 0x87);
+        REQUIRE(input.read() == 0xcf);
+        REQUIRE(input.read() == 0x87);
+        REQUIRE(input.empty());
+    }
+
+    SECTION("Expands a wrapped queue")
+    {
+        tib::pushed_input input;
+        KEY_EVENT_RECORD record {};
+        record.bKeyDown = true;
+
+        record.wRepeatCount = 100;
+        record.uChar.UnicodeChar = L'a';
+        REQUIRE(input.push_key_event(record) == 1);
+        for (size_t i = 0; i < 90; ++i)
+            REQUIRE(input.read() == 'a');
+
+        record.wRepeatCount = 120;
+        record.uChar.UnicodeChar = L'b';
+        REQUIRE(input.push_key_event(record) == 1);
+
+        record.wRepeatCount = 30;
+        record.uChar.UnicodeChar = L'c';
+        REQUIRE(input.push_key_event(record) == 1);
+
+        for (size_t i = 0; i < 10; ++i)
+            REQUIRE(input.read() == 'a');
+        for (size_t i = 0; i < 120; ++i)
+            REQUIRE(input.read() == 'b');
+        for (size_t i = 0; i < 30; ++i)
+            REQUIRE(input.read() == 'c');
+        REQUIRE(input.empty());
+    }
+}
+#endif
+
 TEST_CASE("Key bindings")
 {
     SECTION("Main")
