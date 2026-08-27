@@ -66,6 +66,7 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 ## Data Structures
 
 - Use a flat sorted line of key binding sequence strings.  I'm not a fan of using a trie for managing key bindings.  The performance benefits are negligible and require complex traversal implementations to successfully use the trie.  _[YES:  perf testing shows a trie is massive overkill.]_
+  - _[Also, this was crucial for supporting mouse input bindings.]_
 - Each tib has a separate class instance associated with it.  The host can choose which tib is active, and will call appropriate input and dispatch functions to provide an input loop.  Or optionally call a generic encapsulated input loop implementation.
 - Minimal "repaints" are important.  Maintain a cache of what's been displayed, and when updating the display skip displaying any line that's the same as what's already displayed.  And a minimal sub-line to display, by clipping leading/trailing graphemes that match what's already displayed.  IMPORTANT:  Clip based on grapheme boundaries, NOT on byte or character or encoding boundaries!
 
