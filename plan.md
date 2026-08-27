@@ -15,44 +15,44 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 - Bindable commands.
     - Basic set of bindable commands for input editing.
     - [x] Extensibility framework to allow registering custom bindable commands.
-- History integration through a history provider interface.
-    - Default to no history integration.
-    - A built-in optional simple in-memory history provider can be used.
-    - Or the host can provide its own custom history provider at runtime.
-- Completion integration through a completion provider interface.
-    - Default to no completion integration.
-- Input coloring.
-    - Optional interface for host to control input coloring.
-    - Default to no input coloring.
+- [ ] History integration through a history provider interface.
+    - [ ] Default to no history integration.
+    - [ ] A built-in optional simple in-memory history provider can be used.
+    - [ ] Or the host can provide its own custom history provider at runtime.
+- [x] **(LATER?)** Completion integration through a completion provider interface.  This can be delegated to the host, for now.
+    - [x] **(LATER?)** Default to no completion integration.  This can be delegated to the host, for now.
+- [x] Input coloring.
+    - [x] Optional interface for host to control input coloring.
+    - [x] Default to no input coloring.
 - Hookable events.
     - Enough hooks that a caller can manage optional contextual regions, such as a clickable toolbar, or a hint row, or etc.
-    - [ ] Allow optional contextual regions outside the border.
-    - [ ] Allow optional contextual regions inside the border?
-- Optional interface for host to provide input.
-    - Default to using built-in input driver for native VT input.
-    - Optional interface for the host to provide its own input driver.
+    - [x] **(HOST)** Allow optional contextual regions outside the border.  This can be delegated to the host; the `binding_resolver` enables the host to handle mouse input that the `editor_context` doesn't.
+    - [x] **(HOST)** Allow optional contextual regions inside the border?  This can be delegated to the host; the `binding_resolver` enables the host to handle mouse input that the `editor_context` doesn't.
+- [x] Optional interface for host to provide input.
+    - [x] Default to using built-in input driver for native VT input.
+    - [x] Optional interface for the host to provide its own input driver.
     - [x] `term_out_hook` callback for host to handle output.
     - [x] `term_in_hook` callback for host to provide input.
-- Region.
-    - Let the caller specify a screen region, and whether the region can grow vertically as needed (and min and max heights).
-    - Optional border around the input box (imagine line drawing characters, or block graphics like Codex uses, or custom-defined borders).
-    - Support for irregular shape on the first line (e.g. prompt on the left and right-prompt on the right).
+- [x] Region.
+    - [x] Let the caller specify a screen region, and whether the region can grow vertically as needed (and min and max heights).
+    - [x] Optional border around the input box (imagine line drawing characters, or block graphics like Codex uses, or custom-defined borders).
+    - [x] Support for irregular shape on the first line (e.g. prompt on the left and right-prompt on the right).
 - Display.
     - [x] Custom border drawing.
-    - [ ] Custom prompt drawing.
-    - [ ] Custom prompt drawing, optionally within border.
+    - [x] **(HOST)** Custom prompt drawing.  This can be delegated to the host; providing `set_left_text()` is sufficient for the host to handle the rest of the prompt display.
+    - [x] **(HOST)** Custom prompt drawing, optionally within border.  This can be delegated to the host, via `border_definition` customization.
     - [x] Custom padding inside border.
-    - [ ] Relative cursor positioning, esp. for multi-line display.
-- Platform abstraction.
-    - Abstract platform-dependent functionality behind an interface, and only provide a built-in lowest-common-denominator implementation.
+    - [x] Relative cursor positioning, esp. for multi-line display.
+- [x] Platform abstraction.
+    - [x] Abstract platform-dependent functionality behind an interface, and only provide a built-in lowest-common-denominator implementation.
 - Config options.
-    - Word wrapping.
-    - Multi-line.
-    - Horizontal scrolling.
-    - Vertical scrolling.
+    - [x] Word wrapping.
+    - [x] Multi-line.
+    - [x] Horizontal scrolling.
+    - [x] Vertical scrolling.
     - [x] Max width.
-    - [ ] Max height.
-    - [ ] Variable height (grow up to max height).
+    - [x] Max height.
+    - [x] Variable height (grow up to max height).
 - [x] Max input size.
 
 ## Internal encoding
