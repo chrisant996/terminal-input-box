@@ -23,6 +23,10 @@ extern bool g_show_hide_cursor;
 
 struct border_definition
 {
+#if 0
+    bool                is_valid() const;
+#endif
+
     // FUTURE: Allow callback functions for header and footer, or for building
     // a custom strings for the top and bottom borders?
 
@@ -32,7 +36,7 @@ struct border_definition
     bool                has_right() const { return this && right && *right; }
 
     // These allow a border_definition to include embedded ANSI escape
-    // sequences without requiring terminal-input-box to include an ECMA-48
+    // sequences without requiring terminal-input-box to include an ECMA48
     // compliant escape sequence parser.
     int8_t              get_top_left_width() const { return !this ? 0 : get_width(top_left, top_left_width); }
     int8_t              get_top_width() const { return !this ? 0 : get_width(top, top_width); }
@@ -60,6 +64,9 @@ struct border_definition
     int8_t              bottom_left_width = -1;
     int8_t              bottom_width = -1;
     int8_t              bottom_right_width = -1;
+
+    const char*         left_2 = nullptr;
+    const char*         right_2 = nullptr;
 
 private:
     int8_t              get_width(const char* s, int8_t width) const;

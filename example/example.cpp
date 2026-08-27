@@ -19,7 +19,8 @@ static const char c_long_usage[] =
 "  --variable        Variable height input mode (implies --multiline).\n"
 "  --full-width      Use the full terminal width (default is 40).\n"
 "  --no-border       No border (default; same as '--border none').\n"
-"  --border STYLE    Use border style:  light, padding, bar-padding, none.\n"
+"  --border STYLE    Use border style (STYLE == light, padding, bar-padding,\n"
+"                      first-line, none).\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
 ;
@@ -32,6 +33,8 @@ static bool s_show_keys = false;
 
 static const char* const c_bar_text_color = "0;38;2;180;140;33";
 static const char* const c_border_text_color = "0;38;2;33;33;33";
+static const char* const c_border_back_color = "0;48;2;33;33;33";
+static const char* const c_border_first_color = "38;2;33;204;33";
 constexpr char FACE_CTRL = '^';
 constexpr char FACE_RAINBOW = '\x80';
 
@@ -48,7 +51,7 @@ static const tib::border_definition c_padding_border =
 
 struct bar_padding_border_definition : public tib::border_definition
 {
-    bar_padding_border_definition()
+    bar_padding_border_definition(const char* first_left=nullptr, const char* first_right=nullptr)
     {
         make_bar("▗▄", custom_top_left, top_left, top_left_width);
         make_bar("▐█", custom_left, left, left_width);
@@ -60,6 +63,39 @@ struct bar_padding_border_definition : public tib::border_definition
 
         top = "▄";              top_width = 1;
         bottom = "▀";           bottom_width = 1;
+
+        if (first_left)
+        {
+            const uint32_t first_width = __wcswidth(first_left, strlen(first_left));
+            custom_left_2 = custom_left;
+            custom_left_2.append_color(c_border_back_color);
+            custom_left_2.append_spaces(first_width);
+            left_2 = custom_left_2.c_str();
+            custom_left.append_color(c_border_back_color);
+            custom_left.append_color(c_border_first_color);
+            custom_left.append(first_left);
+            left_width += first_width;
+        }
+        if (first_right)
+        {
+            const uint32_t first_width = __wcswidth(first_right, strlen(first_right));
+            custom_right_2.append_color(c_border_back_color);
+            custom_right_2.append_spaces(first_width);
+            custom_right_2.append_color(c_border_text_color);
+            custom_right_2.append(right);
+            right_2 = custom_right_2.c_str();
+            custom_right.append_color(c_border_back_color);
+            custom_right.append_color(c_border_first_color);
+            custom_right.append(first_right);
+            custom_right.append_color(c_border_text_color);
+            custom_right.append(right);
+            right = custom_right.c_str();
+            right_width += first_width;
+        }
+
+#if 0
+        assert(is_valid());
+#endif
     };
 
 protected:
@@ -79,10 +115,14 @@ protected:
 private:
     tib::cstring custom_top_left;
     tib::cstring custom_left;
+    tib::cstring custom_left_2;
+    tib::cstring custom_right;
+    tib::cstring custom_right_2;
     tib::cstring custom_bottom_left;
 };
 
 static const bar_padding_border_definition c_bar_padding_border;
+static const bar_padding_border_definition c_first_line_border("> ", " HH:MM");
 #pragma endregion // Example customizations.
 
 std::shared_ptr<tib::key_table_list> make_key_tables()
@@ -286,6 +326,12 @@ no_border:
                     tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
                     border = &c_bar_padding_border;
+                }
+                else if (_stricmp(argv[i], "first-line") == 0)
+                {
+                    tib->set_empty_face(tib::FACE_DEFAULT);
+                    colors->set_color(tib::color_element::base, c_padding_base);
+                    border = &c_first_line_border;
                 }
                 else if (_stricmp(argv[i], "none") == 0)
                 {

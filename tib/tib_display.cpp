@@ -30,6 +30,21 @@ const border_definition c_light_border =
     1,      1,      1,
 };
 
+// FUTURE: this project does not yet have an ECMA48 compliant parser, so this
+// can't verify any of the widths.
+#if 0
+bool border_definition::is_valid() const
+{
+    if (has_left() && left_2 && get_width(left, left_width) != cell_count(left_2, -1))
+        return false;
+    if (has_right() && right_2 && get_width(right, right_width) != cell_count(right_2, -1))
+        return false;
+
+    // FUTURE: verify that attested widths are accurate.
+    return true;
+}
+#endif
+
 int8_t border_definition::get_width(const char* s, int8_t width) const
 {
     return (!s || !*s) ? 0 : (width < 0) ? __wcswidth(s, -1) : width;
@@ -1501,6 +1516,10 @@ void display_manager::append_border(coord extent)
     assert(m_style);
 
     const border_definition& b = *m_style->border;
+#if 0
+    assert(implies(m_style->border, b.is_valid()));
+#endif
+
     const uint16_t b_left_width = b.get_left_width();
     const uint16_t b_right_width = b.get_right_width();
     const uint16_t extra_border_width = b_left_width + b_right_width;
@@ -1525,18 +1544,19 @@ void display_manager::append_border(coord extent)
             output(b.top_right);
     }
 
-    for (uint32_t i = extent.y - extra_border_height; i--;)
+    bool first = true;
+    for (uint32_t i = extent.y - extra_border_height; i--; first = false)
     {
         output("\r\n");
         if (b_left_width)
         {
             output(term_col(m_origin.x));
-            output(b.left);
+            output((!b.left_2 || first) ? b.left : b.left_2);
         }
         if (b_right_width)
         {
             output(term_col(m_origin.x + extent.x - b_right_width));
-            output(b.right);
+            output((!b.right_2 || first) ? b.right : b.right_2);
         }
     }
 
