@@ -85,6 +85,7 @@ public:
     void                set_color_table(std::shared_ptr<const color_table> colors);
     void                set_face_defs(const face_definitions* face_defs);
     void                set_empty_face(char face);
+    void                set_left_text(const char* left, uint16_t width) { m_display.set_left_text(left, width); }
     void                set_right_text(const char* right, uint16_t width) { m_display.set_right_text(right, width); }
     void                set_additional_lines(const std::vector<additional_display_line>& lines) { m_display.set_additional_lines(lines); }
     void                clear_additional_lines() { m_display.clear_additional_lines(); }

@@ -177,6 +177,17 @@ private:
 
 TEST_CASE("Display differential updates")
 {
+    SECTION("Redraws changed left text")
+    {
+        display_test_fixture fixture;
+        fixture.m_display.set_left_text("old: ", 5);
+        fixture.display_initial("abc", 0);
+
+        fixture.m_display.set_left_text("new: ", 5);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "new: ") != nullptr);
+    }
+
     SECTION("Reuses a line only when all displayed text matches")
     {
         display_test_fixture fixture;
@@ -242,6 +253,66 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(strstr(s_display_output.c_str(), "b\xcc\x81") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
+    }
+}
+
+TEST_CASE("Display left text")
+{
+    SECTION("Participates in wrapping")
+    {
+        display_test_fixture fixture(5, false, 3, true);
+        fixture.m_display.set_left_text("> ", 2);
+        fixture.m_buffer.set_text("abcd", 4);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "> ") != nullptr);
+        const tib::coord expected = { 1, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Is omitted unless an input column remains")
+    {
+        display_test_fixture fixture(5, false, 3, true);
+        fixture.m_display.set_left_text("12345", 5);
+        fixture.m_buffer.set_text("abcd", 4);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "12345") == nullptr);
+        const tib::coord expected = { 4, 0 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Is omitted when horizontally scrolled")
+    {
+        display_test_fixture fixture(8, true);
+        fixture.m_display.set_left_text("1234567", 7);
+        fixture.m_buffer.set_text("abcdefghijkl", 12);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(fixture.m_display.get_left() > 0);
+        REQUIRE(strstr(s_display_output.c_str(), "1234567") == nullptr);
+    }
+
+    SECTION("Is displayed before horizontal scrolling starts")
+    {
+        display_test_fixture fixture(8, true);
+        fixture.m_display.set_left_text("> ", 2);
+        fixture.m_buffer.set_text("abc", 3);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(fixture.m_display.get_left() == 0);
+        REQUIRE(strstr(s_display_output.c_str(), "> ") != nullptr);
+    }
+
+    SECTION("Is not displayed when the first logical line is scrolled away")
+    {
+        display_test_fixture fixture(5, false, 2);
+        fixture.m_display.set_left_text("> ", 2);
+        fixture.m_buffer.set_text("abcdefghijkl", 12);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(fixture.m_display.get_top() > 0);
+        REQUIRE(strstr(s_display_output.c_str(), "> ") == nullptr);
     }
 }
 

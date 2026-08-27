@@ -139,8 +139,10 @@ void display_lines::clear()
 
     m_lines.clear();
     m_rows.clear();
+    m_left_text.clear();
+    m_left_text_width = 0;
     m_right_text.clear();
-    m_right_width = 0;
+    m_right_text_width = 0;
     m_additional_lines.clear();
     m_cursor = { -1, -1 };
 
@@ -305,10 +307,18 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
     invalidate_border();
 }
 
+void display_manager::set_left_text(const char* left, uint16_t width)
+{
+    m_left_text = left;
+    m_left_text_width = width;
+    m_hwheel_exclusion = false;
+    invalidate();
+}
+
 void display_manager::set_right_text(const char* right, uint16_t width)
 {
     m_right_text = right;
-    m_right_width = width;
+    m_right_text_width = width;
     invalidate();
 }
 
@@ -496,7 +506,9 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     display_row_start target = { 0, false };
     display_row_start last = target;
     int32_t row = 0;
-    uint16_t row_width = 0;
+    const uint16_t left_text_width =
+        (m_left_text.length() && m_left_text_width < max_size.x) ? m_left_text_width : 0;
+    uint16_t row_width = left_text_width;
     wcwidth_iter scan(text.c_str(), text.length());
 
     while (scan.more() && row < wanted_row)
@@ -556,7 +568,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
 
     cursor_column = max(cursor_column - m_displayed.m_inner_offset.x, 0);
     textpos_t caret = target.offset;
-    uint32_t screen_column = 0;
+    uint32_t screen_column = (wanted_row == 0) ? left_text_width : 0;
     if (target.pending)
     {
         if (cursor_column)
@@ -657,6 +669,13 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     textpos_t caret = start.offset;
     uint32_t screen_column = 0;
 
+    if (row == 0 && m_displayed.m_left_text_width)
+    {
+        screen_column = m_displayed.m_left_text_width;
+        if (uint32_t(column) < screen_column)
+            return set_screen_caret(caret);
+    }
+
     if (start.pending)
     {
         if (!column)
@@ -698,6 +717,9 @@ void display_manager::ensure_left()
         return;
     }
 
+    const coord full_max_size = get_effective_max_size();
+    const uint16_t left_text_width =
+        (m_left_text.length() && m_left_text_width < full_max_size.x) ? m_left_text_width : 0;
     const cstring& text = m_buffer->get_text();
     const selection_state& selection = m_buffer->get_selection_state();
     if (m_hwheel_exclusion)
@@ -720,10 +742,12 @@ void display_manager::ensure_left()
         width += g.width;
     for (auto g = m_tmp_graphemes.cbegin(); true; ++g)
     {
+        const uint16_t current_left_text_width = m_left ? 0 : left_text_width;
+        const int16_t caret_max_width = current_left_text_width ? full_max_size.x : max_size.x;
         int16_t display_width = width;
         if (m_left && m_style->horiz_scroll_markers && g != m_tmp_graphemes.cend())
             display_width = get_horiz_scrolled_width(width, g->width);
-        if (display_width < max_size.x)
+        if (display_width + current_left_text_width < caret_max_width)
             break;
 
         assert(g != m_tmp_graphemes.cend());
@@ -735,7 +759,9 @@ void display_manager::ensure_left()
     assert(selection.get_caret() >= m_left);
     {
         textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
-        if (m_left > backup_left)
+        // Returning to column zero would restore the left text and could
+        // make the caret overflow again.
+        if (m_left > backup_left && (backup_left || !left_text_width))
             m_left = backup_left;
     }
 }
@@ -846,8 +872,12 @@ bool display_manager::display_internal(display_lines& lines)
                 // line exactly matches the previously displayed line.  The
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
+                const bool left_text_changed = (i == 0 &&
+                    (!lines.m_left_text.equals(m_displayed.m_left_text) ||
+                     lines.m_left_text_width != m_displayed.m_left_text_width));
                 if (line->m_text.equals(displayed->m_text) &&
                     line->m_faces.equals(displayed->m_faces) &&
+                    !left_text_changed &&
                     (i || m_right_text.equals(m_displayed.m_right_text)))
                 {
                     reuse_displayed_line = true;
@@ -859,7 +889,7 @@ bool display_manager::display_internal(display_lines& lines)
                 // Walk forward past a leading portion that exactly matches.
                 size_t displayed_begin = 0;
                 const size_t displayed_length = displayed->m_text.length();
-                while (begin < end && displayed_begin < limit_forward_skip)
+                while (!left_text_changed && begin < end && displayed_begin < limit_forward_skip)
                 {
                     uint16_t width;
                     const size_t next = forward_one_grapheme(line->m_text.c_str(), end, uint32_t(begin), &width);
@@ -916,7 +946,16 @@ bool display_manager::display_internal(display_lines& lines)
 
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
-        move_to_column(cursor, begin_width, lines.m_inner_offset.x);
+        const uint16_t left_text_width = (i == 0) ? lines.m_left_text_width : 0;
+        move_to_column(cursor, begin_width ? begin_width + left_text_width : 0, lines.m_inner_offset.x);
+
+        // The left text is kept separate from the input text because it may
+        // contain terminal escape sequences whose width the caller attests.
+        if (i == 0 && begin == 0 && lines.m_left_text.length())
+        {
+            output(lines.m_left_text.c_str(), lines.m_left_text.length());
+            cursor.x += lines.m_left_text_width;
+        }
 
         // Display the text.
         char face = 0;
@@ -954,9 +993,9 @@ bool display_manager::display_internal(display_lines& lines)
         {
             move_to_column(cursor, line->width(), lines.m_inner_offset.x);
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
-            if (i == 0 && m_right_width && line->width() + c_right_text_padding + m_right_width <= max_size.x)
+            if (i == 0 && m_right_text_width && line->width() + c_right_text_padding + m_right_text_width <= max_size.x)
             {
-                erase_row(max_size.x - (line->width() + m_right_width));
+                erase_row(max_size.x - (line->width() + m_right_text_width));
                 output(m_right_text.c_str(), m_right_text.length());
             }
             else
@@ -1233,13 +1272,24 @@ bool display_manager::build(display_lines& out)
     const bool multiline = (max_size.y > 1);
     assert(implies(multiline, !left));
 
+    // The left text is all-or-nothing and must leave at least one column
+    // available for the input.  Its caller-provided width participates in
+    // wrapping even though the text itself may contain terminal escapes.
+    const bool show_left_text = !left && m_left_text.length() && m_left_text_width < max_size.x;
+    const uint16_t left_text_width = show_left_text ? m_left_text_width : 0;
+    if (show_left_text)
+    {
+        tmp.m_left_text = m_left_text;
+        tmp.m_left_text_width = m_left_text_width;
+    }
+
     // Calculate row boundaries without allocating display_line strings.
     // Special cases:  (1) a control character can wrap between its '^' and
     // its second displayed byte, and (2) if the final row is full then an
     // extra phantom row is needed for the cursor to land in.
     std::vector<display_row_start> rows;
     rows.push_back({ left, false });
-    uint16_t row_width = 0;
+    uint16_t row_width = left_text_width;
     int32_t y_extent = max_size.y;
     wcwidth_iter scan(text.c_str() + left, text.length() - left);
     const char* const cursor_ptr = text.c_str() + pos;
@@ -1356,6 +1406,9 @@ bool display_manager::build(display_lines& out)
         wcwidth_iter iter(text.c_str() + start.offset, text.length() - start.offset);
         const char* face = faces.c_str() + start.offset;
 
+        if (index == 0)
+            line->m_x2 += left_text_width;
+
         if (start.pending)
         {
             iter.next();
@@ -1461,10 +1514,10 @@ again:
             }
         }
 
-        if (index == 0 && m_right_width && line->width() + c_right_text_padding + m_right_width <= max_size.x)
+        if (index == 0 && m_right_text_width && line->width() + c_right_text_padding + m_right_text_width <= max_size.x)
         {
             tmp.m_right_text = m_right_text;
-            tmp.m_right_width = m_right_width;
+            tmp.m_right_text_width = m_right_text_width;
         }
 
         return line;
@@ -1494,6 +1547,14 @@ again:
     else
     {
         tmp.m_top = 0;
+    }
+
+    // The left text belongs only to the first logical display line.  Its
+    // width still influenced that line's wrapping when it is scrolled away.
+    if (tmp.m_top != 0)
+    {
+        tmp.m_left_text.clear();
+        tmp.m_left_text_width = 0;
     }
 
     // Build only the rows that will be visible.

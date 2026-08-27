@@ -21,6 +21,7 @@ static const char c_long_usage[] =
 "  --no-border       No border (default; same as '--border none').\n"
 "  --border STYLE    Use border style (STYLE == light, padding, bar-padding,\n"
 "                      first-line, none).\n"
+"  --left TEXT       Display TEXT at the left of the first line.\n"
 "  --right TEXT      Display TEXT at the right of the first line.\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
@@ -270,7 +271,9 @@ int main(int argc, const char** argv)
     face_defs.emplace(FACE_CTRL, "0;36;44");
 
     const tib::border_definition* border = nullptr;
+    tib::cstring left_text;
     tib::cstring right_text;
+    uint16_t left_width = 0;
     uint16_t right_width = 0;
     tib::mouse_input_mode mode = tib::mouse_input_mode::none;
     bool sgr_encoding = true;
@@ -355,6 +358,20 @@ no_border:
         else if (_stricmp(argv[i], "--rainbow") == 0)
         {
             s_use_rainbow_faces = true;
+        }
+        else if (_stricmp(argv[i], "--left") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                left_text = argv[i];
+                left_width = uint16_t(__wcswidth(left_text.c_str(), left_text.length()));
+            }
+            else
+            {
+                fputs("Missing left text.\n", stderr);
+                return 1;
+            }
         }
         else if (_stricmp(argv[i], "--right") == 0)
         {
@@ -453,6 +470,14 @@ no_border:
         border_face_scroller.append_color("36");
         face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
 
+        if (left_text.length())
+        {
+            tib::cstring tmp;
+            tmp.append_color(colors->get_color(tib::color_element::base));
+            tmp.append_color("96");
+            tmp.append(left_text.c_str());
+            left_text = std::move(tmp);
+        }
         if (right_text.length())
         {
             tib::cstring tmp;
@@ -484,6 +509,7 @@ no_border:
     tib->set_color_table(colors);
     tib->set_face_defs(&face_defs);
     tib->set_border(border);
+    tib->set_left_text(left_text.c_str(), left_width);
     tib->set_right_text(right_text.c_str(), right_width);
 #pragma endregion // Example customizations.
 
