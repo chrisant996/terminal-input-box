@@ -106,6 +106,7 @@ public:
     void                move_right(bool word=false, bool select=false);
     void                backspace(bool word=false);
     void                del(bool word=false);
+    void                transpose(bool word=false);
 
     void                clear_selection();
     void                set_caret(textpos_t caret);

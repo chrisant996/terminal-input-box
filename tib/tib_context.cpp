@@ -425,6 +425,10 @@ void editor_context::move_left(bool word, bool select)
         pos_mover(m_text.c_str(), m_text.length(), caret, false/*forward*/, word);
         m_selection.set_selection(select ? anchor : caret, caret);
     }
+    else if (!word)
+    {
+        ding();
+    }
     if (!select)
         m_selection.reset_word_anchor();
 }
@@ -442,6 +446,10 @@ void editor_context::move_right(bool word, bool select)
         pos_mover(m_text.c_str(), m_text.length(), caret, true/*forward*/, word);
         m_selection.set_selection(select ? anchor : caret, caret);
     }
+    else if (!word)
+    {
+        ding();
+    }
     if (!select)
         m_selection.reset_word_anchor();
 }
@@ -450,7 +458,11 @@ void editor_context::backspace(bool word)
 {
     m_selection.reset_word_anchor();
     if (!m_selection.has_selection() && m_selection.get_caret() <= 0)
+    {
+        if (!word)
+            ding();
         return;
+    }
 
     begin_undo_group();
 
@@ -473,7 +485,11 @@ void editor_context::del(bool word)
 {
     m_selection.reset_word_anchor();
     if (!m_selection.has_selection() && m_selection.get_caret() >= m_text.length())
+    {
+        if (!word)
+            ding();
         return;
+    }
 
     begin_undo_group();
 
@@ -537,6 +553,46 @@ void editor_context::select_word()
     }
 
     m_selection.set_selection(begin, end);
+}
+
+void editor_context::transpose(bool word)
+{
+    const textpos_t anchor = m_selection.get_anchor();
+    const textpos_t caret = m_selection.get_caret();
+
+    clear_selection();
+    move_right(word);
+    move_left(word);
+    const textpos_t second_begin = get_caret();
+    move_left(word);
+    const textpos_t first_begin = get_caret();
+    move_right(word);
+    const textpos_t first_end = get_caret();
+    move_right(word);
+    const textpos_t second_end = get_caret();
+
+    if (first_begin >= first_end || first_end > second_begin || second_begin >= second_end)
+    {
+        set_selection(anchor, caret);
+        ding();
+        return;
+    }
+
+    cstring transposed;
+    const char* const t = m_text.c_str();
+    transposed.append(t + second_begin, second_end - second_begin);
+    transposed.append(t + first_end, second_begin - first_end);
+    transposed.append(t + first_begin, first_end - first_begin);
+
+    set_selection(anchor, caret);
+    begin_undo_group();
+    clear_selection();
+    set_caret(first_begin);
+    remove_text(first_begin, second_end);
+    assert(get_caret() == first_begin);
+    insert_text(transposed.c_str(), transposed.length());
+    set_caret(second_end);
+    end_undo_group();
 }
 
 #ifdef _WIN32

@@ -6,8 +6,6 @@
 - Commands:
   - CUA versions of `screen-line-down` and `screen-line-up`.
   - Automatic clearing of selection when a non-CUA command is dispatched.
-  - Transpose characters.
-  - Transpose words.
   - UPPER CASE, lower case, Capitalize.
   - Toggle-able overwrite mode.
   - Undo all changes to the input line (undo back to the original state).

@@ -217,6 +217,20 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 //------------------------------------------------------------------------------
 
+int32_t transpose_chars(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.transpose();
+    return 0;
+}
+
+int32_t transpose_words(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.transpose(true/*word*/);
+    return 0;
+}
+
+//------------------------------------------------------------------------------
+
 static uint32_t get_scroll_lines(const editor_context& ctx)
 {
     uint32_t scroll_lines = 3;
@@ -493,38 +507,41 @@ std::shared_ptr<key_table_list> make_default_key_table()
 {
     auto t = std::make_shared<key_table>(true/*can_self_insert*/);
 
-    t->add({ "\001", binding_target_func("select-all") });
-    t->add({ "\003", binding_target_func("copy") });
-    t->add({ "\010", binding_target_func("del-word-left") }); // VT sends 0x08 for Ctrl-Backspace.
-    t->add({ "\r", binding_target_func("accept-line") });
-    t->add({ "\026", binding_target_func("paste") });
-    t->add({ "\030", binding_target_func("cut") });
-    t->add({ "\031", binding_target_func("redo") });
-    t->add({ "\032", binding_target_func("undo") });
+    t->add({ "\001", binding_target_func("select-all") });      // Ctrl-A
+    t->add({ "\003", binding_target_func("copy") });            // Ctrl-C
+    t->add({ "\010", binding_target_func("del-word-left") });   // VT sends 0x08 for Ctrl-Backspace.
+    t->add({ "\r", binding_target_func("accept-line") });       // Ctrl-M / Enter
+    t->add({ "\024", binding_target_func("transpose-chars") }); // Ctrl-T
+    t->add({ "\026", binding_target_func("paste") });           // Ctrl-V
+    t->add({ "\030", binding_target_func("cut") });             // Ctrl-X
+    t->add({ "\031", binding_target_func("redo") });            // Ctrl-Y
+    t->add({ "\032", binding_target_func("undo") });            // Ctrl-Z
 
-    t->add({ "\177", binding_target_func("del-char-left") }); // VT sends 0x7F for Backspace.
+    t->add({ "\033t", binding_target_func("transpose-words") });    // Alt-T (lower case)
 
-    t->add({ "\033[H", binding_target_func("begin-of-line") });
-    t->add({ "\033[F", binding_target_func("end-of-line") });
-    t->add({ "\033[D", binding_target_func("backward-char") });
-    t->add({ "\033[C", binding_target_func("forward-char") });
-    t->add({ "\033[1;5D", binding_target_func("backward-word") });
-    t->add({ "\033[1;5C", binding_target_func("forward-word") });
-    t->add({ "\033[B", binding_target_func("screen-line-down") });
-    t->add({ "\033[A", binding_target_func("screen-line-up") });
+    t->add({ "\177", binding_target_func("del-char-left") });       // VT sends 0x7F for Backspace.
 
-    t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });
-    t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });
-    t->add({ "\033[1;2D", binding_target_func("cua-backward-char") });
-    t->add({ "\033[1;2C", binding_target_func("cua-forward-char") });
-    t->add({ "\033[1;6D", binding_target_func("cua-backward-word") });
-    t->add({ "\033[1;6C", binding_target_func("cua-forward-word") });
+    t->add({ "\033[H", binding_target_func("begin-of-line") });     // Home
+    t->add({ "\033[F", binding_target_func("end-of-line") });       // End
+    t->add({ "\033[D", binding_target_func("backward-char") });     // Left
+    t->add({ "\033[C", binding_target_func("forward-char") });      // Right
+    t->add({ "\033[1;5D", binding_target_func("backward-word") });  // Ctrl-Left
+    t->add({ "\033[1;5C", binding_target_func("forward-word") });   // Ctrl-Right
+    t->add({ "\033[B", binding_target_func("screen-line-down") });  // Down
+    t->add({ "\033[A", binding_target_func("screen-line-up") });    // Up
 
-    t->add({ "\033[3~", binding_target_func("del-char-right") });
-    t->add({ "\033[3;5~", binding_target_func("del-word-right") });
+    t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });  // Shift-Home
+    t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });    // Shift-End
+    t->add({ "\033[1;2D", binding_target_func("cua-backward-char") });  // Shift-Left
+    t->add({ "\033[1;2C", binding_target_func("cua-forward-char") });   // Shift-Right
+    t->add({ "\033[1;6D", binding_target_func("cua-backward-word") });  // Shift-Ctrl-Left
+    t->add({ "\033[1;6C", binding_target_func("cua-forward-word") });   // Shift-Ctrl-Right
 
-    t->add({ "\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/ });
-    t->add({ "\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/ });
+    t->add({ "\033[3~", binding_target_func("del-char-right") });       // Del
+    t->add({ "\033[3;5~", binding_target_func("del-word-right") });     // Ctrl-Del
+
+    t->add({ "\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse press
+    t->add({ "\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse release
 
     auto tables = std::make_shared<key_table_list>();
     tables->emplace_back(std::move(t));
@@ -564,6 +581,8 @@ static const editor_command c_commands[] =
     { "screen-line-up", screen_line_up },
     { "select-all", select_all },
     { "select-word", select_word },
+    { "transpose-chars", transpose_chars },
+    { "transpose-words", transpose_words },
     { "undo", undo },
 };
 

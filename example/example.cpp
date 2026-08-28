@@ -130,8 +130,8 @@ static const bar_padding_border_definition c_first_line_border("> ", " HH:MM");
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
-    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });
-    t->add({ "\024", tib::binding_target_macro("Macro Text") });
+    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });    // Ctrl-R
+    t->add({ "\033T", tib::binding_target_macro("Macro Text") });   // Alt-Shift-T
 
     auto tables = tib::make_default_key_table();
     tables->emplace_back(t);
