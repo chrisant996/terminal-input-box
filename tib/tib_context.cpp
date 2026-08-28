@@ -727,9 +727,9 @@ bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
     return m_display.scroll_horizontally(columns, cursor_column, m_selection);
 }
 
-bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column)
+bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column, bool select)
 {
-    return m_display.move_caret_vertically(rows, cursor_column, m_selection);
+    return m_display.move_caret_vertically(rows, cursor_column, m_selection, select);
 }
 
 bool editor_context::set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars, bool word_drag)

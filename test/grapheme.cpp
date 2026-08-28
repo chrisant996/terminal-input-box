@@ -108,16 +108,24 @@ TEST_CASE("Back one grapheme")
 class display_test_buffer : public tib::input_buffer
 {
 public:
-    void set_text(const char* text, tib::textpos_t caret)
+    void set_text(const char* text, tib::textpos_t caret, tib::textpos_t anchor=-1)
     {
         m_text.set(text);
-        m_selection.set_caret(caret);
+        if (anchor < 0)
+            m_selection.set_caret(caret);
+        else
+            m_selection.set_selection(anchor, caret);
         ++m_change_counter;
     }
 
     void set_selection(tib::textpos_t anchor, tib::textpos_t caret)
     {
         m_selection.set_selection(anchor, caret);
+    }
+
+    tib::selection_state& get_selection_state_out()
+    {
+        return m_selection;
     }
 };
 
@@ -157,9 +165,9 @@ public:
         s_display_output.clear();
     }
 
-    void display_initial(const char* text, tib::textpos_t caret)
+    void display_initial(const char* text, tib::textpos_t caret, tib::textpos_t anchor=-1)
     {
-        m_buffer.set_text(text, caret);
+        m_buffer.set_text(text, caret, anchor);
         REQUIRE(m_display.display() == false);
         s_display_output.clear();
     }
@@ -314,6 +322,24 @@ TEST_CASE("Display left text")
         REQUIRE(fixture.m_display.get_top() > 0);
         REQUIRE(strstr(s_display_output.c_str(), "> ") == nullptr);
     }
+}
+
+TEST_CASE("Display vertical caret movement")
+{
+    display_test_fixture fixture(5, false, 3, true);
+    fixture.display_initial("abc\ndef\nghi", 1, 0);
+
+    const int32_t cursor_column = fixture.m_display.get_relative_cursor().x;
+    REQUIRE(fixture.m_display.move_caret_vertically(
+                1, cursor_column, fixture.m_buffer.get_selection_state_out(), true/*select*/));
+    REQUIRE(fixture.m_buffer.get_selection_state().get_anchor() == 0);
+    REQUIRE(fixture.m_buffer.get_selection_state().get_caret() == 5);
+
+    REQUIRE(fixture.m_display.display() == false);
+    REQUIRE(fixture.m_display.move_caret_vertically(
+                -1, cursor_column, fixture.m_buffer.get_selection_state_out()));
+    REQUIRE(fixture.m_buffer.get_selection_state().get_anchor() == 1);
+    REQUIRE(fixture.m_buffer.get_selection_state().get_caret() == 1);
 }
 
 TEST_CASE("Display horizontal scrolling")

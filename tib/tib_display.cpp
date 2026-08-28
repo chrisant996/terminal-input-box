@@ -494,7 +494,7 @@ void display_manager::suppress_auto_horizontal_scroll(const selection_state& sel
     m_hwheel_exclusion_change_counter = m_buffer->get_change_counter();
 }
 
-bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection)
+bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection, bool select)
 {
     const coord max_size = get_effective_max_size();
     if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
@@ -591,7 +591,10 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     }
 
     const bool changed = caret != selection.get_caret();
-    selection.set_caret(caret);
+    if (select)
+        selection.set_selection(selection.get_anchor(), caret);
+    else
+        selection.set_caret(caret);
     return changed;
 }
 

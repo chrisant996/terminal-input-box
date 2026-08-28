@@ -128,7 +128,7 @@ public:
     void                clear_named_value(const char* name);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
-    bool                move_caret_vertically(int32_t rows, int32_t cursor_column);
+    bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
     bool                set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll();
 

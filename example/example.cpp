@@ -127,11 +127,20 @@ static const bar_padding_border_definition c_bar_padding_border;
 static const bar_padding_border_definition c_first_line_border("> ", " HH:MM");
 #pragma endregion // Example customizations.
 
+int32_t insert_newline(tib::editor_context& ctx, int32_t key, const char* name, const tib::binding_params* params) noexcept
+{
+    ctx.insert_char('\n');
+    return 0;
+}
+
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
-    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });    // Ctrl-R
-    t->add({ "\033T", tib::binding_target_macro("Macro Text") });   // Alt-Shift-T
+    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });        // Ctrl-R
+    t->add({ "\033m", tib::binding_target_func("insert-newline") });    // Alt-M
+    t->add({ "\033T", tib::binding_target_macro("Macro Text") });       // Alt-Shift-T
+
+    tib::editor_context::register_command("insert-newline", insert_newline);
 
     auto tables = tib::make_default_key_table();
     tables->emplace_back(t);

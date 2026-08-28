@@ -16,14 +16,25 @@ namespace tib {
 
 static const char c_cursor_column_operation_var_name[] = "cursor_column_operation";
 
-static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* operation, const char* alt_command_name=nullptr)
+static bool is_in_string_list(const char* s, const char* const* list)
+{
+    while (*list)
+    {
+        if (!strcmp(s, *list))
+            return true;
+        ++list;
+    }
+    return false;
+}
+
+static int16_t cursor_column_continuation(editor_context& ctx, const char* command_name, const char* operation, const char* const* alt_command_names=nullptr)
 {
     static const char c_continuation_var_name[] = "cursor_column_continuation";
 
     const char* const have_operation = ctx.get_named_value(c_cursor_column_operation_var_name);
     const bool continuing = ((!operation || (operation && have_operation && !strcmp(have_operation, operation))) &&
                              (!strcmp(ctx.get_last_command(), command_name) ||
-                              (alt_command_name && !strcmp(ctx.get_last_command(), alt_command_name))));
+                              (alt_command_names && is_in_string_list(ctx.get_last_command(), alt_command_names))));
 
     int32_t cursor_column;
     if (continuing)
@@ -50,6 +61,15 @@ int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const bi
 }
 
 //------------------------------------------------------------------------------
+
+static const char* const c_screen_line_commands[] =
+{
+    "cua-screen-line-down",
+    "cua-screen-line-up",
+    "screen-line-down",
+    "screen-line-up",
+    nullptr
+};
 
 int32_t begin_of_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
@@ -89,13 +109,13 @@ int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const b
 
 int32_t screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, "screen-line-up"));
+    ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands));
     return 0;
 }
 
 int32_t screen_line_up(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, "screen-line-down"));
+    ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands));
     return 0;
 }
 
@@ -192,6 +212,18 @@ int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name, co
 int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_right(true/*word*/, true/*select*/);
+    return 0;
+}
+
+int32_t cua_screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands), true/*select*/);
+    return 0;
+}
+
+int32_t cua_screen_line_up(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands), true/*select*/);
     return 0;
 }
 
@@ -649,12 +681,14 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\033[B", binding_target_func("screen-line-down") });  // Down
     t->add({ "\033[A", binding_target_func("screen-line-up") });    // Up
 
-    t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });  // Shift-Home
-    t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });    // Shift-End
-    t->add({ "\033[1;2D", binding_target_func("cua-backward-char") });  // Shift-Left
-    t->add({ "\033[1;2C", binding_target_func("cua-forward-char") });   // Shift-Right
-    t->add({ "\033[1;6D", binding_target_func("cua-backward-word") });  // Shift-Ctrl-Left
-    t->add({ "\033[1;6C", binding_target_func("cua-forward-word") });   // Shift-Ctrl-Right
+    t->add({ "\033[1;2H", binding_target_func("cua-begin-of-line") });      // Shift-Home
+    t->add({ "\033[1;2F", binding_target_func("cua-end-of-line") });        // Shift-End
+    t->add({ "\033[1;2D", binding_target_func("cua-backward-char") });      // Shift-Left
+    t->add({ "\033[1;2C", binding_target_func("cua-forward-char") });       // Shift-Right
+    t->add({ "\033[1;6D", binding_target_func("cua-backward-word") });      // Shift-Ctrl-Left
+    t->add({ "\033[1;6C", binding_target_func("cua-forward-word") });       // Shift-Ctrl-Right
+    t->add({ "\033[1;2B", binding_target_func("cua-screen-line-down") });   // Shift-Down
+    t->add({ "\033[1;2A", binding_target_func("cua-screen-line-up") });     // Shift-Up
 
     t->add({ "\033[3~", binding_target_func("del-char-right") });       // Del
     t->add({ "\033[3;5~", binding_target_func("del-word-right") });     // Ctrl-Del
@@ -684,6 +718,8 @@ static const editor_command c_commands[] =
     { "cua-end-of-line", cua_end_of_line },
     { "cua-forward-char", cua_forward_char },
     { "cua-forward-word", cua_forward_word },
+    { "cua-screen-line-down", cua_screen_line_down },
+    { "cua-screen-line-up", cua_screen_line_up },
     { "cut", cut },
     { "del-char-left", del_char_left },
     { "del-char-right", del_char_right },
