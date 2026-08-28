@@ -5,6 +5,7 @@
 #include "maybe_windows.h"
 #include "tib.h"
 #include "test.h"
+#include "test_util.h"
 
 #include <list>
 #include <assert.h>
@@ -44,6 +45,7 @@ int main(int argc, char** argv)
 
     reset_wcwidths();
 
+    install_test_terminal_in();
     tib::term_begin();
 
     bool list = false;

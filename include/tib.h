@@ -11,7 +11,7 @@
 #include "tib_colors.h"
 #include "tib_commands.h"
 #include "tib_context.h"
-#include "tib_input.h"
+#include "tib_terminal.h"
 #include "tib_output.h"
 #include "tib_termcap.h"
 

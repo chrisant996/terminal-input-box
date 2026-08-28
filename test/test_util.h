@@ -5,11 +5,46 @@
 
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_terminal.h"
 
-static bool add_binding(tib::key_table& table, const char* sequence, const char* name)
+class test_terminal_in final : public tib::terminal_in
 {
-    return table.add({ sequence, tib::binding_target_func(name) });
-}
+public:
+                        ~test_terminal_in() override;
+                        test_terminal_in(tib::pushed_input& pushed);
+
+    int32_t             read() noexcept override;
+    bool                avail(uint32_t timeout=0) noexcept override;
+
+private:
+    friend class test_input_stream;
+
+    void                set_input(const char* input, size_t len);
+    void                clear() noexcept;
+    bool                empty() const noexcept { return m_index >= m_input.length(); }
+    static test_terminal_in* get() noexcept;
+
+    static test_terminal_in* s_instance;
+    tib::cstring        m_input;
+    size_t              m_index = 0;
+};
+
+class test_input_stream
+{
+public:
+                        test_input_stream(const char* input, size_t len=tib::c_auto_length);
+                        ~test_input_stream();
+
+                        test_input_stream(const test_input_stream&) = delete;
+    test_input_stream&  operator=(const test_input_stream&) = delete;
+
+    bool                empty() const noexcept;
+
+private:
+    test_terminal_in*   m_terminal = nullptr;
+};
+
+void install_test_terminal_in();
 
 class dispatcher_tester : public tib::dispatcher_target
 {
@@ -22,3 +57,5 @@ public:
 private:
     uint32_t            m_dispatch_count = 0;
 };
+
+bool add_binding(tib::key_table& table, const char* sequence, const char* name);

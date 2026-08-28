@@ -20,17 +20,24 @@ class pushed_input;
 class terminal_in
 {
 public:
+    virtual             ~terminal_in() = default;
     virtual int32_t     read() noexcept = 0;
     virtual bool        avail(uint32_t timeout=0) noexcept = 0;
     virtual bool        enable_mouse_input(mouse_input_mode mode, bool sgr_encoding) noexcept { return false; }
 };
 
+typedef terminal_in* (*hook_new_terminal_in_func_t)(pushed_input& pushed);
+extern hook_new_terminal_in_func_t hook_new_terminal_in;
+
 void term_begin();
 void term_end();
 void term_sigint();
 
-typedef terminal_in* (*hook_new_terminal_in_func_t)(pushed_input& pushed);
-extern hook_new_terminal_in_func_t hook_new_terminal_in;
+int32_t term_in();
+int32_t term_in_peek();
+bool term_in_avail(DWORD timeout=0);
+bool term_push_macro_text(const char* text, size_t len=-1);
+bool enable_mouse_input(mouse_input_mode mode, bool sgr_encoding=true);
 
 class pushed_input
 {

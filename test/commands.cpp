@@ -5,6 +5,7 @@
 
 #include "maybe_windows.h"
 #include "test.h"
+#include "test_util.h"
 #include "tib.h"
 
 static void initialize_context(tib::editor_context& context, const char* text,
@@ -170,6 +171,43 @@ TEST_CASE("Case transform commands")
         REQUIRE(context.get_selection_state().get_anchor() == 6);
         REQUIRE(context.get_selection_state().get_caret() == 6);
     }
+}
+
+TEST_CASE("Screen line cursor column continuation")
+{
+    static const char input_bytes[] = "\x1b[B\x1b[1;2B"; // Down, Shift-Down.
+    test_input_stream stream(input_bytes);
+
+    auto context = std::make_shared<tib::editor_context>();
+    context->set_max_width(10);
+    context->set_max_height(3);
+    context->set_variable_height(true);
+    context->set_origin(1, 1);
+    context->initialize("abcdefgh\nxy\nabcdefgh");
+    context->set_caret(7);
+    context->set_bindings(tib::make_default_key_table());
+
+    tib::binding_resolver resolver;
+    resolver.add_target(context);
+
+    void (*old_term_out)(const char*, size_t) = tib::hook_term_out;
+    MAKE_CLEANUP([old_term_out]() { tib::hook_term_out = old_term_out; });
+    tib::hook_term_out = [](const char*, size_t) {};
+
+    while (tib::term_in_avail())
+    {
+        context->display();
+        const int32_t c = tib::term_in();
+        REQUIRE(c >= 0);
+        auto resolved = resolver.step(uint8_t(c));
+        if (!resolved.more())
+            REQUIRE(resolved.dispatch());
+    }
+
+    REQUIRE(stream.empty());
+    REQUIRE(!strcmp(context->get_last_command(), "cua-screen-line-down"));
+    REQUIRE(context->get_selection_state().get_anchor() == 11);
+    REQUIRE(context->get_selection_state().get_caret() == 19);
 }
 
 TEST_CASE("Transpose chars command")

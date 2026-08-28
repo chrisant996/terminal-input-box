@@ -8,7 +8,7 @@
 #include "tib_base.h"
 #include "tib_bindings.h"
 #include "tib_context.h"
-#include "tib_input.h"
+#include "tib_terminal.h"
 #include <algorithm>
 #include <assert.h>
 
