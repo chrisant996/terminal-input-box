@@ -359,6 +359,9 @@ bool to_utf8(const WCHAR* s, size_t len, cstring_t<char>& out);
 bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out);
 #endif
 
+enum class transform_mode { title, upper, lower };
+bool str_transform(const char* in, size_t len, cstring& out, transform_mode mode);
+
 double clock();
 bool getenv(const char* name, cstring& out);
 inline bool implies(bool a, bool b) { return !a || b; }

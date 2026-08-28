@@ -6,6 +6,7 @@
 #include "pch.h"
 #include "maybe_windows.h"
 #include "tib_base.h"
+#include "str_iter.h"
 #include <assert.h>
 
 #ifndef _WIN32
@@ -112,7 +113,118 @@ bool to_utf16(const char* s, size_t len, cstring_t<WCHAR>& out)
 
     return true;
 }
+
+static bool map_utf16_case(const WCHAR* in, size_t len, cstring_t<WCHAR>& out, DWORD mapflags)
+{
+    out.clear();
+    if (!len)
+        return true;
+
+    if (!out.reserve(len + max<size_t>(len / 10, 10)))
+        return false;
+
+    int32_t cch = LCMapStringW(LOCALE_USER_DEFAULT, mapflags, in, DWORD(len), out.reserve(0), DWORD(out.capacity()));
+    if (!cch)
+    {
+        cch = LCMapStringW(LOCALE_USER_DEFAULT, mapflags, in, DWORD(len), nullptr, 0);
+        if (cch <= 0 || !out.reserve(cch))
+            return false;
+        cch = LCMapStringW(LOCALE_USER_DEFAULT, mapflags, in, DWORD(len), out.reserve(0), DWORD(out.capacity()));
+        if (!cch)
+            return false;
+    }
+
+    out.set_length(cch);
+    return true;
+}
 #endif
+
+bool str_transform(const char* in, size_t len, cstring& out, transform_mode mode)
+{
+    if (!in)
+        return false;
+
+#ifdef _WIN32
+    DWORD mapflags;
+    switch (mode)
+    {
+    case transform_mode::lower:     mapflags = LCMAP_LOWERCASE; break;
+    case transform_mode::upper:     mapflags = LCMAP_UPPERCASE; break;
+    case transform_mode::title:     mapflags = LCMAP_TITLECASE; break;
+    default:                        assert(false); return false;
+    }
+#endif
+
+    len = resolve_auto_length(len, in);
+    assert(len <= strlen(in));
+
+#ifdef _WIN32
+    cstring_t<WCHAR> tmp_in;
+    cstring_t<WCHAR> tmp_out;
+    if (!to_utf16(in, len, tmp_in))
+        return false;
+
+    if (mode == transform_mode::title)
+    {
+        cstring_t<WCHAR> tmp_lower;
+        if (!map_utf16_case(tmp_in.c_str(), tmp_in.length(), tmp_lower, LCMAP_LOWERCASE))
+            return false;
+        if (!map_utf16_case(tmp_lower.c_str(), tmp_lower.length(), tmp_out, mapflags))
+            return false;
+    }
+    else
+    {
+        if (!map_utf16_case(tmp_in.c_str(), tmp_in.length(), tmp_out, mapflags))
+            return false;
+    }
+
+    return to_utf8(tmp_out.c_str(), tmp_out.length(), out);
+#endif
+
+    if (in > out.c_str() && in <= out.c_str() + out.length())
+    {
+        cstring tmp;
+        if (!tmp.set(in, len))
+            return false;
+        if (!out.set(tmp.c_str(), tmp.length()))
+            return false;
+    }
+    else
+    {
+        if (!out.set(in, len))
+            return false;
+    }
+
+    in = out.c_str();
+    assert(len == out.length());
+
+    bool title_char = true;
+    str_iter iter(in, len);
+    while (iter.more())
+    {
+        const char* p = iter.get_pointer();
+        const char32_t u = iter.next();
+
+        const char c = *p;
+
+        const bool upper = (mode == transform_mode::upper || (title_char && mode == transform_mode::title));
+        if (upper)
+        {
+            if (c >= 'a' && c <= 'z')
+                *const_cast<char*>(p) = (c - 'a' + 'A');
+        }
+        else
+        {
+            if (c >= 'A' && c <= 'Z')
+                *const_cast<char*>(p) = (c - 'A' + 'a');
+        }
+
+        title_char = (u <= 0xffff && !!iswspace(uint16_t(u)));
+    }
+
+    assert(out.c_str()[len] == 0);
+    return true;
+}
 
 class high_resolution_clock
 {
