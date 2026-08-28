@@ -108,6 +108,7 @@ public:
     void                del(bool word=false);
 
     void                clear_selection();
+    void                set_caret(textpos_t caret);
     void                set_selection(textpos_t anchor, textpos_t caret);
     void                select_word();
 

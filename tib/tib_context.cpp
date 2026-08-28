@@ -493,6 +493,11 @@ void editor_context::clear_selection()
     m_selection.clear_selection();
 }
 
+void editor_context::set_caret(textpos_t caret)
+{
+    m_selection.set_caret(caret);
+}
+
 void editor_context::set_selection(textpos_t anchor, textpos_t caret)
 {
     m_selection.set_selection(anchor, caret);
