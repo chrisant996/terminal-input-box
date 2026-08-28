@@ -4,9 +4,8 @@
 
 - Quoted insert.  Needs an internal mode to force self-insert of next char.
 - Commands:
-  - Force a full redisplay.
   - CUA versions of `screen-line-down` and `screen-line-up`.
-  - Select word at cursor.
+  - Automatic clearing of selection when a non-CUA command is dispatched.
   - Transpose characters.
   - Transpose words.
   - UPPER CASE, lower case, Capitalize.

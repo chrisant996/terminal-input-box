@@ -85,14 +85,16 @@ public:
     void                set_color_table(std::shared_ptr<const color_table> colors);
     void                set_face_defs(const face_definitions* face_defs);
     void                set_empty_face(char face);
-    void                set_left_text(const char* left, uint16_t width) { m_display.set_left_text(left, width); }
-    void                set_right_text(const char* right, uint16_t width) { m_display.set_right_text(right, width); }
-    void                set_additional_lines(const std::vector<additional_display_line>& lines) { m_display.set_additional_lines(lines); }
-    void                clear_additional_lines() { m_display.clear_additional_lines(); }
+    void                set_left_text(const char* left, uint16_t width);
+    void                set_right_text(const char* right, uint16_t width);
+    void                set_additional_lines(const std::vector<additional_display_line>& lines);
+    void                clear_additional_lines();
 
 #if 0
     int32_t             go(void* cookie=nullptr);
 #endif
+    void                invalidate();
+    void                invalidate_border();
     void                display();
     void                erase_display();
     void                move_to_end_of_display();
@@ -105,6 +107,7 @@ public:
     void                backspace(bool word=false);
     void                del(bool word=false);
 
+    void                clear_selection();
     void                set_selection(textpos_t anchor, textpos_t caret);
     void                select_word();
 
@@ -123,9 +126,9 @@ public:
     void                clear_named_value(const char* name);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
-    bool                move_caret_vertically(int32_t rows, int32_t cursor_column) { return m_display.move_caret_vertically(rows, cursor_column, m_selection); }
-    bool                set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars=0, bool word_drag=false) { return m_display.set_caret_from_screen(x, y, m_selection, drag_scroll_chars, word_drag); }
-    void                suppress_auto_horizontal_scroll() { m_display.suppress_auto_horizontal_scroll(m_selection); }
+    bool                move_caret_vertically(int32_t rows, int32_t cursor_column);
+    bool                set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars=0, bool word_drag=false);
+    void                suppress_auto_horizontal_scroll();
 
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);

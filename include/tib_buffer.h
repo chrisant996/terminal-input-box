@@ -17,6 +17,7 @@ struct selection_state
 
     void            set_caret(textpos_t caret) { set_selection(caret, caret); }
     void            set_selection(textpos_t anchor, textpos_t caret);
+    bool            clear_selection();
 #if 0
     void            reset_word_anchor() { m_word_anchor_begin = m_anchor; m_word_anchor_end = m_caret; }
     void            reset_word_anchor(textpos_t caret) { m_word_anchor_begin = m_anchor; m_word_anchor_end = caret; }

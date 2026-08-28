@@ -141,9 +141,21 @@ int32_t undo(editor_context& ctx, int32_t key, const char* name, const binding_p
 
 //------------------------------------------------------------------------------
 
+int32_t clear_selection(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.clear_selection();
+    return 0;
+}
+
 int32_t select_all(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.set_selection(0, uint16_t(ctx.get_text().length()));
+    return 0;
+}
+
+int32_t select_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.select_word();
     return 0;
 }
 
@@ -401,6 +413,16 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
 
 //------------------------------------------------------------------------------
 
+int32_t redisplay(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.invalidate();
+    ctx.invalidate_border();
+    ctx.display();
+    return 0;
+}
+
+//------------------------------------------------------------------------------
+
 int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.insert_text(
@@ -517,6 +539,7 @@ static const editor_command c_commands[] =
     { "backward-char", backward_char },
     { "backward-word", backward_word },
     { "begin-of-line", begin_of_line },
+    { "clear-selection", clear_selection },
     { "copy", copy },
     { "cua-backward-char", cua_backward_char },
     { "cua-backward-word", cua_backward_word },
@@ -535,10 +558,12 @@ static const editor_command c_commands[] =
     { "lorem-ipsum", lorem_ipsum },
     { "mouse-input", mouse_input },
     { "paste", paste },
+    { "redisplay", redisplay },
     { "redo", redo },
     { "screen-line-down", screen_line_down },
     { "screen-line-up", screen_line_up },
     { "select-all", select_all },
+    { "select-word", select_word },
     { "undo", undo },
 };
 

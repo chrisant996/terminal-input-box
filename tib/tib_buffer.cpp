@@ -21,4 +21,12 @@ void selection_state::set_selection(textpos_t anchor, textpos_t caret)
     m_caret = caret;
 }
 
+bool selection_state::clear_selection()
+{
+    if (!has_selection())
+        return false;
+    set_selection(m_caret, m_caret);
+    return true;
+}
+
 } // namespace tib

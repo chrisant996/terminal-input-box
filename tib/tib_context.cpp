@@ -244,6 +244,26 @@ void editor_context::set_empty_face(char face)
     m_display.invalidate();
 }
 
+void editor_context::set_left_text(const char* left, uint16_t width)
+{
+    m_display.set_left_text(left, width);
+}
+
+void editor_context::set_right_text(const char* right, uint16_t width)
+{
+    m_display.set_right_text(right, width);
+}
+
+void editor_context::set_additional_lines(const std::vector<additional_display_line>& lines)
+{
+    m_display.set_additional_lines(lines);
+}
+
+void editor_context::clear_additional_lines()
+{
+    m_display.clear_additional_lines();
+}
+
 #if 0
 int32_t editor_context::go(void* cookie)
 {
@@ -333,6 +353,16 @@ int32_t editor_context::go(void* cookie)
     }
 }
 #endif
+
+void editor_context::invalidate()
+{
+    m_display.invalidate();
+}
+
+void editor_context::invalidate_border()
+{
+    m_display.invalidate_border();
+}
 
 void editor_context::display()
 {
@@ -456,6 +486,11 @@ void editor_context::del(bool word)
     }
 
     end_undo_group();
+}
+
+void editor_context::clear_selection()
+{
+    m_selection.clear_selection();
 }
 
 void editor_context::set_selection(textpos_t anchor, textpos_t caret)
@@ -629,6 +664,21 @@ void editor_context::clear_named_value(const char* name)
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
 {
     return m_display.scroll_horizontally(columns, cursor_column, m_selection);
+}
+
+bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column)
+{
+    return m_display.move_caret_vertically(rows, cursor_column, m_selection);
+}
+
+bool editor_context::set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars, bool word_drag)
+{
+    return m_display.set_caret_from_screen(x, y, m_selection, drag_scroll_chars, word_drag);
+}
+
+void editor_context::suppress_auto_horizontal_scroll()
+{
+    m_display.suppress_auto_horizontal_scroll(m_selection);
 }
 
 void editor_context::insert_char(char c)

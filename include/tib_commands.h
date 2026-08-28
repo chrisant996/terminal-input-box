@@ -27,7 +27,9 @@ int32_t del_word_right(tib::editor_context& ctx, int32_t key, const char* name, 
 int32_t redo(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t undo(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
+int32_t clear_selection(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t select_all(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t select_word(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t cua_begin_of_line(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t cua_end_of_line(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t cua_backward_char(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
@@ -40,6 +42,8 @@ int32_t copy(tib::editor_context& ctx, int32_t key, const char* name, const bind
 int32_t paste(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 int32_t mouse_input(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+
+int32_t redisplay(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
