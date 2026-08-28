@@ -52,6 +52,7 @@ public:
                         cstring_t(cstring_t<T>&& s) noexcept { *this = std::move(s); }
     cstring_t<T>&       operator=(const cstring_t<T>& s);
     cstring_t<T>&       operator=(cstring_t<T>&& s) noexcept;
+    bool                operator==(const T* s) const noexcept;
     bool                operator==(const cstring_t<T>& s) const noexcept;
 
     bool                set(const T* s, size_t len=c_auto_length);
@@ -106,9 +107,16 @@ cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s) noexcept
 }
 
 template<class T>
+bool cstring_t<T>::operator==(const T* s) const noexcept
+{
+    size_t const len = str_len(s);
+    return (length() == len) && (memcmp(m_text, s, m_len) == 0);
+}
+
+template<class T>
 bool cstring_t<T>::operator==(const cstring_t<T>& s) const noexcept
 {
-    return this->equals(s);
+    return equals(s);
 }
 
 template<class T>

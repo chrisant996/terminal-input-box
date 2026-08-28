@@ -231,6 +231,120 @@ int32_t transpose_words(editor_context& ctx, int32_t key, const char* name, cons
 
 //------------------------------------------------------------------------------
 
+static bool range_equals(const char* input, size_t len, const cstring& transformed)
+{
+    return len == transformed.length() && !memcmp(input, transformed.c_str(), len);
+}
+
+static int32_t transform_case(editor_context& ctx, transform_mode mode, bool toggle) noexcept
+{
+    const auto& selection = ctx.get_selection_state();
+    const textpos_t anchor = selection.get_anchor();
+    const textpos_t caret = selection.get_caret();
+
+    textpos_t begin;
+    textpos_t end;
+    if (selection.has_selection())
+    {
+        begin = selection.get_sel_begin();
+        end = selection.get_sel_end();
+    }
+    else
+    {
+        ctx.move_right(true/*word*/);
+        end = ctx.get_caret();
+        ctx.move_left(true/*word*/);
+        begin = max(ctx.get_caret(), caret);
+        ctx.set_selection(anchor, caret);
+    }
+
+    if (begin >= end)
+        return 0;
+
+    const char* const input = ctx.get_text().c_str() + begin;
+    const size_t len = size_t(end - begin);
+    cstring transformed;
+
+    if (toggle)
+    {
+        if (!str_transform(input, len, transformed, transform_mode::upper))
+            return -1;
+
+        if (range_equals(input, len, transformed))
+        {
+            if (!str_transform(input, len, transformed, transform_mode::title))
+                return -1;
+        }
+        else
+        {
+            cstring title;
+            if (!str_transform(input, len, title, transform_mode::title))
+                return -1;
+            if (range_equals(input, len, title) &&
+                !str_transform(input, len, transformed, transform_mode::lower))
+                return -1;
+        }
+    }
+    else if (!str_transform(input, len, transformed, mode))
+    {
+        return -1;
+    }
+
+    ctx.begin_undo_group();
+
+    ctx.set_selection(begin, end);
+    ctx.insert_text(transformed.c_str(), transformed.length());
+
+    if (anchor != caret)
+    {
+        textpos_t new_anchor = begin;
+        textpos_t new_caret = begin + uint32_t(transformed.length());
+        if (anchor > caret)
+        {
+            new_anchor = new_caret;
+            new_caret = begin;
+        }
+        ctx.set_selection(new_anchor, new_caret);
+    }
+    else if (toggle)
+    {
+        // Restore the caret to allow repeated toggling.
+        ctx.set_caret(caret);
+        if (caret > 0)
+        {
+            // Move left and right to snap to a grapheme boundary in case the
+            // transformation alter where grapheme boundaries lie.
+            ctx.move_left();
+            ctx.move_right();
+        }
+    }
+
+    ctx.end_undo_group();
+    return 0;
+}
+
+int32_t upper_case(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return transform_case(ctx, transform_mode::upper, false/*toggle*/);
+}
+
+int32_t lower_case(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return transform_case(ctx, transform_mode::lower, false/*toggle*/);
+}
+
+int32_t capitalize(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return transform_case(ctx, transform_mode::title, false/*toggle*/);
+}
+
+int32_t toggle_case(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return transform_case(ctx, transform_mode::upper, true/*toggle*/);
+}
+
+//------------------------------------------------------------------------------
+
 static uint32_t get_scroll_lines(const editor_context& ctx)
 {
     uint32_t scroll_lines = 3;
@@ -517,7 +631,12 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\031", binding_target_func("redo") });            // Ctrl-Y
     t->add({ "\032", binding_target_func("undo") });            // Ctrl-Z
 
-    t->add({ "\033t", binding_target_func("transpose-words") });    // Alt-T (lower case)
+    t->add({ "\033c", binding_target_func("capitalize") });         // Alt-C (c)
+    t->add({ "\033l", binding_target_func("lower-case") });         // Alt-L (l)
+    t->add({ "\033t", binding_target_func("transpose-words") });    // Alt-T (t)
+    t->add({ "\033u", binding_target_func("upper-case") });         // Alt-U (u)
+
+    t->add({ "\033\024", binding_target_func("toggle-case") });     // Alt-Ctrl-T
 
     t->add({ "\177", binding_target_func("del-char-left") });       // VT sends 0x7F for Backspace.
 
@@ -556,6 +675,7 @@ static const editor_command c_commands[] =
     { "backward-char", backward_char },
     { "backward-word", backward_word },
     { "begin-of-line", begin_of_line },
+    { "capitalize", capitalize },
     { "clear-selection", clear_selection },
     { "copy", copy },
     { "cua-backward-char", cua_backward_char },
@@ -573,6 +693,7 @@ static const editor_command c_commands[] =
     { "forward-char", forward_char },
     { "forward-word", forward_word },
     { "lorem-ipsum", lorem_ipsum },
+    { "lower-case", lower_case },
     { "mouse-input", mouse_input },
     { "paste", paste },
     { "redisplay", redisplay },
@@ -581,9 +702,11 @@ static const editor_command c_commands[] =
     { "screen-line-up", screen_line_up },
     { "select-all", select_all },
     { "select-word", select_word },
+    { "toggle-case", toggle_case },
     { "transpose-chars", transpose_chars },
     { "transpose-words", transpose_words },
     { "undo", undo },
+    { "upper-case", upper_case },
 };
 
 void editor_context::ensure_commands()

@@ -43,6 +43,10 @@ int32_t paste(tib::editor_context& ctx, int32_t key, const char* name, const bin
 
 int32_t transpose_chars(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t transpose_words(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t upper_case(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t lower_case(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t capitalize(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t toggle_case(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 int32_t mouse_input(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
