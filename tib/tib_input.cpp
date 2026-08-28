@@ -15,8 +15,7 @@
 
 namespace tib {
 
-hook_term_in_func_t hook_term_in = nullptr;
-hook_term_in_avail_func_t hook_term_in_avail = nullptr;
+hook_new_terminal_in_func_t hook_new_terminal_in = nullptr;
 
 struct macro_playback
 {
@@ -25,25 +24,18 @@ struct macro_playback
     macro_playback*     m_next = nullptr;
 };
 
+static pushed_input s_pushed;
 static macro_playback* s_macro_playback = nullptr;
-static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
-static bool s_mouse_sgr_encoding = true;
 
+static terminal_in* s_terminal_in = nullptr;
 static int32_t s_term_began = 0;
 static coord s_last_term_size { -1, -1 };
-static HANDLE s_hin = 0;
-static HANDLE s_hout = 0;
-static DWORD s_prev_input_mode = 0;
-static DWORD s_prev_output_mode = 0;
-static DWORD s_prev_mouse_button_state = 0;
 
 #ifdef _WIN32
 #ifdef DEBUG
 static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 #endif
-
-static pushed_input s_pushed;
 
 pushed_input::~pushed_input() noexcept
 {
@@ -188,6 +180,8 @@ bool pushed_input::ensure_capacity(size_t num) noexcept
     return true;
 }
 
+static terminal_in* new_basic_terminal_in(pushed_input& pushed);
+
 void term_begin()
 {
 #ifdef _WIN32
@@ -198,40 +192,17 @@ void term_begin()
 
     assert(s_term_began >= 0);
     if (s_term_began < 0)
+    {
+        assert(!s_terminal_in);
         s_term_began = 0;
+    }
 
     if (!s_term_began)
     {
+        assert(!s_terminal_in);
         s_last_term_size = get_terminal_size();
-
-        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-        if (GetConsoleMode(hin, &s_prev_input_mode))
-        {
-            s_hin = hin;
-            s_prev_mouse_button_state = 0;
-            if (GetKeyState(VK_LBUTTON) < 0)
-                s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
-            if (GetKeyState(VK_MBUTTON) < 0)
-                s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
-            if (GetKeyState(VK_RBUTTON) < 0)
-                s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
-        }
-        else
-        {
-            assert(!s_hin);
-            s_hin = 0;
-        }
-
-        HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (GetConsoleMode(hout, &s_prev_output_mode))
-        {
-            s_hout = hout;
-        }
-        else
-        {
-            assert(!s_hout);
-            s_hout = 0;
-        }
+        s_terminal_in = hook_new_terminal_in ? hook_new_terminal_in(s_pushed) : new_basic_terminal_in(s_pushed);
+        // TODO: s_terminal_out
     }
 
     ++s_term_began;
@@ -251,23 +222,8 @@ void term_end()
 
     if (s_term_began == 1)
     {
-        if (s_hout)
-        {
-            term_out(c_show_cursor);
-            // FUTURE: cursor shape.
-            term_out("\x1b[m");
-
-            if (s_mouse_input_mode != mouse_input_mode::none)
-                enable_mouse_input(mouse_input_mode::none, false);
-        }
-
-        if (s_hin)
-            SetConsoleMode(s_hin, s_prev_input_mode);
-        if (s_hout)
-            SetConsoleMode(s_hout, s_prev_output_mode);
-
-        s_hin = 0;
-        s_hout = 0;
+        delete s_terminal_in;
+        s_terminal_in = nullptr;
     }
 
     --s_term_began;
@@ -288,6 +244,185 @@ public:
     ~auto_term_end() { term_sigint(); }
 };
 static auto_term_end s_auto_term_end;
+
+int32_t term_in()
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_terminal_in)
+        return c_input_terminal_eof;
+
+    if (!s_pushed.empty())
+        return s_pushed.read();
+
+    if (s_macro_playback)
+    {
+        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
+        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index++];
+        if (s_macro_playback->m_index >= s_macro_playback->m_text.length())
+        {
+            macro_playback* d = s_macro_playback;
+            s_macro_playback = s_macro_playback->m_next;
+            delete d;
+        }
+        return uint8_t(c);
+    }
+
+    const coord term_size = get_terminal_size();
+    if (s_last_term_size != term_size)
+    {
+        s_last_term_size = term_size;
+        return uint8_t(c_input_terminal_resize);
+    }
+
+    const int32_t c = s_terminal_in->read();
+    assert(c < 0 || !(c & 0xffffff00));
+    return c;
+}
+
+int32_t term_in_peek()
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_terminal_in)
+        return c_input_terminal_eof;
+
+    if (!s_pushed.empty())
+        return s_pushed.peek();
+
+    if (s_macro_playback)
+    {
+        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
+        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index];
+        return uint8_t(c);
+    }
+
+    if (!term_in_avail())
+        return -1;
+
+    // term_in_avail() can queue multiple UTF8 bytes for one UTF16 input
+    // character.  Return the head in place; reading and pushing it back would
+    // rotate the queued bytes.
+    if (!s_pushed.empty())
+        return s_pushed.peek();
+
+    assert(!s_macro_playback);
+
+    const int32_t c = term_in();
+    if (c < 0)
+        return c;
+    assert(!(c & 0xffffff00));
+
+    s_pushed.push(uint8_t(c));
+    return c;
+}
+
+bool term_in_avail(const DWORD _timeout)
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_terminal_in)
+        return false;
+
+    if (!s_pushed.empty())
+        return true;
+    if (s_macro_playback)
+        return true;
+
+    const coord term_size = get_terminal_size();
+    if (s_last_term_size != term_size)
+    {
+        s_last_term_size = term_size;
+        s_pushed.push(c_input_terminal_resize);
+        return true;
+    }
+
+    return s_terminal_in->avail(_timeout);
+}
+
+bool term_push_macro_text(const char* text, size_t len)
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    macro_playback* m = new macro_playback;
+    if (!m)
+        return false;
+
+    if (!m->m_text.set(text, len))
+    {
+        delete m;
+        return false;
+    }
+
+    m->m_next = s_macro_playback;
+    s_macro_playback = m;
+    return true;
+}
+
+bool enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    assert(s_term_began);
+    if (!s_term_began || !s_terminal_in)
+        return false;
+
+    return s_terminal_in->enable_mouse_input(mode, sgr_encoding);
+}
+
+//------------------------------------------------------------------------------
+
+#define s_pushed __invalid____instead_use_m_pushed__
+
+static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
+static bool s_mouse_sgr_encoding = true;
+static HANDLE s_hin = 0;
+static HANDLE s_hout = 0;
+static DWORD s_prev_input_mode = 0;
+static DWORD s_prev_output_mode = 0;
+static DWORD s_prev_mouse_button_state = 0;
+
+class basic_terminal_in : public terminal_in
+{
+public:
+                        ~basic_terminal_in();
+                        basic_terminal_in(pushed_input& pushed);
+
+    int32_t             read() noexcept override;
+    bool                avail(uint32_t timeout=0) noexcept override;
+    bool                enable_mouse_input(mouse_input_mode mode, bool sgr_encoding) noexcept override;
+
+protected:
+    pushed_input&       m_pushed;
+};
+
+static terminal_in* new_basic_terminal_in(pushed_input& pushed)
+{
+    return new basic_terminal_in(pushed);
+}
 
 #ifdef _WIN32
 static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
@@ -412,9 +547,6 @@ static bool generate_mouse_sequences(const MOUSE_EVENT_RECORD& record, cstring& 
     // Drag.
     if (!ret && (record.dwEventFlags & MOUSE_MOVED))
     {
-assert(!left_held);
-assert(!middle_held);
-assert(!right_held);
         if ((s_mouse_input_mode == mouse_input_mode::ANY) ||
             (s_mouse_input_mode == mouse_input_mode::DRAG && (left_held || middle_held || right_held)))
         {
@@ -431,48 +563,62 @@ assert(!right_held);
 }
 #endif // _WIN32
 
-int32_t term_in()
+basic_terminal_in::~basic_terminal_in()
 {
-#ifdef _WIN32
-#ifdef DEBUG
-    assert(c_idMainThread == GetCurrentThreadId());
-#endif
-#endif
-
-    assert(s_term_began);
-    if (!s_term_began || !s_hin)
-        return c_input_terminal_eof;
-
-    if (!s_pushed.empty())
-        return s_pushed.read();
-
-    if (s_macro_playback)
+    if (s_hout)
     {
-        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
-        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index++];
-        if (s_macro_playback->m_index >= s_macro_playback->m_text.length())
-        {
-            macro_playback* d = s_macro_playback;
-            s_macro_playback = s_macro_playback->m_next;
-            delete d;
-        }
-        return uint8_t(c);
+        term_out(c_show_cursor);
+        // FUTURE: cursor shape.
+        term_out("\x1b[m");
+
+        if (s_mouse_input_mode != mouse_input_mode::none)
+            enable_mouse_input(mouse_input_mode::none, false);
     }
 
-    const coord term_size = get_terminal_size();
-    if (s_last_term_size != term_size)
+    if (s_hin)
+        SetConsoleMode(s_hin, s_prev_input_mode);
+    if (s_hout)
+        SetConsoleMode(s_hout, s_prev_output_mode);
+
+    s_hin = 0;
+    s_hout = 0;
+}
+
+basic_terminal_in::basic_terminal_in(pushed_input& pushed)
+: m_pushed(pushed)
+{
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    if (GetConsoleMode(hin, &s_prev_input_mode))
     {
-        s_last_term_size = term_size;
-        return uint8_t(c_input_terminal_resize);
+        s_hin = hin;
+        s_prev_mouse_button_state = 0;
+        if (GetKeyState(VK_LBUTTON) < 0)
+            s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
+        if (GetKeyState(VK_MBUTTON) < 0)
+            s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
+        if (GetKeyState(VK_RBUTTON) < 0)
+            s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
+    }
+    else
+    {
+        assert(!s_hin);
+        s_hin = 0;
     }
 
-    if (hook_term_in)
+    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (GetConsoleMode(hout, &s_prev_output_mode))
     {
-        const int32_t c = hook_term_in();
-        assert(c < 0 || !(c & 0xffffff00));
-        return c;
+        s_hout = hout;
     }
+    else
+    {
+        assert(!s_hout);
+        s_hout = 0;
+    }
+}
 
+int32_t basic_terminal_in::read() noexcept
+{
 #ifdef _WIN32
     static cstring s_tmp_utf8;
 
@@ -497,8 +643,8 @@ again:
             if (generate_mouse_sequences(record.Event.MouseEvent, seq))
             {
                 for (size_t i = 0; i < seq.length(); ++i)
-                    s_pushed.push(seq.c_str()[i]);
-                return s_pushed.read();
+                    m_pushed.push(seq.c_str()[i]);
+                return m_pushed.read();
             }
         }
         goto again;
@@ -519,100 +665,27 @@ again:
         goto again;
     }
     assert(record.EventType == KEY_EVENT);
-    const int32_t pushed = s_pushed.push_key_event(record.Event.KeyEvent);
+    const int32_t pushed = m_pushed.push_key_event(record.Event.KeyEvent);
 #else
     WCHAR tmp;
     if (!ReadConsoleW(h, &tmp, 1, &num_read, nullptr) || 1 != num_read)
         return -1;
-    const int32_t pushed = s_pushed.push_utf16(tmp);
+    const int32_t pushed = m_pushed.push_utf16(tmp);
 #endif
     // Zero indicates that no byte was queued, so there is nothing to read.
     if (pushed <= 0)
         goto again;
-    return s_pushed.read();
+    return m_pushed.read();
 #else
     // TODO-LINUX: Use fgetc?
     // TODO-LINUX: What to do upon EOF?
 #endif
 }
 
-int32_t term_in_peek()
+bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
 {
 #ifdef _WIN32
-#ifdef DEBUG
-    assert(c_idMainThread == GetCurrentThreadId());
-#endif
-#endif
-
-    assert(s_term_began);
-    if (!s_term_began || !s_hin)
-        return c_input_terminal_eof;
-
-    if (!s_pushed.empty())
-        return s_pushed.peek();
-
-    if (s_macro_playback)
-    {
-        assert(s_macro_playback->m_index < s_macro_playback->m_text.length());
-        const char c = s_macro_playback->m_text.c_str()[s_macro_playback->m_index];
-        return uint8_t(c);
-    }
-
-    if (!term_in_avail())
-        return -1;
-
-    // term_in_avail() can queue multiple UTF8 bytes for one UTF16 input
-    // character.  Return the head in place; reading and pushing it back would
-    // rotate the queued bytes.
-    if (!s_pushed.empty())
-        return s_pushed.peek();
-
-    const int32_t c = term_in();
-    if (c < 0)
-        return c;
-    assert(!(c & 0xffffff00));
-
-    s_pushed.push(uint8_t(c));
-    return c;
-}
-
-bool term_in_avail(const DWORD _timeout)
-{
-#ifdef _WIN32
-#ifdef DEBUG
-    assert(c_idMainThread == GetCurrentThreadId());
-#endif
-#endif
-
-    assert(s_term_began);
-    if (!s_term_began || !s_hin)
-        return false;
-
-#ifdef _WIN32
-#ifdef DEBUG
-    DWORD mode;
-    assert(GetConsoleMode(s_hin, &mode));
-#endif
-#endif
-
-    if (!s_pushed.empty())
-        return true;
-    if (s_macro_playback)
-        return true;
-
-    const coord term_size = get_terminal_size();
-    if (s_last_term_size != term_size)
-    {
-        s_last_term_size = term_size;
-        s_pushed.push(c_input_terminal_resize);
-        return true;
-    }
-
-    if (hook_term_in_avail)
-        return hook_term_in_avail(_timeout);
-
-#ifdef _WIN32
-    bool ret = !s_pushed.empty();
+    bool ret = !m_pushed.empty();
     bool sleep_on_error = false;
     const DWORD stop = GetTickCount() + _timeout;
     while (!ret)
@@ -649,7 +722,7 @@ bool term_in_avail(const DWORD _timeout)
             // little to do here.
             if (!is_invalid_keyevent(record.Event.KeyEvent))
             {
-                const int32_t pushed = s_pushed.push_key_event(record.Event.KeyEvent);
+                const int32_t pushed = m_pushed.push_key_event(record.Event.KeyEvent);
                 if (pushed < 0)
                     continue;
                 ret = (pushed > 0);
@@ -662,7 +735,7 @@ bool term_in_avail(const DWORD _timeout)
                 if (generate_mouse_sequences(record.Event.MouseEvent, seq))
                 {
                     for (size_t i = 0; i < seq.length(); ++i)
-                        s_pushed.push(seq.c_str()[i]);
+                        m_pushed.push(seq.c_str()[i]);
                     ret = true;
                 }
             }
@@ -670,7 +743,7 @@ bool term_in_avail(const DWORD _timeout)
 
         case WINDOW_BUFFER_SIZE_EVENT:
 #ifdef USE_READCONSOLEINPUT
-            if (s_pushed.push(c_input_terminal_resize))
+            if (m_pushed.push(c_input_terminal_resize))
                 ret = true;
 #else
             // REVIEW: can't really do anything with this unless term_in()
@@ -689,41 +762,8 @@ bool term_in_avail(const DWORD _timeout)
     return ret;
 }
 
-bool term_push_macro_text(const char* text, size_t len)
+bool basic_terminal_in::enable_mouse_input(mouse_input_mode mode, bool sgr_encoding) noexcept
 {
-#ifdef _WIN32
-#ifdef DEBUG
-    assert(c_idMainThread == GetCurrentThreadId());
-#endif
-#endif
-
-    macro_playback* m = new macro_playback;
-    if (!m)
-        return false;
-
-    if (!m->m_text.set(text, len))
-    {
-        delete m;
-        return false;
-    }
-
-    m->m_next = s_macro_playback;
-    s_macro_playback = m;
-    return true;
-}
-
-void enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
-{
-#ifdef _WIN32
-#ifdef DEBUG
-    assert(c_idMainThread == GetCurrentThreadId());
-#endif
-#endif
-
-    assert(s_term_began);
-    if (!s_term_began || !s_hin || !s_hout)
-        return;
-
     // https://tintin.mudhalla.net/info/xterm/
     //
     // XTERM MOUSE TRACKING
@@ -775,6 +815,8 @@ void enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
 
     s_mouse_input_mode = mode;
     s_mouse_sgr_encoding = sgr_encoding;
+
+    return true;
 }
 
 } // namespace tib
