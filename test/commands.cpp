@@ -181,7 +181,7 @@ TEST_CASE("Transpose chars command")
         const auto command = tib::editor_context::lookup_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("acbd"));
+        REQUIRE(context.get_text() == "acbd");
         REQUIRE(context.get_caret() == 3);
     }
 
@@ -192,7 +192,7 @@ TEST_CASE("Transpose chars command")
         const auto command = tib::editor_context::lookup_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("abdc"));
+        REQUIRE(context.get_text() == "abdc");
         REQUIRE(context.get_caret() == 4);
     }
 
@@ -204,7 +204,7 @@ TEST_CASE("Transpose chars command")
         const auto command = tib::editor_context::lookup_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("ab" "e\xcc\x81"));
+        REQUIRE(context.get_text() == "ab" "e\xcc\x81");
         REQUIRE(context.get_caret() == 5);
     }
 
@@ -215,7 +215,7 @@ TEST_CASE("Transpose chars command")
         const auto command = tib::editor_context::lookup_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("a"));
+        REQUIRE(context.get_text() == "a");
         REQUIRE(context.get_caret() == 1);
     }
 }
@@ -229,7 +229,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two one three"));
+        REQUIRE(context.get_text() == "two one three");
         REQUIRE(context.get_caret() == 7);
     }
 
@@ -240,7 +240,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two,  one three"));
+        REQUIRE(context.get_text() == "two,  one three");
         REQUIRE(context.get_caret() == 9);
     }
 
@@ -251,7 +251,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two one three"));
+        REQUIRE(context.get_text() == "two one three");
         REQUIRE(context.get_caret() == 7);
     }
 
@@ -262,7 +262,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two,  one three"));
+        REQUIRE(context.get_text() == "two,  one three");
         REQUIRE(context.get_caret() == 9);
     }
 
@@ -273,7 +273,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("one,  two three"));
+        REQUIRE(context.get_text() == "one,  two three");
         REQUIRE(context.get_caret() == 0);
     }
 
@@ -284,7 +284,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("one three two"));
+        REQUIRE(context.get_text() == "one three two");
         REQUIRE(context.get_caret() == 13);
     }
 
@@ -295,7 +295,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("one three two"));
+        REQUIRE(context.get_text() == "one three two");
         REQUIRE(context.get_caret() == 13);
     }
 
@@ -306,7 +306,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("one three two"));
+        REQUIRE(context.get_text() == "one three two");
         REQUIRE(context.get_caret() == 13);
     }
 
@@ -317,7 +317,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("  one two"));
+        REQUIRE(context.get_text() == "  one two");
         REQUIRE(context.get_caret() == 0);
     }
 
@@ -328,7 +328,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two$one,,"));
+        REQUIRE(context.get_text() == "two$one,,");
         REQUIRE(context.get_caret() == 7);
     }
 
@@ -339,7 +339,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two one  "));
+        REQUIRE(context.get_text() == "two one  ");
         REQUIRE(context.get_caret() == 7);
     }
 
@@ -351,7 +351,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("\xc2\xa2" "b a" "e\xcc\x81"));
+        REQUIRE(context.get_text() == "\xc2\xa2" "b a" "e\xcc\x81");
         REQUIRE(context.get_caret() == 8);
     }
 
@@ -362,7 +362,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("one"));
+        REQUIRE(context.get_text() == "one");
         REQUIRE(context.get_caret() == 3);
     }
 
@@ -373,7 +373,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("  , "));
+        REQUIRE(context.get_text() == "  , ");
         REQUIRE(context.get_caret() == 2);
     }
 
@@ -385,7 +385,7 @@ TEST_CASE("Transpose words command")
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == tib::cstring("two one three"));
+        REQUIRE(context.get_text() == "two one three");
         REQUIRE(context.get_caret() == 7);
         REQUIRE(!context.get_selection_state().has_selection());
     }
@@ -398,7 +398,7 @@ TEST_CASE("Transpose words command")
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         context.undo();
-        REQUIRE(context.get_text() == tib::cstring("one two"));
+        REQUIRE(context.get_text() == "one two");
         REQUIRE(context.get_caret() == 4);
     }
 }

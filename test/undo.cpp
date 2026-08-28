@@ -25,19 +25,19 @@ TEST_CASE("Undo grouping")
         REQUIRE(context.get_text() == tib::cstring(utf8));
 
         context.undo();
-        REQUIRE(context.get_text() == tib::cstring("\xc2\xa2\xe2\x82\xac"));
+        REQUIRE(context.get_text() == "\xc2\xa2\xe2\x82\xac");
 
         context.undo();
-        REQUIRE(context.get_text() == tib::cstring("\xc2\xa2"));
+        REQUIRE(context.get_text() == "\xc2\xa2");
 
         context.undo();
         REQUIRE(context.get_text().empty());
 
         context.redo();
-        REQUIRE(context.get_text() == tib::cstring("\xc2\xa2"));
+        REQUIRE(context.get_text() == "\xc2\xa2");
 
         context.redo();
-        REQUIRE(context.get_text() == tib::cstring("\xc2\xa2\xe2\x82\xac"));
+        REQUIRE(context.get_text() == "\xc2\xa2\xe2\x82\xac");
 
         context.redo();
         REQUIRE(context.get_text() == tib::cstring(utf8));
@@ -55,6 +55,6 @@ TEST_CASE("Undo grouping")
         context.insert_char('a');
         context.insert_char('b');
         context.undo();
-        REQUIRE(context.get_text() == tib::cstring("a"));
+        REQUIRE(context.get_text() == "a");
     }
 }

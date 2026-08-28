@@ -111,7 +111,7 @@ TEST_CASE("Key bindings")
                 auto resolved = resolver.step('x');
                 REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
                 REQUIRE(!resolved.binding_target);
-                REQUIRE(resolved.sequence == tib::cstring("x"));
+                REQUIRE(resolved.sequence == "x");
             }
 
             {
@@ -120,7 +120,7 @@ TEST_CASE("Key bindings")
                 auto resolved = resolver.step('Z');
                 REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
                 REQUIRE(!resolved.binding_target);
-                REQUIRE(resolved.sequence == tib::cstring("Z"));
+                REQUIRE(resolved.sequence == "Z");
             }
         }
 
@@ -143,7 +143,7 @@ TEST_CASE("Key bindings")
                 auto resolved = resolver.step('x');
                 REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
                 REQUIRE(!resolved.binding_target);
-                REQUIRE(resolved.sequence == tib::cstring("x"));
+                REQUIRE(resolved.sequence == "x");
             }
 
             {
@@ -152,7 +152,7 @@ TEST_CASE("Key bindings")
                 auto resolved = resolver.step('Z');
                 REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
                 REQUIRE(!resolved.binding_target);
-                REQUIRE(resolved.sequence == tib::cstring("Z"));
+                REQUIRE(resolved.sequence == "Z");
             }
         }
 
