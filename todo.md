@@ -6,7 +6,7 @@
 - Commands:
   - CUA versions of `screen-line-down` and `screen-line-up`.
   - Automatic clearing of selection when a non-CUA command is dispatched.
-  - UPPER CASE, lower case, Capitalize.
+  - UPPER CASE, lower case, Capitalize, and toggle case to cycle through the forms.
   - Toggle-able overwrite mode.
   - Undo all changes to the input line (undo back to the original state).
   - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).
