@@ -22,8 +22,8 @@ public:
 
 private:
 #ifdef _WIN32
-    HANDLE              m_hout;
-    bool                m_is_console;
+    HANDLE              m_hout = 0;
+    bool                m_is_console = false;
 #endif
 };
 
@@ -48,11 +48,11 @@ void basic_terminal_out::write(const char* s, size_t len) noexcept
         static cstring_t<WCHAR> s_buffer;
         if (!to_utf16(s, len, s_buffer))
             return;
-        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
+        WriteConsoleW(m_hout, s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
     }
     else
     {
-        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, DWORD(len), &written, nullptr);
+        WriteFile(m_hout, s, DWORD(len), &written, nullptr);
     }
 #else
     fwrite(s, len, 1, stdout);

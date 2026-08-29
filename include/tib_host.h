@@ -31,7 +31,7 @@ private:
 private:
 #ifdef _WIN32
     DWORD               m_orig_modes[3];
-    bool                m_restore_modes = false;
+    uint8_t             m_restore_modes = 0;
 #else
     // TODO-LINUX: POSIX sigaction alternative.
 #endif

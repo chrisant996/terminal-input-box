@@ -16,8 +16,6 @@ namespace tib {
 
 static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
 static bool s_mouse_sgr_encoding = true;
-static HANDLE s_hin = 0;
-static HANDLE s_hout = 0;
 static DWORD s_prev_input_mode = 0;
 static DWORD s_prev_output_mode = 0;
 static DWORD s_prev_mouse_button_state = 0;
@@ -34,7 +32,18 @@ public:
     bool                enable_mouse_input(mouse_input_mode mode, bool sgr_encoding) noexcept override;
 
 protected:
+#ifdef _WIN32
+    int32_t             read_redirected() noexcept;
+#endif
+
+protected:
     pushed_input&       m_pushed;
+
+#ifdef _WIN32
+    HANDLE              m_hin = 0;
+    HANDLE              m_hout = 0;
+    bool                m_is_console = false;
+#endif
 };
 
 terminal_in* new_basic_terminal_in(pushed_input& pushed)
@@ -183,32 +192,32 @@ static bool generate_mouse_sequences(const MOUSE_EVENT_RECORD& record, cstring& 
 
 basic_terminal_in::~basic_terminal_in()
 {
-    if (s_hout)
-    {
-        term_out(c_show_cursor);
-        // FUTURE: cursor shape.
-        term_out("\x1b[m");
+    term_out(c_show_cursor);
+    // FUTURE: cursor shape.
+    term_out("\x1b[m");
 
-        if (s_mouse_input_mode != mouse_input_mode::none)
-            enable_mouse_input(mouse_input_mode::none, false);
-    }
+    if (s_mouse_input_mode != mouse_input_mode::none)
+        enable_mouse_input(mouse_input_mode::none, false);
 
-    if (s_hin)
-        SetConsoleMode(s_hin, s_prev_input_mode);
-    if (s_hout)
-        SetConsoleMode(s_hout, s_prev_output_mode);
+#ifdef _WIN32
+    if (m_hin && m_is_console)
+        SetConsoleMode(m_hin, s_prev_input_mode);
+    if (m_hout)
+        SetConsoleMode(m_hout, s_prev_output_mode);
 
-    s_hin = 0;
-    s_hout = 0;
+    m_hin = 0;
+    m_hout = 0;
+#endif
 }
 
 basic_terminal_in::basic_terminal_in(pushed_input& pushed)
 : m_pushed(pushed)
 {
-    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-    if (GetConsoleMode(hin, &s_prev_input_mode))
+#ifdef _WIN32
+    m_hin = GetStdHandle(STD_INPUT_HANDLE);
+    m_is_console = !!GetConsoleMode(m_hin, &s_prev_input_mode);
+    if (m_is_console)
     {
-        s_hin = hin;
         s_prev_mouse_button_state = 0;
         if (GetKeyState(VK_LBUTTON) < 0)
             s_prev_mouse_button_state |= FROM_LEFT_1ST_BUTTON_PRESSED;
@@ -217,28 +226,38 @@ basic_terminal_in::basic_terminal_in(pushed_input& pushed)
         if (GetKeyState(VK_RBUTTON) < 0)
             s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
     }
-    else
-    {
-        assert(!s_hin);
-        s_hin = 0;
-    }
 
     HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
     if (GetConsoleMode(hout, &s_prev_output_mode))
-    {
-        s_hout = hout;
-    }
-    else
-    {
-        assert(!s_hout);
-        s_hout = 0;
-    }
+        m_hout = hout;
+#endif
 
     s_last_term_size = get_terminal_size();
 }
 
+#ifdef _WIN32
+int32_t basic_terminal_in::read_redirected() noexcept
+{
+    if (!m_hin || m_hin == INVALID_HANDLE_VALUE)
+        return c_input_terminal_eof;
+
+    uint8_t c;
+    DWORD num_read = 0;
+    if (!ReadFile(m_hin, &c, 1, &num_read, nullptr) || !num_read)
+        return c_input_terminal_eof;
+    return c;
+}
+#endif
+
 int32_t basic_terminal_in::read() noexcept
 {
+#ifdef _WIN32
+    // Read redirected stdin as UTF8 bytes.  FUTURE: let the host control
+    // stdin decoding (i.e. ACP or UTF8).
+    if (!m_is_console)
+        return read_redirected();
+#endif
+
     const coord term_size = get_terminal_size();
     if (s_last_term_size != term_size)
     {
@@ -256,7 +275,7 @@ again:
     // FUTURE: add a mode that conditionally applies/removes
     // ENABLE_MOUSE_INPUT like Clink does?
     INPUT_RECORD record;
-    if (!ReadConsoleInputW(s_hin, &record, 1, &num_read) || 1 != num_read)
+    if (!ReadConsoleInputW(m_hin, &record, 1, &num_read) || 1 != num_read)
         return -1;
     switch (record.EventType)
     {
@@ -311,6 +330,44 @@ again:
 
 bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
 {
+#ifdef _WIN32
+    if (!m_is_console)
+    {
+        if (!m_hin || m_hin == INVALID_HANDLE_VALUE)
+            return true;
+
+        if (GetFileType(m_hin) == FILE_TYPE_PIPE)
+        {
+            const DWORD stop = GetTickCount() + _timeout;
+            for (;;)
+            {
+                DWORD available = 0;
+                if (!PeekNamedPipe(m_hin, nullptr, 0, nullptr, &available, nullptr))
+                    return true; // Let read() report EOF.
+                if (available)
+                    return true;
+
+                DWORD timeout = stop - GetTickCount();
+                if (timeout > _timeout)
+                    return false;
+                const DWORD sleep = min<DWORD>(timeout, 10);
+                if (!sleep)
+                    return false;
+                Sleep(sleep);
+            }
+        }
+
+        // Disk files are always ready, and other redirected handle types do
+        // not have a general non-blocking availability API.  Read one byte
+        // ahead and preserve it in the shared pushed-input queue.
+        assert(m_pushed.empty());
+        const int32_t c = read_redirected();
+        if (c < 0 || !m_pushed.push(uint8_t(c)))
+            return false;
+        return true;
+    }
+#endif
+
     const coord term_size = get_terminal_size();
     if (s_last_term_size != term_size)
     {
@@ -337,13 +394,13 @@ bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
             timeout -= sleep;
         }
 
-        const DWORD waited = WaitForSingleObject(s_hin, timeout);
+        const DWORD waited = WaitForSingleObject(m_hin, timeout);
         if (waited == WAIT_TIMEOUT)
             break;
 
         DWORD count;
         INPUT_RECORD record;
-        if (!ReadConsoleInputW(s_hin, &record, 1, &count) || 1 != count)
+        if (!ReadConsoleInputW(m_hin, &record, 1, &count) || 1 != count)
         {
             // Handle's probably invalid if ReadConsoleInput() failed.
             sleep_on_error = true;
@@ -420,8 +477,7 @@ bool basic_terminal_in::enable_mouse_input(mouse_input_mode mode, bool sgr_encod
 
 #ifdef _WIN32
     DWORD old_console_mode;
-    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-    if (GetConsoleMode(hin, &old_console_mode) &&
+    if (m_hin && GetConsoleMode(m_hin, &old_console_mode) &&
         !(old_console_mode & ENABLE_VIRTUAL_TERMINAL_INPUT))
     {
         DWORD new_console_mode = old_console_mode;
@@ -431,7 +487,7 @@ bool basic_terminal_in::enable_mouse_input(mouse_input_mode mode, bool sgr_encod
         else
             new_console_mode |= (s_prev_input_mode & ENABLE_QUICK_EDIT_MODE);
         if (old_console_mode != new_console_mode)
-            SetConsoleMode(hin, new_console_mode);
+            SetConsoleMode(m_hin, new_console_mode);
     }
     else
 #endif

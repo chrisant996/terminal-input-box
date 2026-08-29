@@ -592,7 +592,7 @@ no_border:
         tib->display();                                     // Required.
 
         const int32_t c = tib::term_in();                   // Required.
-        if (c == tib::c_input_terminal_eof)
+        if (c < 0 || c == tib::c_input_terminal_eof)
             break;
 
                 /*Custom*/  update_sequence_before_step(c);

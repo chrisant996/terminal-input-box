@@ -33,19 +33,18 @@ auto_terminal_init::auto_terminal_init()
     for (int i = 0; i < 3; ++i)
     {
         handles[i] = GetStdHandle(STD_INPUT_HANDLE - i);
-        if (!handles[i])
-            return;
-        if (!GetConsoleMode(handles[i], &m_orig_modes[i]))
-            return;
+        if (handles[i] && GetConsoleMode(handles[i], &m_orig_modes[i]))
+            m_restore_modes |= uint8_t(1 << i);
     }
-
-    m_restore_modes = true;
 
     SetConsoleCtrlHandler(BreakHandler, true);
 
-    SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT|ENABLE_WINDOW_INPUT));
-    SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-    SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    if (m_restore_modes & 0x01)
+        SetConsoleMode(handles[0], m_orig_modes[0]&~(ENABLE_PROCESSED_INPUT|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT|ENABLE_WINDOW_INPUT));
+    if (m_restore_modes & 0x02)
+        SetConsoleMode(handles[1], m_orig_modes[1]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    if (m_restore_modes & 0x04)
+        SetConsoleMode(handles[2], m_orig_modes[2]|ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #else
     // TODO-LINUX: POSIX sigaction alternative.
 #endif
@@ -54,14 +53,18 @@ auto_terminal_init::auto_terminal_init()
 void auto_terminal_init::restore()
 {
 #ifdef _WIN32
-    if (m_restore_modes)
+    const uint8_t restore_modes = m_restore_modes;
+    if (restore_modes)
     {
-        m_restore_modes = false;
+        m_restore_modes = 0;
         for (int i = 0; i < 3; ++i)
         {
-            HANDLE h = GetStdHandle(STD_INPUT_HANDLE - i);
-            if (h)
-                SetConsoleMode(h, m_orig_modes[i]);
+            if (restore_modes & (1 << i))
+            {
+                HANDLE h = GetStdHandle(STD_INPUT_HANDLE - i);
+                if (h)
+                    SetConsoleMode(h, m_orig_modes[i]);
+            }
         }
     }
 #else
