@@ -62,6 +62,60 @@ TEST_CASE("Select word command")
     }
 }
 
+TEST_CASE("Bigword commands")
+{
+    SECTION("Forward and backward bigword use whitespace boundaries")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one.two\tthree", 0);
+        invoke_command(context, "forward-bigword");
+        REQUIRE(context.get_caret() == 7);
+        invoke_command(context, "forward-bigword");
+        REQUIRE(context.get_caret() == 13);
+        invoke_command(context, "backward-bigword");
+        REQUIRE(context.get_caret() == 8);
+        invoke_command(context, "backward-bigword");
+        REQUIRE(context.get_caret() == 0);
+    }
+
+    SECTION("Delete bigword left includes punctuation")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one.two three", 7);
+        invoke_command(context, "del-bigword-left");
+        REQUIRE(context.get_text() == " three");
+        REQUIRE(context.get_caret() == 0);
+    }
+
+    SECTION("Delete bigword right includes punctuation")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one.two three", 0);
+        invoke_command(context, "del-bigword-right");
+        REQUIRE(context.get_text() == " three");
+        REQUIRE(context.get_caret() == 0);
+    }
+
+    SECTION("Select bigword includes punctuation")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one.two three", 4);
+        invoke_command(context, "select-bigword");
+        const auto& selection = context.get_selection_state();
+        REQUIRE(selection.get_sel_begin() == 0);
+        REQUIRE(selection.get_sel_end() == 7);
+    }
+
+    SECTION("Transpose bigwords treats punctuation as part of each bigword")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one.two three", 8);
+        invoke_command(context, "transpose-bigwords");
+        REQUIRE(context.get_text() == "three one.two");
+        REQUIRE(context.get_caret() == 13);
+    }
+}
+
 TEST_CASE("Case transform commands")
 {
     SECTION("Upper case transforms the selection")

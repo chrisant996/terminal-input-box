@@ -112,6 +112,18 @@ int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const b
     return 0;
 }
 
+int32_t backward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_left(2/*bigword*/);
+    return 0;
+}
+
+int32_t forward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.move_right(2/*bigword*/);
+    return 0;
+}
+
 int32_t screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands));
@@ -147,6 +159,18 @@ int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const 
 int32_t del_word_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.del(true/*word*/);
+    return 0;
+}
+
+int32_t del_bigword_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.backspace(2/*bigword*/);
+    return 0;
+}
+
+int32_t del_bigword_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.del(2/*bigword*/);
     return 0;
 }
 
@@ -187,6 +211,12 @@ int32_t select_all(editor_context& ctx, int32_t key, const char* name, const bin
 int32_t select_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.select_word();
+    return 0;
+}
+
+int32_t select_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.select_word(true/*bigword*/);
     return 0;
 }
 
@@ -269,6 +299,12 @@ int32_t transpose_chars(editor_context& ctx, int32_t key, const char* name, cons
 int32_t transpose_words(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.transpose(true/*word*/);
+    return 0;
+}
+
+int32_t transpose_bigwords(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.transpose(2/*bigword*/);
     return 0;
 }
 
@@ -717,6 +753,7 @@ std::shared_ptr<key_table_list> make_default_key_table()
 static const editor_command c_commands[] =
 {
     { "accept-line", accept_line },
+    { "backward-bigword", backward_bigword },
     { "backward-char", backward_char },
     { "backward-word", backward_word },
     { "begin-of-line", begin_of_line },
@@ -732,11 +769,14 @@ static const editor_command c_commands[] =
     { "cua-screen-line-down", cua_screen_line_down },
     { "cua-screen-line-up", cua_screen_line_up },
     { "cut", cut },
+    { "del-bigword-left", del_bigword_left },
+    { "del-bigword-right", del_bigword_right },
     { "del-char-left", del_char_left },
     { "del-char-right", del_char_right },
     { "del-word-left", del_word_left },
     { "del-word-right", del_word_right },
     { "end-of-line", end_of_line },
+    { "forward-bigword", forward_bigword },
     { "forward-char", forward_char },
     { "forward-word", forward_word },
     { "lorem-ipsum", lorem_ipsum },
@@ -749,8 +789,10 @@ static const editor_command c_commands[] =
     { "screen-line-down", screen_line_down },
     { "screen-line-up", screen_line_up },
     { "select-all", select_all },
+    { "select-bigword", select_bigword },
     { "select-word", select_word },
     { "toggle-case", toggle_case },
+    { "transpose-bigwords", transpose_bigwords },
     { "transpose-chars", transpose_chars },
     { "transpose-words", transpose_words },
     { "undo", undo },

@@ -5,7 +5,6 @@
 - Commands:
   - Toggle-able overwrite mode.
   - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
-  - Bigword commands that only treat whitespace as word breaks.
 - Some way to automagically treat upper case keys the same as their lower case equivalent?  Not sure that even makes any sense without a trie.  Maybe it should be handled by default bindings for Alt-UpperLetter keys to signal reevaluating the binding with LowerLetter for the last byte?
 
 ## Open Questions

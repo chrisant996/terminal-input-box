@@ -30,7 +30,7 @@ struct editor_command
     editor_command_func_t func;
 };
 
-textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const bool word);
+textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const uint8_t word);
 
 struct editor_callbacks : public std::enable_shared_from_this<editor_callbacks>
 {
@@ -102,16 +102,16 @@ public:
 
     void                begin_of_input(bool select=false);
     void                end_of_input(bool select=false);
-    void                move_left(bool word=false, bool select=false);
-    void                move_right(bool word=false, bool select=false);
-    void                backspace(bool word=false);
-    void                del(bool word=false);
-    void                transpose(bool word=false);
+    void                move_left(uint8_t word=0, bool select=false);
+    void                move_right(uint8_t word=0, bool select=false);
+    void                backspace(uint8_t word=0);
+    void                del(uint8_t word=0);
+    void                transpose(uint8_t word=0);
 
     void                clear_selection();
     void                set_caret(textpos_t caret);
     void                set_selection(textpos_t anchor, textpos_t caret);
-    void                select_word();
+    void                select_word(bool bigword=false);
 
 #if _WIN32
     void                copy_to_clipboard();
