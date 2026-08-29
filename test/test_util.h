@@ -29,6 +29,24 @@ private:
     size_t              m_index = 0;
 };
 
+class test_terminal_out final : public tib::terminal_out
+{
+public:
+                        ~test_terminal_out() override;
+                        test_terminal_out();
+
+    void                write(const char* s, size_t len) noexcept override;
+    void                ding() noexcept override;
+
+private:
+    friend class test_output_stream;
+
+    static test_terminal_out* get() noexcept;
+    static test_terminal_out* s_instance;
+    tib::cstring*       m_output = nullptr;
+    uint32_t            m_ding_count = 0;
+};
+
 class test_input_stream
 {
 public:
@@ -44,7 +62,22 @@ private:
     test_terminal_in*   m_terminal = nullptr;
 };
 
-void install_test_terminal_in();
+class test_output_stream
+{
+public:
+                        test_output_stream(tib::cstring& output);
+                        ~test_output_stream();
+
+                        test_output_stream(const test_output_stream&) = delete;
+    test_output_stream& operator=(const test_output_stream&) = delete;
+
+    uint32_t            get_ding_count() const noexcept;
+
+private:
+    test_terminal_out*  m_terminal = nullptr;
+};
+
+void install_test_terminal();
 
 class dispatcher_tester : public tib::dispatcher_target
 {

@@ -6,7 +6,6 @@
 #include "pch.h"
 #include "maybe_windows.h"
 #include "tib_host.h"
-#include "tib_output.h"
 
 static bool s_signaled = false;
 
@@ -29,9 +28,6 @@ auto_terminal_init::~auto_terminal_init()
 
 auto_terminal_init::auto_terminal_init()
 {
-    if (!tib::is_console())
-        return;
-
 #ifdef _WIN32
     HANDLE handles[3] = {};
     for (int i = 0; i < 3; ++i)

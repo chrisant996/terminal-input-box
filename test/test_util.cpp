@@ -13,7 +13,13 @@ static tib::terminal_in* new_test_terminal_in(tib::pushed_input& pushed)
     return new test_terminal_in(pushed);
 }
 
+static tib::terminal_out* new_test_terminal_out()
+{
+    return new test_terminal_out;
+}
+
 test_terminal_in* test_terminal_in::s_instance = nullptr;
+test_terminal_out* test_terminal_out::s_instance = nullptr;
 
 test_terminal_in::test_terminal_in(tib::pushed_input& pushed)
 {
@@ -75,10 +81,61 @@ bool test_input_stream::empty() const noexcept
     return m_terminal->empty();
 }
 
-void install_test_terminal_in()
+test_terminal_out::test_terminal_out()
+{
+    assert(!s_instance);
+    s_instance = this;
+}
+
+test_terminal_out::~test_terminal_out()
+{
+    assert(s_instance == this);
+    s_instance = nullptr;
+}
+
+void test_terminal_out::write(const char* s, size_t len) noexcept
+{
+    if (m_output)
+        m_output->append(s, len);
+}
+
+void test_terminal_out::ding() noexcept
+{
+    ++m_ding_count;
+}
+
+test_terminal_out* test_terminal_out::get() noexcept
+{
+    return s_instance;
+}
+
+test_output_stream::test_output_stream(tib::cstring& output)
+{
+    m_terminal = test_terminal_out::get();
+    assert(m_terminal);
+    assert(!m_terminal->m_output);
+    m_terminal->m_output = &output;
+    m_terminal->m_ding_count = 0;
+}
+
+test_output_stream::~test_output_stream()
+{
+    assert(m_terminal == test_terminal_out::get());
+    assert(m_terminal->m_output);
+    m_terminal->m_output = nullptr;
+}
+
+uint32_t test_output_stream::get_ding_count() const noexcept
+{
+    return m_terminal->m_ding_count;
+}
+
+void install_test_terminal()
 {
     assert(!tib::hook_new_terminal_in);
+    assert(!tib::hook_new_terminal_out);
     tib::hook_new_terminal_in = new_test_terminal_in;
+    tib::hook_new_terminal_out = new_test_terminal_out;
 }
 
 bool add_binding(tib::key_table& table, const char* sequence, const char* name)

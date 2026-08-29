@@ -6,26 +6,62 @@
 #include "pch.h"
 #include "maybe_windows.h"
 #include "tib_base.h"
-#include "tib_output.h"
+#include "tib_terminal.h"
 #include "tib_termcap.h"
 #include "wcwidth.h"
 #include <assert.h>
 
 namespace tib {
 
-void (*hook_term_out)(const char* s, size_t len) = nullptr;
-void (*hook_term_ding)() = nullptr;
-
-static bool is_console_raw()
+class basic_terminal_out final : public terminal_out
 {
-    DWORD mode;
-    return !!GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode);
+public:
+                        basic_terminal_out() noexcept;
+    void                write(const char* s, size_t len) noexcept override;
+    void                ding() noexcept override;
+
+private:
+#ifdef _WIN32
+    HANDLE              m_hout;
+    bool                m_is_console;
+#endif
+};
+
+terminal_out* new_basic_terminal_out()
+{
+    return new basic_terminal_out;
 }
 
-bool is_console()
+basic_terminal_out::basic_terminal_out() noexcept
 {
-    static const bool c_is_console = is_console_raw();
-    return c_is_console;
+    DWORD mode;
+    m_hout = GetStdHandle(STD_OUTPUT_HANDLE);
+    m_is_console = !!GetConsoleMode(m_hout, &mode);
+}
+
+void basic_terminal_out::write(const char* s, size_t len) noexcept
+{
+#ifdef _WIN32
+    DWORD written;
+    if (m_is_console)
+    {
+        static cstring_t<WCHAR> s_buffer;
+        if (!to_utf16(s, len, s_buffer))
+            return;
+        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
+    }
+    else
+    {
+        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, DWORD(len), &written, nullptr);
+    }
+#else
+    fwrite(s, len, 1, stdout);
+#endif
+}
+
+void basic_terminal_out::ding() noexcept
+{
+    write("\007", 1);
 }
 
 size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_width, uint16_t* truncated_width)
@@ -58,39 +94,6 @@ size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_
     if (truncated_width)
         *truncated_width = width_fits;
     return length_fits;
-}
-
-void term_out(const char* s, size_t len)
-{
-    len = resolve_auto_length(len, s);
-
-    if (hook_term_out)
-        return hook_term_out(s, len);
-
-#ifdef _WIN32
-    DWORD written;
-    if (is_console())
-    {
-        static cstring_t<WCHAR> s_buffer;
-        if (!to_utf16(s, len, s_buffer))
-            return;
-        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
-    }
-    else
-    {
-        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, DWORD(len), &written, nullptr);
-    }
-#else
-    fwrite(s, resolve_auto_length(len, s), 1, stdout);
-#endif
-}
-
-void ding()
-{
-    if (hook_term_ding)
-        return hook_term_ding();
-
-    term_out("\007", 1);
 }
 
 } // namespace tib

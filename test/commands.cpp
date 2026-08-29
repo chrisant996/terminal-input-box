@@ -190,10 +190,6 @@ TEST_CASE("Screen line cursor column continuation")
     tib::binding_resolver resolver;
     resolver.add_target(context);
 
-    void (*old_term_out)(const char*, size_t) = tib::hook_term_out;
-    MAKE_CLEANUP([old_term_out]() { tib::hook_term_out = old_term_out; });
-    tib::hook_term_out = [](const char*, size_t) {};
-
     while (tib::term_in_avail())
     {
         context->display();

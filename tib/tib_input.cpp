@@ -7,7 +7,6 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_terminal.h"
-#include "tib_output.h"
 #include "tib_termcap.h"
 #include <memory>
 #include <conio.h>

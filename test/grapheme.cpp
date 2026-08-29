@@ -3,6 +3,7 @@
 
 #include "maybe_windows.h"
 #include "test.h"
+#include "test_util.h"
 #include "tib.h"
 #include "wcwidth.h"
 
@@ -131,20 +132,14 @@ public:
 
 static tib::cstring s_display_output;
 
-static void capture_display_output(const char* text, size_t length)
-{
-    s_display_output.append(text, length);
-}
-
 class display_test_fixture
 {
 public:
     display_test_fixture(uint16_t max_width=10, bool horiz_scroll_markers=false,
                          uint16_t max_height=1, bool variable_height=false)
+    : m_output(s_display_output)
     {
-        m_old_hook = tib::hook_term_out;
         m_old_coalesce = tib::g_coalesce_output;
-        tib::hook_term_out = capture_display_output;
         tib::g_coalesce_output = true;
 
         m_layout.max_width = max_width;
@@ -160,7 +155,6 @@ public:
 
     ~display_test_fixture()
     {
-        tib::hook_term_out = m_old_hook;
         tib::g_coalesce_output = m_old_coalesce;
         s_display_output.clear();
     }
@@ -176,10 +170,10 @@ public:
     tib::display_manager m_display;
 
 private:
+    test_output_stream  m_output;
     tib::layout_info m_layout;
     tib::border_definition m_border;
     tib::style_info m_style;
-    void (*m_old_hook)(const char*, size_t) = nullptr;
     bool m_old_coalesce = false;
 };
 

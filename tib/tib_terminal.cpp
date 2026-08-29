@@ -7,12 +7,12 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_terminal.h"
-#include "tib_output.h"
 #include <assert.h>
 
 namespace tib {
 
 hook_new_terminal_in_func_t hook_new_terminal_in = nullptr;
+hook_new_terminal_out_func_t hook_new_terminal_out = nullptr;
 
 struct macro_playback
 {
@@ -25,6 +25,7 @@ static pushed_input s_pushed;
 static macro_playback* s_macro_playback = nullptr;
 
 static terminal_in* s_terminal_in = nullptr;
+static terminal_out* s_terminal_out = nullptr;
 static int32_t s_term_began = 0;
 
 #ifdef _WIN32
@@ -34,6 +35,150 @@ static const DWORD c_idMainThread = GetCurrentThreadId();
 #endif
 
 terminal_in* new_basic_terminal_in(pushed_input& pushed);
+terminal_out* new_basic_terminal_out();
+
+pushed_input::~pushed_input() noexcept
+{
+    free(m_data);
+}
+
+bool pushed_input::push(uint8_t c) noexcept
+{
+    if (m_high_surrogate && !push_invalid())
+        return false;
+
+    if (!ensure_capacity(1))
+        return false;
+
+    m_data[(m_head + m_count) % m_size] = c;
+    ++m_count;
+    return true;
+}
+
+#ifdef _WIN32
+int32_t pushed_input::push_utf16(WCHAR c) noexcept
+{
+    // If c is a high surrogate then cache it for later.
+    if (IS_HIGH_SURROGATE(c))
+    {
+        const int32_t pushed = m_high_surrogate ? push_invalid() : -1;
+        m_high_surrogate = c; // After push_invalid() because that clears it.
+        return pushed;
+    }
+
+    // If a high surrogate is cached then complete it.
+    if (m_high_surrogate)
+    {
+        if (!IS_LOW_SURROGATE(c))
+        {
+            if (!push_invalid())
+                return false;
+
+convert_c:
+            if (!to_utf8(&c, 1, m_tmp_utf8))
+                return false;
+
+push_utf8:
+            if (!ensure_capacity(m_tmp_utf8.length()))
+                return false;
+            for (size_t i = 0; i < m_tmp_utf8.length(); ++i)
+                push(m_tmp_utf8.c_str()[i]);
+            return true;
+        }
+
+        WCHAR convert[2];
+        convert[0] = m_high_surrogate;
+        convert[1] = c;
+        m_high_surrogate = 0;
+        if (!to_utf8(convert, 2, m_tmp_utf8))
+            return false;
+        goto push_utf8;
+    }
+
+    goto convert_c;
+}
+
+int32_t pushed_input::push_key_event(const KEY_EVENT_RECORD& record) noexcept
+{
+    // Returns:
+    //  -1  =   The first iteration hit an error.  Execution was aborted.
+    //  0   =   No error, but all iterations pushed nothing.
+    //  1   =   Something was pushed.  All preceding iterations returned 1,
+    //          regardless what the last iteration returned.
+    int32_t pushed = 0;
+    for (WORD count = record.wRepeatCount; count; --count)
+    {
+        const int32_t result = push_utf16(record.uChar.UnicodeChar);
+        if (result <= 0)
+            return pushed > 0 ? pushed : result;
+        pushed = result;
+    }
+    return pushed;
+}
+#endif
+
+bool pushed_input::push_invalid() noexcept
+{
+    m_high_surrogate = 0;
+    return push(0xef) && push(0xbf) && push(0xbd);
+}
+
+int32_t pushed_input::peek() const noexcept
+{
+    assert(!empty());
+    const uint8_t c = m_data[m_head];
+    return c;
+}
+
+int32_t pushed_input::read() noexcept
+{
+    assert(!empty());
+    const uint8_t c = m_data[m_head];
+    ++m_head;
+    --m_count;
+    m_head %= m_size;
+    return c;
+}
+
+bool pushed_input::ensure_capacity(size_t num) noexcept
+{
+    if (m_size - m_count >= num)
+        return true;
+
+    if (num > size_t(-1) - m_count)
+        return false;
+    const size_t required = m_count + num;
+
+#ifdef DEBUG
+    constexpr size_t min_size = 1;
+#else
+    constexpr size_t min_size = 128;
+#endif
+
+    size_t new_size = m_size;
+    if (m_size <= size_t(-1) - m_size / 2)
+        new_size += m_size / 2;
+    if (new_size < min_size)
+        new_size = min_size;
+    if (new_size < required)
+        new_size = required;
+
+    uint8_t* const data = static_cast<uint8_t*>(malloc(new_size));
+    if (!data)
+        return false;
+
+    const size_t first = min(m_count, m_size - m_head);
+    if (first)
+        memcpy(data, m_data + m_head, first);
+    if (m_count > first)
+        memcpy(data + first, m_data, m_count - first);
+
+    free(m_data);
+    m_data = data;
+    m_size = new_size;
+    m_head = 0;
+    return true;
+}
 
 void term_begin()
 {
@@ -47,14 +192,16 @@ void term_begin()
     if (s_term_began < 0)
     {
         assert(!s_terminal_in);
+        assert(!s_terminal_out);
         s_term_began = 0;
     }
 
     if (!s_term_began)
     {
         assert(!s_terminal_in);
+        assert(!s_terminal_out);
         s_terminal_in = hook_new_terminal_in ? hook_new_terminal_in(s_pushed) : new_basic_terminal_in(s_pushed);
-        // TODO: s_terminal_out
+        s_terminal_out = hook_new_terminal_out ? hook_new_terminal_out() : new_basic_terminal_out();
     }
 
     ++s_term_began;
@@ -76,6 +223,8 @@ void term_end()
     {
         delete s_terminal_in;
         s_terminal_in = nullptr;
+        delete s_terminal_out;
+        s_terminal_out = nullptr;
     }
 
     --s_term_began;
@@ -230,147 +379,19 @@ bool enable_mouse_input(mouse_input_mode mode, bool sgr_encoding)
     return s_terminal_in->enable_mouse_input(mode, sgr_encoding);
 }
 
-pushed_input::~pushed_input() noexcept
+void term_out(const char* s, size_t len)
 {
-    free(m_data);
+    if (!s_terminal_out)
+        return;
+
+    len = resolve_auto_length(len, s);
+    s_terminal_out->write(s, len);
 }
 
-bool pushed_input::push(uint8_t c) noexcept
+void ding()
 {
-    if (m_high_surrogate && !push_invalid())
-        return false;
-
-    if (!ensure_capacity(1))
-        return false;
-
-    m_data[(m_head + m_count) % m_size] = c;
-    ++m_count;
-    return true;
-}
-
-#ifdef _WIN32
-int32_t pushed_input::push_utf16(WCHAR c) noexcept
-{
-    // If c is a high surrogate then cache it for later.
-    if (IS_HIGH_SURROGATE(c))
-    {
-        const int32_t pushed = m_high_surrogate ? push_invalid() : -1;
-        m_high_surrogate = c; // After push_invalid() because that clears it.
-        return pushed;
-    }
-
-    // If a high surrogate is cached then complete it.
-    if (m_high_surrogate)
-    {
-        if (!IS_LOW_SURROGATE(c))
-        {
-            if (!push_invalid())
-                return false;
-
-convert_c:
-            if (!to_utf8(&c, 1, m_tmp_utf8))
-                return false;
-
-push_utf8:
-            if (!ensure_capacity(m_tmp_utf8.length()))
-                return false;
-            for (size_t i = 0; i < m_tmp_utf8.length(); ++i)
-                push(m_tmp_utf8.c_str()[i]);
-            return true;
-        }
-
-        WCHAR convert[2];
-        convert[0] = m_high_surrogate;
-        convert[1] = c;
-        m_high_surrogate = 0;
-        if (!to_utf8(convert, 2, m_tmp_utf8))
-            return false;
-        goto push_utf8;
-    }
-
-    goto convert_c;
-}
-
-int32_t pushed_input::push_key_event(const KEY_EVENT_RECORD& record) noexcept
-{
-    // Returns:
-    //  -1  =   The first iteration hit an error.  Execution was aborted.
-    //  0   =   No error, but all iterations pushed nothing.
-    //  1   =   Something was pushed.  All preceding iterations returned 1,
-    //          regardless what the last iteration returned.
-    int32_t pushed = 0;
-    for (WORD count = record.wRepeatCount; count; --count)
-    {
-        const int32_t result = push_utf16(record.uChar.UnicodeChar);
-        if (result <= 0)
-            return pushed > 0 ? pushed : result;
-        pushed = result;
-    }
-    return pushed;
-}
-#endif
-
-bool pushed_input::push_invalid() noexcept
-{
-    m_high_surrogate = 0;
-    return push(0xef) && push(0xbf) && push(0xbd);
-}
-
-int32_t pushed_input::peek() const noexcept
-{
-    assert(!empty());
-    const uint8_t c = m_data[m_head];
-    return c;
-}
-
-int32_t pushed_input::read() noexcept
-{
-    assert(!empty());
-    const uint8_t c = m_data[m_head];
-    ++m_head;
-    --m_count;
-    m_head %= m_size;
-    return c;
-}
-
-bool pushed_input::ensure_capacity(size_t num) noexcept
-{
-    if (m_size - m_count >= num)
-        return true;
-
-    if (num > size_t(-1) - m_count)
-        return false;
-    const size_t required = m_count + num;
-
-#ifdef DEBUG
-    constexpr size_t min_size = 1;
-#else
-    constexpr size_t min_size = 128;
-#endif
-
-    size_t new_size = m_size;
-    if (m_size <= size_t(-1) - m_size / 2)
-        new_size += m_size / 2;
-    if (new_size < min_size)
-        new_size = min_size;
-    if (new_size < required)
-        new_size = required;
-
-    uint8_t* const data = static_cast<uint8_t*>(malloc(new_size));
-    if (!data)
-        return false;
-
-    const size_t first = min(m_count, m_size - m_head);
-    if (first)
-        memcpy(data, m_data + m_head, first);
-    if (m_count > first)
-        memcpy(data + first, m_data, m_count - first);
-
-    free(m_data);
-    m_data = data;
-    m_size = new_size;
-    m_head = 0;
-    return true;
+    if (s_terminal_out)
+        s_terminal_out->ding();
 }
 
 } // namespace tib

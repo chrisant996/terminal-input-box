@@ -37,15 +37,12 @@ int main(int argc, char** argv)
     install_crt_invalid_parameter_handler();
 #endif
 
-    // Override ding, otherwise tests could be vocal.
-    tib::hook_term_ding = [](){};
-
     // Override self-insert optimization, for stable test outcomes.
     tib::g_optimize_self_insert = false;
 
     reset_wcwidths();
 
-    install_test_terminal_in();
+    install_test_terminal();
     tib::term_begin();
 
     bool list = false;

@@ -26,8 +26,18 @@ public:
     virtual bool        enable_mouse_input(mouse_input_mode mode, bool sgr_encoding) noexcept { return false; }
 };
 
+class terminal_out
+{
+public:
+    virtual             ~terminal_out() = default;
+    virtual void        write(const char* s, size_t len) noexcept = 0;
+    virtual void        ding() noexcept = 0;
+};
+
 typedef terminal_in* (*hook_new_terminal_in_func_t)(pushed_input& pushed);
+typedef terminal_out* (*hook_new_terminal_out_func_t)();
 extern hook_new_terminal_in_func_t hook_new_terminal_in;
+extern hook_new_terminal_out_func_t hook_new_terminal_out;
 
 void term_begin();
 void term_end();
@@ -38,6 +48,14 @@ int32_t term_in_peek();
 bool term_in_avail(DWORD timeout=0);
 bool term_push_macro_text(const char* text, size_t len=-1);
 bool enable_mouse_input(mouse_input_mode mode, bool sgr_encoding=true);
+
+void term_out(const char* s, size_t len=c_auto_length);
+void ding();
+
+size_t fits_in_wcwidth(const char* s, const size_t len, const uint16_t truncate_width, uint16_t* truncated_width);
+
+bool ensure_term_caps();
+coord get_terminal_size();
 
 class pushed_input
 {
