@@ -136,6 +136,7 @@ int32_t insert_newline(tib::editor_context& ctx, int32_t key, const char* name, 
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
+    t->add({ "\021", tib::binding_target_func("quoted-insert") });      // Ctrl-Q
     t->add({ "\022", tib::binding_target_func("lorem-ipsum") });        // Ctrl-R
     t->add({ "\033m", tib::binding_target_func("insert-newline") });    // Alt-M
     t->add({ "\033T", tib::binding_target_macro("Macro Text") });       // Alt-Shift-T
@@ -570,6 +571,7 @@ no_border:
         switch (outcome)
         {
         case tib::dispatch_outcome::self_insert:
+        case tib::dispatch_outcome::quoted_insert:
             if (sequence.length() == 1/*c*/ + 1/*space*/)
                 sequence.clear();
             break;

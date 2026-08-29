@@ -2,7 +2,6 @@
 
 # TODO
 
-- Quoted insert.  Needs an internal mode to force self-insert of next char.
 - Commands:
   - Toggle-able overwrite mode.
   - Undo all changes to the input line (undo back to the original state).

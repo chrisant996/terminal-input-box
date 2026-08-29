@@ -40,6 +40,7 @@ int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name
 int32_t cut(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t copy(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t paste(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t quoted_insert(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 int32_t transpose_chars(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t transpose_words(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);

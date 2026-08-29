@@ -10,8 +10,13 @@
 namespace tib {
 
 // Use some invalid UTF8 bytes for special meanings.
-constexpr uint8_t c_input_terminal_resize = 0xfe;
-constexpr uint8_t c_input_terminal_eof = 0xfd;
+constexpr uint8_t c_input_terminal_reserved_begin   = 0xfa;
+//                                                  = 0xfa;
+//                                                  = 0xfb;
+//                                                  = 0xfc;
+constexpr uint8_t c_input_terminal_eof              = 0xfd;
+constexpr uint8_t c_input_terminal_resize           = 0xfe;
+// Do not use 0xff; it may be confused with errors. = 0xff;
 
 enum class mouse_input_mode { none, VT200, DRAG, ANY };
 

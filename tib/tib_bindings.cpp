@@ -14,6 +14,11 @@
 
 namespace tib {
 
+struct binding_resolver_state
+{
+    std::weak_ptr<dispatcher_target> quoted_insert_target;
+};
+
 binding_target::binding_target(binding_type type, const char* text, size_t len) noexcept
 {
     switch (type)
@@ -29,6 +34,11 @@ binding_target::binding_target(binding_type type, const char* text, size_t len) 
     case binding_type::macro:
         set_macro(text, len);
         break;
+    case binding_type::quoted_insert:
+        assert(len == 1);
+        assert(*text && uint8_t(*text) < c_input_terminal_reserved_begin);
+        set_quoted_insert(*text);
+        break;
     default:
         assert(false);
         break;
@@ -43,6 +53,11 @@ binding_target binding_target_func(const char* name)
 binding_target binding_target_macro(const char* text, size_t len)
 {
     return binding_target(binding_type::macro, text, len);
+}
+
+binding_target binding_target_quoted_insert(char c)
+{
+    return binding_target(binding_type::quoted_insert, &c, 1);
 }
 
 bool binding_target::operator==(const binding_target& t) const noexcept
@@ -103,6 +118,14 @@ void binding_target::set_macro(const char* text, size_t len) noexcept
     m_length = len;
 }
 
+void binding_target::set_quoted_insert(char c) noexcept
+{
+    assert(c && uint8_t(c) < c_input_terminal_reserved_begin);
+    m_type = binding_type::quoted_insert;
+    m_text = nullptr;
+    m_length = uint8_t(c);
+}
+
 binding_target_copy::binding_target_copy(const binding_target& t) noexcept
 {
     *this = t;
@@ -124,6 +147,9 @@ binding_target_copy& binding_target_copy::operator=(const binding_target& t) noe
         m_owned_text.set(t.get_text(), t.get_length());
         set_macro(m_owned_text.c_str(), m_owned_text.length());
         break;
+    case binding_type::quoted_insert:
+        m_owned_text.clear();
+        set_quoted_insert(char(t.get_char()));
     default:
         assert(false);
         m_owned_text.clear();
@@ -204,30 +230,46 @@ void dispatcher_target::set_bindings(std::shared_ptr<const key_table_list> bindi
 
 resolved_binding::operator bool()
 {
-    return outcome == dispatch_outcome::match || outcome == dispatch_outcome::self_insert;
+    return (outcome == dispatch_outcome::match ||
+            outcome == dispatch_outcome::self_insert ||
+            outcome == dispatch_outcome::quoted_insert);
 }
 
 bool resolved_binding::dispatch()
 {
     const bool self_insert = (outcome == dispatch_outcome::self_insert);
+    const bool quoted_insert = (outcome == dispatch_outcome::quoted_insert);
+    const bool literal_insert = self_insert || quoted_insert;
     assert(implies(self_insert, is_self_insertable(key)));
-    assert(implies(self_insert, sequence.length() == 1));
-    assert(implies(self_insert, uint8_t(sequence.c_str()[0]) == key));
+    assert(implies(literal_insert, sequence.length() == 1));
+    assert(implies(literal_insert, uint8_t(sequence.c_str()[0]) == key));
 
     switch (outcome)
     {
     case dispatch_outcome::self_insert:
+    case dispatch_outcome::quoted_insert:
     case dispatch_outcome::match:
         {
             auto ctx = dispatcher_target.lock();
             if (ctx)
             {
-                const auto target = binding_target;
+                tib::binding_target quoted_target;
+                const tib::binding_target* target = binding_target;
+                if (quoted_insert)
+                {
+                    quoted_target.set_quoted_insert(char(key));
+                    target = &quoted_target;
+                }
+
                 assert(self_insert == !target);
                 if (target && target->get_type() == binding_type::macro)
                     term_push_macro_text(target->get_text(), target->get_length());
                 else
-                    ctx->dispatch(sequence, key, target, &params); // REVIEW: do anything with the return value?
+                {
+                    const int32_t result = ctx->dispatch(sequence, key, target, &params);
+                    if (result == c_dispatch_request_quoted_insert && m_resolver_state)
+                        m_resolver_state->quoted_insert_target = ctx;
+                }
                 return true;
             }
             else
@@ -244,9 +286,15 @@ bool resolved_binding::dispatch()
     return false;
 }
 
+binding_resolver::binding_resolver()
+    : m_state(std::make_shared<binding_resolver_state>())
+{
+}
+
 void binding_resolver::clear_targets()
 {
     m_registrants.clear();
+    m_state->quoted_insert_target.reset();
 }
 
 void binding_resolver::add_target(std::weak_ptr<dispatcher_target> target)
@@ -262,6 +310,20 @@ void binding_resolver::reset()
 
 resolved_binding binding_resolver::step(uint8_t c)
 {
+    if (!m_state->quoted_insert_target.expired())
+    {
+        const std::weak_ptr<dispatcher_target> weak = m_state->quoted_insert_target;
+        m_state->quoted_insert_target.reset();
+        reset();
+
+        resolved_binding resolved;
+        resolved.sequence.append(reinterpret_cast<const char*>(&c), 1);
+        resolved.key = c;
+        resolved.dispatcher_target = weak;
+        resolved.outcome = dispatch_outcome::quoted_insert;
+        return resolved;
+    }
+
     m_sequence.append(reinterpret_cast<const char*>(&c), 1);
 
     // Search the key tables in priority order (later tables overlay earlier
@@ -316,6 +378,7 @@ resolved_binding binding_resolver::step(uint8_t c)
                     resolved.binding_target = &found->target;
                     resolved.dispatcher_target = weak;
                     resolved.outcome = dispatch_outcome::match;
+                    resolved.m_resolver_state = m_state;
                     reset();
                     return resolved;
                 }
@@ -412,6 +475,7 @@ resolved_binding binding_resolver::step(uint8_t c)
                             resolved.binding_target = &pattern->target;
                             resolved.dispatcher_target = weak;
                             resolved.outcome = dispatch_outcome::match;
+                            resolved.m_resolver_state = m_state;
                             resolved.params = std::move(params);
                             reset();
                             return resolved;

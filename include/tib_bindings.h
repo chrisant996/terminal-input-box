@@ -20,6 +20,7 @@ enum class binding_type : uint8_t
     none,
     func,
     macro,
+    quoted_insert,
 };
 
 class key_table;
@@ -44,10 +45,12 @@ public:
     binding_type        get_type() const noexcept { return m_type; }
     const char*         get_text() const noexcept { return m_text; }
     size_t              get_length() const noexcept { assert(m_type == binding_type::macro); return m_length; }
+    char                get_char() const noexcept { assert(m_type == binding_type::quoted_insert); return char(m_length); }
 
     void                clear() noexcept;
     void                set_func(const char* name) noexcept;
     void                set_macro(const char* text, size_t len=c_auto_length) noexcept;
+    void                set_quoted_insert(char c) noexcept;
 
 protected:
     binding_type        m_type = binding_type::none;
@@ -57,6 +60,7 @@ protected:
 
 binding_target binding_target_func(const char* name);
 binding_target binding_target_macro(const char* text, size_t len=c_auto_length);
+binding_target binding_target_quoted_insert(char c);
 
 class binding_target_copy : public binding_target
 {
@@ -129,10 +133,15 @@ enum class dispatch_outcome
 {
     miss,               // Input sequence did not resolve to a binding.
     self_insert,        // Input sequence is literal text.
+    quoted_insert,      // Input byte is to be delivered as a quoted insert.
     more,               // Input sequence is a prefix of one or more bindings.
     match,              // Input sequence resolved to a binding.
     expired,            // The dispatcher_target weak reference was expired.
 };
+
+constexpr int32_t c_dispatch_request_quoted_insert = INT32_MAX;
+
+struct binding_resolver_state;
 
 class dispatcher_target : public std::enable_shared_from_this<dispatcher_target>
 {
@@ -140,16 +149,19 @@ public:
     std::shared_ptr<const key_table_list> get_bindings() const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
 
-    // The dispatch() callback is called by dispatcher::step() in two cases:
-    //  1.  The input sequence matched a key binding, in which case binding
-    //      points at the matched key binding.
+    // The binding_resolver::step() produces a resolved_binding in three cases:
+    //
+    //  1.  The input sequence matched a key binding.
     //  2.  A key_table has self-insert enabled and the input sequence is a
-    //      single self-insert character, in which case binding is nullptr and
-    //      key is the character to be inserted.
+    //      single self-insert character.
+    //  3.  The input is literal, i.e. a quoted insert.
     //
     // Returning negative means the input sequence was not handled, and
     // implies permission for something else to choose to handle the input
-    // sequence.
+    // sequence.  Returning c_dispatch_request_quoted_insert asks the
+    // binding_resolver to send the next input byte back to this
+    // dispatcher_target as a quoted insert i.e. as literal input not
+    // translated through key bindings.
     virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept = 0;
 
 private:
@@ -158,6 +170,8 @@ private:
 
 struct resolved_binding
 {
+    friend class binding_resolver;
+
                         operator bool();
     bool                more() const { return outcome == dispatch_outcome::more; }
     bool                dispatch();
@@ -168,13 +182,16 @@ struct resolved_binding
     std::weak_ptr<dispatcher_target> dispatcher_target;
     dispatch_outcome    outcome = dispatch_outcome::miss;
     binding_params      params;
+
+private:
+    std::shared_ptr<binding_resolver_state> m_resolver_state;
 };
 
 class binding_resolver
 {
 public:
                         ~binding_resolver() = default;
-                        binding_resolver() = default;
+                        binding_resolver();
 
     void                clear_targets();
     void                add_target(std::weak_ptr<dispatcher_target> target);
@@ -185,6 +202,7 @@ public:
 private:
     std::vector<std::weak_ptr<dispatcher_target>> m_registrants;
     cstring             m_sequence;
+    std::shared_ptr<binding_resolver_state> m_state;
 };
 
 std::shared_ptr<tib::key_table_list> make_default_key_table();

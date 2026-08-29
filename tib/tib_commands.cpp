@@ -60,6 +60,11 @@ int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const bi
     return 0;
 }
 
+int32_t quoted_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return c_dispatch_request_quoted_insert;
+}
+
 //------------------------------------------------------------------------------
 
 static const char* const c_screen_line_commands[] =
@@ -732,6 +737,7 @@ static const editor_command c_commands[] =
     { "lower-case", lower_case },
     { "mouse-input", mouse_input },
     { "paste", paste },
+    { "quoted-insert", quoted_insert },
     { "redisplay", redisplay },
     { "redo", redo },
     { "screen-line-down", screen_line_down },

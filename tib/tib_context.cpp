@@ -1009,21 +1009,37 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 {
     if (binding)
     {
-        assert(binding->get_type() == binding_type::func);
-        if (binding->get_type() == binding_type::func)
+        switch (binding->get_type())
         {
-            const char* const name = binding->get_text();
-            editor_command_func_t func = lookup_command(name);
-            if (!func)
+        case binding_type::func:
             {
+                const char* const name = binding->get_text();
+                editor_command_func_t func = lookup_command(name);
+                if (!func)
+                {
+                    set_last_command(name);
+                    ding();
+                    return 0;
+                }
+
+                const int32_t result = func(*this, key, name, params);
                 set_last_command(name);
-                ding();
-                return -1;
+                return result;
+            }
+            break;
+
+        case binding_type::quoted_insert:
+            {
+                set_last_command("self-insert");
+                const char c = binding->get_char();
+                if (c && uint8_t(c) < c_input_terminal_reserved_begin)
+                    insert_char(c);
+                return 0;
             }
 
-            const int32_t result = func(*this, key, name, params);
-            set_last_command(name);
-            return result;
+        default:
+            assert("unexpected binding_type" == false);
+            break;
         }
     }
     else
