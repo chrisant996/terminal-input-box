@@ -144,6 +144,7 @@ public:
     void                begin_undo_group();
     void                end_undo_group();
     void                undo();
+    void                undo_all();
     void                redo();
 
     void                transfer_text(cstring& out);

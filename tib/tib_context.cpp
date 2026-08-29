@@ -975,6 +975,31 @@ void editor_context::undo()
     m_display.set_scroll_offsets(p->m_left, p->m_top);
 }
 
+void editor_context::undo_all()
+{
+    assert(!m_grouping);
+    if (m_grouping)
+        return;
+    if (!m_undo_head)
+        return;
+
+    undo_entry* current = m_undo_current ? m_undo_current : m_undo_tail;
+    if (current == m_undo_head)
+        return;
+
+    current->m_left = m_display.get_left();
+    current->m_top = m_display.get_top();
+
+    undo_entry* first = m_undo_head->m_next;
+    assert(first);
+
+    inc_change_counter();
+    m_text.set(m_undo_head->m_text);
+    m_selection = first->m_sel_before;
+    m_undo_current = m_undo_head;
+    m_display.set_scroll_offsets(m_undo_head->m_left, m_undo_head->m_top);
+}
+
 void editor_context::redo()
 {
     assert(!m_grouping);

@@ -26,6 +26,7 @@ int32_t del_word_right(tib::editor_context& ctx, int32_t key, const char* name, 
 
 int32_t redo(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t undo(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
+int32_t undo_all(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 
 int32_t clear_selection(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);
 int32_t select_all(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params);

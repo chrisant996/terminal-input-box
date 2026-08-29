@@ -164,6 +164,12 @@ int32_t undo(editor_context& ctx, int32_t key, const char* name, const binding_p
     return 0;
 }
 
+int32_t undo_all(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.undo_all();
+    return 0;
+}
+
 //------------------------------------------------------------------------------
 
 int32_t clear_selection(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
@@ -748,6 +754,7 @@ static const editor_command c_commands[] =
     { "transpose-chars", transpose_chars },
     { "transpose-words", transpose_words },
     { "undo", undo },
+    { "undo-all", undo_all },
     { "upper-case", upper_case },
 };
 

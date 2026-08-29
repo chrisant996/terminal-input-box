@@ -6,6 +6,13 @@
 #include "test_util.h"
 #include "tib.h"
 
+static void invoke_command(tib::editor_context& context, const char* name)
+{
+    const auto command = tib::editor_context::lookup_command(name);
+    REQUIRE(command != nullptr);
+    REQUIRE(command(context, 0, name, nullptr) == 0);
+}
+
 TEST_CASE("Undo grouping")
 {
     tib::editor_context context;
@@ -57,4 +64,62 @@ TEST_CASE("Undo grouping")
         context.undo();
         REQUIRE(context.get_text() == "a");
     }
+}
+
+TEST_CASE("Undo all command")
+{
+    tib::editor_context context;
+    context.initialize("original");
+    context.set_selection(0, 4);
+    context.clear_undo();
+
+    context.insert_text(" one");
+    context.insert_text(" two");
+    context.set_caret(3);
+
+    invoke_command(context, "undo-all");
+    REQUIRE(context.get_text() == "original");
+    REQUIRE(context.get_selection_state().get_anchor() == 0);
+    REQUIRE(context.get_selection_state().get_caret() == 4);
+
+    SECTION("Redo restores each change individually")
+    {
+        context.redo();
+        REQUIRE(context.get_text() == " oneinal");
+
+        context.redo();
+        REQUIRE(context.get_text() == " one twoinal");
+        REQUIRE(context.get_selection_state().get_caret() == 8);
+
+        context.undo();
+        REQUIRE(context.get_text() == " oneinal");
+    }
+
+    SECTION("A new edit replaces the redo records")
+    {
+        context.insert_text(" replacement");
+        context.redo();
+        REQUIRE(context.get_text() == " replacementinal");
+    }
+}
+
+TEST_CASE("Undo all command after undo")
+{
+    tib::editor_context context;
+    context.initialize();
+    context.insert_text("one");
+    context.insert_text(" two");
+    context.insert_text(" three");
+    context.undo();
+    REQUIRE(context.get_text() == "one two");
+
+    invoke_command(context, "undo-all");
+    REQUIRE(context.get_text().empty());
+
+    context.redo();
+    REQUIRE(context.get_text() == "one");
+    context.redo();
+    REQUIRE(context.get_text() == "one two");
+    context.redo();
+    REQUIRE(context.get_text() == "one two three");
 }
