@@ -168,7 +168,6 @@ invalid_current_data:
     while (more());
 
     // An incomplete encoding is invalid.
-    assert(ax);
     assert(expected);
     assert(length < expected);
     return 0xFFFD;

@@ -60,11 +60,6 @@ int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const bi
     return 0;
 }
 
-int32_t quoted_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
-{
-    return c_dispatch_request_quoted_insert;
-}
-
 //------------------------------------------------------------------------------
 
 static const char* const c_screen_line_commands[] =
@@ -285,6 +280,17 @@ int32_t copy(editor_context& ctx, int32_t key, const char* name, const binding_p
 int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.paste_from_clipboard();
+    return 0;
+}
+
+int32_t quoted_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return c_dispatch_request_quoted_insert;
+}
+
+int32_t toggle_overwrite_mode(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.toggle_overwrite_mode();
     return 0;
 }
 
@@ -652,7 +658,7 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const bi
 
     if (key <= 0xff)
     {
-        ctx.insert_char(char(key));
+        ctx.insert_char(char(key), ctx.get_overwrite_mode());
         return 0;
     }
 
@@ -686,10 +692,7 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const bi
         return -1;
 
     // Insert the converted UTF8 characters.
-    ctx.begin_undo_group();
-    for (size_t i = 0; i < length; ++i)
-        ctx.insert_char(utf8[i]);
-    ctx.end_undo_group();
+    ctx.insert_text(utf8, length, ctx.get_overwrite_mode());
 
     return 0;
 }
@@ -792,6 +795,7 @@ static const editor_command c_commands[] =
     { "select-bigword", select_bigword },
     { "select-word", select_word },
     { "toggle-case", toggle_case },
+    { "toggle-overwrite-mode", toggle_overwrite_mode },
     { "transpose-bigwords", transpose_bigwords },
     { "transpose-chars", transpose_chars },
     { "transpose-words", transpose_words },

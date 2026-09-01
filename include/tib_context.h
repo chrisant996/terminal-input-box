@@ -118,6 +118,9 @@ public:
     void                cut_to_clipboard();
     void                paste_from_clipboard();
 #endif
+    bool                get_overwrite_mode() const noexcept { return m_overwrite_mode; }
+    void                set_overwrite_mode(bool overwrite) noexcept;
+    void                toggle_overwrite_mode() noexcept { set_overwrite_mode(!m_overwrite_mode); }
 
     const char*         get_last_command() const noexcept { return m_last_command.c_str(); }
     void                set_last_command(const char* name);
@@ -135,8 +138,8 @@ public:
 #if 0
     void                replace_from_history(const cstring& text, bool keep_undo);
 #endif
-    void                insert_char(char c);
-    void                insert_text(const char* text, size_t len=c_auto_length);
+    void                insert_char(char c, bool overwrite=false);
+    void                insert_text(const char* text, size_t len=c_auto_length, bool overwrite=false);
     void                remove_text(textpos_t begin, textpos_t end);
     bool                elide_selected_text();
 
@@ -171,6 +174,8 @@ private:
     void                unlink_endo_entry(undo_entry* p);
     void                begin_undo_group(bool merge);
     void                inc_change_counter();
+    void                insert_raw_char(char c);
+    void                clear_overwrite_input();
 
     static void         ensure_commands_sorted();
 
@@ -199,6 +204,13 @@ private:
     bool                m_done = false;
     bool                m_can_drag = false;
     bool                m_allow_optimized_self_insert = true;
+    bool                m_overwrite_mode = false;
+    bool                m_replaying_overwrite_input = false;
+    cstring             m_overwrite_input;
+    cstring             m_overwrite_input_original_text;
+    selection_state     m_overwrite_input_original_selection;
+    uint32_t            m_overwrite_input_change_counter = 0;
+    textpos_t           m_overwrite_input_caret = 0;
     cstring             m_last_command;
     std::map<cstring, cstring, cstring_less> m_named_values;
 

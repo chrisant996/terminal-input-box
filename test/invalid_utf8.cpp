@@ -95,8 +95,14 @@ TEST_CASE("Invalid UTF8")
         const char two_byte[] = { char(0xc2) };
         check_utf8(two_byte, sizeof(two_byte), { { 0xfffd, 1 } });
 
+        const char zero_accumulator_three_byte[] = { char(0xe0) };
+        check_utf8(zero_accumulator_three_byte, sizeof(zero_accumulator_three_byte), { { 0xfffd, 1 } });
+
         const char three_byte[] = { char(0xe1), char(0x80) };
         check_utf8(three_byte, sizeof(three_byte), { { 0xfffd, 2 } });
+
+        const char zero_accumulator_four_byte[] = { char(0xf0) };
+        check_utf8(zero_accumulator_four_byte, sizeof(zero_accumulator_four_byte), { { 0xfffd, 1 } });
 
         const char four_byte[] = { char(0xf1), char(0x80), char(0x80) };
         check_utf8(four_byte, sizeof(four_byte), { { 0xfffd, 3 } });

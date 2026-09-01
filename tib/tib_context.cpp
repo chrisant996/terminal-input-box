@@ -172,6 +172,12 @@ editor_context::editor_context()
     m_display.init_style(&m_style);
 }
 
+void editor_context::set_overwrite_mode(bool overwrite) noexcept
+{
+    clear_overwrite_input();
+    m_overwrite_mode = overwrite;
+}
+
 void editor_context::set_border(const border_definition* border)
 {
     if (border && !border->has_top() && !border->has_bottom() && !border->has_left() && !border->has_right())
@@ -192,6 +198,8 @@ void editor_context::set_history(std::vector<cstring>* history)
 void editor_context::initialize(const char* text, size_t len)
 {
     m_done = false;
+    m_overwrite_mode = false;
+    clear_overwrite_input();
 
     if (!text)
     {
@@ -748,11 +756,23 @@ void editor_context::suppress_auto_horizontal_scroll()
     m_display.suppress_auto_horizontal_scroll(m_selection);
 }
 
-void editor_context::insert_char(char c)
+static size_t count_graphemes(const char* s, size_t len)
 {
-    if (!c)
-        return;
+    size_t count = 0;
+    wcwidth_iter iter(s, len);
+    while (iter.next())
+        ++count;
+    return count;
+}
 
+void editor_context::clear_overwrite_input()
+{
+    m_overwrite_input.clear();
+    m_overwrite_input_original_text.clear();
+}
+
+void editor_context::insert_raw_char(char c)
+{
     const bool merge = (uint8_t(c) & 0xc0) == 0x80;
     begin_undo_group(merge);
 
@@ -784,46 +804,122 @@ void editor_context::insert_char(char c)
     end_undo_group();
 }
 
-void editor_context::insert_text(const char* s, size_t available)
+void editor_context::insert_char(char c, bool overwrite)
+{
+    if (!c)
+        return;
+
+    if (!overwrite)
+    {
+        clear_overwrite_input();
+        insert_raw_char(c);
+        return;
+    }
+
+    bool continuing = (!m_overwrite_input.empty() &&
+                       m_overwrite_input_change_counter == m_change_counter &&
+                       m_overwrite_input_caret == m_selection.get_caret() &&
+                       !m_selection.has_selection());
+    if (continuing)
+    {
+        cstring candidate(m_overwrite_input);
+        candidate.append(&c, 1);
+        str_iter iter(candidate.c_str(), candidate.length());
+        iter.next();
+        continuing = !iter.more();
+    }
+
+    if (continuing)
+    {
+        m_overwrite_input.append(&c, 1);
+        begin_undo_group(true);
+        m_text.set(m_overwrite_input_original_text);
+        m_selection = m_overwrite_input_original_selection;
+    }
+    else
+    {
+        clear_overwrite_input();
+        m_overwrite_input.append(&c, 1);
+        m_overwrite_input_original_text.set(m_text);
+        m_overwrite_input_original_selection = m_selection;
+    }
+
+    m_replaying_overwrite_input = true;
+    insert_text(m_overwrite_input.c_str(), m_overwrite_input.length(), true);
+    m_replaying_overwrite_input = false;
+
+    if (continuing)
+        end_undo_group();
+
+    m_overwrite_input_change_counter = m_change_counter;
+    m_overwrite_input_caret = m_selection.get_caret();
+}
+
+void editor_context::insert_text(const char* s, size_t available, bool overwrite)
 {
     if (!available)
         return;
+
+    if (!m_replaying_overwrite_input)
+        clear_overwrite_input();
+
+    available = min<size_t>(INT16_MAX, resolve_auto_length(available, s));
 
     begin_undo_group();
 
     m_selection.reset_word_anchor();
 
-    elide_selected_text();
+    const bool had_selection = m_selection.has_selection();
+    const textpos_t replace_begin = had_selection ? m_selection.get_sel_begin() : m_selection.get_caret();
+    const textpos_t selection_end = had_selection ? m_selection.get_sel_end() : replace_begin;
 
-    if (available > size_t(m_max_length))
-        available = m_max_length;
+    cstring base;
+    base.append(m_text.c_str(), replace_begin);
+    base.append(m_text.c_str() + selection_end, m_text.length() - selection_end);
 
-    textpos_t len = 0;
+    textpos_t replace_end = replace_begin;
+    size_t accepted = 0;
+    const textpos_t context_begin = backward_one_grapheme(base.c_str(), base.length(), replace_begin);
+    cstring context(base.c_str() + context_begin, replace_begin - context_begin);
+    size_t context_graphemes = count_graphemes(context.c_str(), context.length());
+
     wcwidth_iter iter(s, static_cast<textpos_t>(available));
     while (iter.next())
     {
-        if (m_text.length() + iter.character_length() > m_max_length)
+        const size_t source_length = iter.character_length();
+        const size_t old_context_graphemes = context_graphemes;
+        context.append(s + accepted, source_length);
+        context_graphemes = count_graphemes(context.c_str(), context.length());
+
+        textpos_t candidate_end = replace_end;
+        if (overwrite && !had_selection && s[accepted] != '\n')
+        {
+            size_t contributed = (context_graphemes > old_context_graphemes) ?
+                                 context_graphemes - old_context_graphemes : 0;
+            while (contributed-- && candidate_end < base.length() && base.c_str()[candidate_end] != '\n')
+                candidate_end = forward_one_grapheme(base.c_str(), base.length(), candidate_end);
+        }
+
+        const size_t candidate_length = base.length() - (candidate_end - replace_begin) + accepted + source_length;
+        if (candidate_length > m_max_length)
+        {
+            context.set_length(context.length() - source_length);
+            context_graphemes = old_context_graphemes;
             break;
-        len += iter.character_length();
+        }
+
+        accepted += source_length;
+        replace_end = candidate_end;
     }
 
     inc_change_counter();
 
-    if (m_selection.get_caret() == m_text.length())
-    {
-        m_text.append(s, len);
-        m_selection.set_caret(textpos_t(m_text.length()));
-    }
-    else
-    {
-        cstring tmp;
-        const int32_t insert_pos = m_selection.get_caret();
-        tmp.set(m_text.c_str(), insert_pos);
-        tmp.append(s, len);
-        m_selection.set_caret(textpos_t(tmp.length()));
-        tmp.append(m_text.c_str() + insert_pos, m_text.length() - insert_pos);
-        m_text = std::move(tmp);
-    }
+    cstring tmp;
+    tmp.append(base.c_str(), replace_begin);
+    tmp.append(s, accepted);
+    m_selection.set_caret(textpos_t(tmp.length()));
+    tmp.append(base.c_str() + replace_end, base.length() - replace_end);
+    m_text = std::move(tmp);
 
     end_undo_group();
 }
@@ -1064,7 +1160,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 set_last_command("self-insert");
                 const char c = binding->get_char();
                 if (c && uint8_t(c) < c_input_terminal_reserved_begin)
-                    insert_char(c);
+                    insert_char(c, get_overwrite_mode());
                 return 0;
             }
 
@@ -1095,22 +1191,22 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 int32_t peek = term_in_peek();
                 if (is_self_insertable(peek))
                 {
-                    begin_undo_group();
-                    insert_char(c);
+                    cstring input(&c, 1);
                     while (is_self_insertable(peek))
                     {
                         const int32_t cin = term_in();
                         assert(cin == peek);
                         (void)cin;
-                        insert_char(char(peek));
+                        const char next = char(peek);
+                        input.append(&next, 1);
                         peek = term_in_peek();
                     }
-                    end_undo_group();
+                    insert_text(input.c_str(), input.length(), get_overwrite_mode());
                     return 0;
                 }
             }
 
-            insert_char(c);
+            insert_char(c, get_overwrite_mode());
             return 0;
         }
 
