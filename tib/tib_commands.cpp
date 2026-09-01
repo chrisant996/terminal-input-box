@@ -69,7 +69,7 @@ static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const 
     while (n-- > 0)
     {
         did = doit();
-        if (!did || had_selection != ctx.get_selection_state().has_selection())
+        if (!did || (had_selection && !ctx.get_selection_state().has_selection()))
             break;
     }
 
