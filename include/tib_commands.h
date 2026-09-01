@@ -20,6 +20,8 @@ int32_t backward_word(tib::editor_context& ctx, int32_t key, const char* name, c
 int32_t forward_word(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t backward_bigword(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t forward_bigword(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+int32_t screen_line_down(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+int32_t screen_line_up(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
 int32_t del_char_left(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t del_char_right(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
@@ -42,6 +44,8 @@ int32_t cua_backward_char(tib::editor_context& ctx, int32_t key, const char* nam
 int32_t cua_forward_char(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t cua_backward_word(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+int32_t cua_screen_line_down(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+int32_t cua_screen_line_up(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
 int32_t cut(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t copy(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;

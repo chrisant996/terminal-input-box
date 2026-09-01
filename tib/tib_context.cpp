@@ -561,7 +561,7 @@ bool editor_context::select_word(bool bigword)
     return m_selection.set_selection(begin, end);
 }
 
-void editor_context::transpose(uint8_t word)
+bool editor_context::transpose(uint8_t word)
 {
     const textpos_t anchor = m_selection.get_anchor();
     const textpos_t caret = m_selection.get_caret();
@@ -580,8 +580,7 @@ void editor_context::transpose(uint8_t word)
     if (first_begin >= first_end || first_end > second_begin || second_begin >= second_end)
     {
         set_selection(anchor, caret);
-        ding();
-        return;
+        return false;
     }
 
     cstring transposed;
@@ -599,6 +598,7 @@ void editor_context::transpose(uint8_t word)
     insert_text(transposed.c_str(), transposed.length());
     set_caret(second_end);
     end_undo_group();
+    return true;
 }
 
 #ifdef _WIN32
@@ -1088,13 +1088,13 @@ void editor_context::end_undo_group()
     }
 }
 
-void editor_context::undo()
+bool editor_context::undo()
 {
     assert(!m_grouping);
     if (m_grouping)
-        return;
+        return false;
     if (!m_undo_head)
-        return;
+        return false;
 
     if (!m_undo_current)
         m_undo_current = m_undo_tail;
@@ -1102,26 +1102,27 @@ void editor_context::undo()
     m_undo_current->m_top = m_display.get_top();
     undo_entry* p = m_undo_current->m_prev;
     if (!p)
-        return;
+        return false;
 
     inc_change_counter();
     m_text.set(p->m_text);
     m_selection = m_undo_current->m_sel_before;
     m_undo_current = p;
     m_display.set_scroll_offsets(p->m_left, p->m_top);
+    return true;
 }
 
-void editor_context::undo_all()
+bool editor_context::undo_all()
 {
     assert(!m_grouping);
     if (m_grouping)
-        return;
+        return false;
     if (!m_undo_head)
-        return;
+        return false;
 
     undo_entry* current = m_undo_current ? m_undo_current : m_undo_tail;
     if (current == m_undo_head)
-        return;
+        return false;
 
     current->m_left = m_display.get_left();
     current->m_top = m_display.get_top();
@@ -1134,18 +1135,19 @@ void editor_context::undo_all()
     m_selection = first->m_sel_before;
     m_undo_current = m_undo_head;
     m_display.set_scroll_offsets(m_undo_head->m_left, m_undo_head->m_top);
+    return true;
 }
 
-void editor_context::redo()
+bool editor_context::redo()
 {
     assert(!m_grouping);
     if (m_grouping)
-        return;
+        return false;
     if (!m_undo_tail)
-        return;
+        return false;
 
     if (!m_undo_current || m_undo_current == m_undo_tail)
-        return;
+        return false;
 
     m_undo_current->m_left = m_display.get_left();
     m_undo_current->m_top = m_display.get_top();
@@ -1158,6 +1160,7 @@ void editor_context::redo()
 
     m_undo_current = r;
     m_display.set_scroll_offsets(r->m_left, r->m_top);
+    return true;
 }
 
 void editor_context::transfer_text(cstring& out)

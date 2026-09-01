@@ -106,7 +106,7 @@ public:
     bool                move_right(uint8_t word=0, bool select=false);
     bool                backspace(uint8_t word=0);
     bool                del(uint8_t word=0);
-    void                transpose(uint8_t word=0);
+    bool                transpose(uint8_t word=0);
 
     void                clear_selection();
     bool                set_caret(textpos_t caret);
@@ -155,9 +155,9 @@ public:
     void                clear_undo() { init_undo(); }
     void                begin_undo_group();
     void                end_undo_group();
-    void                undo();
-    void                undo_all();
-    void                redo();
+    bool                undo();
+    bool                undo_all();
+    bool                redo();
 
     void                transfer_text(cstring& out);
 
