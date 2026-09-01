@@ -11,14 +11,16 @@
 
 namespace tib {
 
-void selection_state::set_selection(textpos_t anchor, textpos_t caret)
+bool selection_state::set_selection(textpos_t anchor, textpos_t caret)
 {
     assert(anchor != static_cast<textpos_t>(-1));
     assert(caret != static_cast<textpos_t>(-1));
-    if (anchor != m_anchor || caret != m_caret)
-        m_dirty = true;
+    if (anchor == m_anchor && caret == m_caret)
+        return false;
+    m_dirty = true;
     m_anchor = anchor;
     m_caret = caret;
+    return true;
 }
 
 bool selection_state::clear_selection()

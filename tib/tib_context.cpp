@@ -425,57 +425,51 @@ void editor_context::end_of_input(bool select)
         m_selection.reset_word_anchor();
 }
 
-void editor_context::move_left(uint8_t word, bool select)
+bool editor_context::move_left(uint8_t word, bool select)
 {
+    bool moved = false;
     if (!select && m_selection.has_selection())
     {
         m_selection.set_caret(m_selection.get_sel_begin());
+        moved = true;
     }
     else if (m_selection.get_caret() > 0)
     {
         textpos_t caret = m_selection.get_caret();
         textpos_t anchor = m_selection.get_anchor();
         pos_mover(m_text.c_str(), m_text.length(), caret, false/*forward*/, word);
-        m_selection.set_selection(select ? anchor : caret, caret);
-    }
-    else if (!word)
-    {
-        ding();
+        moved = m_selection.set_selection(select ? anchor : caret, caret);
     }
     if (!select)
         m_selection.reset_word_anchor();
+    return moved;
 }
 
-void editor_context::move_right(uint8_t word, bool select)
+bool editor_context::move_right(uint8_t word, bool select)
 {
+    bool moved = false;
     if (!select && m_selection.has_selection())
     {
         m_selection.set_caret(m_selection.get_sel_end());
+        moved = true;
     }
     else if (m_selection.get_caret() < m_text.length())
     {
         textpos_t caret = m_selection.get_caret();
         textpos_t anchor = m_selection.get_anchor();
         pos_mover(m_text.c_str(), m_text.length(), caret, true/*forward*/, word);
-        m_selection.set_selection(select ? anchor : caret, caret);
-    }
-    else if (!word)
-    {
-        ding();
+        moved = m_selection.set_selection(select ? anchor : caret, caret);
     }
     if (!select)
         m_selection.reset_word_anchor();
+    return moved;
 }
 
-void editor_context::backspace(uint8_t word)
+bool editor_context::backspace(uint8_t word)
 {
     m_selection.reset_word_anchor();
     if (!m_selection.has_selection() && m_selection.get_caret() <= 0)
-    {
-        if (!word)
-            ding();
-        return;
-    }
+        return false;
 
     begin_undo_group();
 
@@ -492,17 +486,14 @@ void editor_context::backspace(uint8_t word)
     }
 
     end_undo_group();
+    return true;
 }
 
-void editor_context::del(uint8_t word)
+bool editor_context::del(uint8_t word)
 {
     m_selection.reset_word_anchor();
     if (!m_selection.has_selection() && m_selection.get_caret() >= m_text.length())
-    {
-        if (!word)
-            ding();
-        return;
-    }
+        return false;
 
     begin_undo_group();
 
@@ -515,6 +506,7 @@ void editor_context::del(uint8_t word)
     }
 
     end_undo_group();
+    return true;
 }
 
 void editor_context::clear_selection()
@@ -522,17 +514,17 @@ void editor_context::clear_selection()
     m_selection.clear_selection();
 }
 
-void editor_context::set_caret(textpos_t caret)
+bool editor_context::set_caret(textpos_t caret)
 {
-    m_selection.set_caret(caret);
+    return m_selection.set_caret(caret);
 }
 
-void editor_context::set_selection(textpos_t anchor, textpos_t caret)
+bool editor_context::set_selection(textpos_t anchor, textpos_t caret)
 {
-    m_selection.set_selection(anchor, caret);
+    return m_selection.set_selection(anchor, caret);
 }
 
-void editor_context::select_word(bool bigword)
+bool editor_context::select_word(bool bigword)
 {
     const textpos_t orig_pos = m_selection.get_caret();
     const uint8_t word = bigword ? 2 : 1;
@@ -566,7 +558,7 @@ void editor_context::select_word(bool bigword)
         end = high_mid;
     }
 
-    m_selection.set_selection(begin, end);
+    return m_selection.set_selection(begin, end);
 }
 
 void editor_context::transpose(uint8_t word)
@@ -610,10 +602,10 @@ void editor_context::transpose(uint8_t word)
 }
 
 #ifdef _WIN32
-void editor_context::copy_to_clipboard()
+bool editor_context::copy_to_clipboard()
 {
     if (!m_selection.has_selection())
-        return;
+        return false;
 
     const textpos_t begin = m_selection.get_sel_begin();
     const textpos_t end = m_selection.get_sel_end();
@@ -621,11 +613,11 @@ void editor_context::copy_to_clipboard()
 
     cstring_t<WCHAR> tmp;
     if (!to_utf16(m_text.c_str() + begin, len, tmp))
-        return;
+        return false;
 
     HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE|GMEM_ZEROINIT, (len + 1) * sizeof(WCHAR));
     if (mem == nullptr)
-        return;
+        return false;
 
     WCHAR* data = (WCHAR*)GlobalLock(mem);
     memcpy(data, tmp.c_str(), tmp.length() * sizeof(WCHAR));
@@ -635,27 +627,30 @@ void editor_context::copy_to_clipboard()
     if (!OpenClipboard(0))
     {
         GlobalFree(mem);
-        return;
+        return false;
     }
 
     EmptyClipboard();
     SetClipboardData(CF_UNICODETEXT, mem);
     CloseClipboard();
+    return true;
 }
 
-void editor_context::cut_to_clipboard()
+bool editor_context::cut_to_clipboard()
 {
     begin_undo_group();
-    copy_to_clipboard();
+    const bool copied = copy_to_clipboard();
     elide_selected_text();
     end_undo_group();
+    return copied;
 }
 
-void editor_context::paste_from_clipboard()
+bool editor_context::paste_from_clipboard()
 {
     if (!OpenClipboard(0))
-        return;
+        return false;
 
+    bool pasted = false;
     HANDLE mem = GetClipboardData(CF_UNICODETEXT);
     if (mem)
     {
@@ -667,12 +662,16 @@ void editor_context::paste_from_clipboard()
 
         cstring tmp;
         if (to_utf8(data, len, tmp))
+        {
+            pasted = !tmp.empty();
             insert_text(tmp.c_str(), tmp.length());
+        }
 
         GlobalUnlock(mem);
     }
 
     CloseClipboard();
+    return pasted;
 }
 #endif
 
@@ -734,6 +733,41 @@ void editor_context::set_named_value_int(const char* name, int32_t value)
 void editor_context::clear_named_value(const char* name)
 {
     m_named_values.erase(name);
+}
+
+void editor_context::set_auto_clear_numeric_argument(bool clear)
+{
+    m_auto_clear_numeric_argument = true;
+}
+
+void editor_context::clear_numeric_argument()
+{
+    m_auto_clear_numeric_argument = false;
+    m_has_numeric_argument = false;
+    m_sign_numeric_argument = 1;
+    m_numeric_argument = 0;
+}
+
+void editor_context::set_argument_sign(int32_t sign)
+{
+    m_sign_numeric_argument = (sign >= 0) ? 1 : -1;
+}
+
+void editor_context::invert_argument_sign()
+{
+    m_sign_numeric_argument = 0 - m_sign_numeric_argument;
+}
+
+int32_t editor_context::get_numeric_argument() const
+{
+    return m_has_numeric_argument ? m_numeric_argument : 1;
+}
+
+void editor_context::set_numeric_argument(int32_t value)
+{
+    m_has_numeric_argument = true;
+    m_sign_numeric_argument = (value >= 0) ? 1 : -1;
+    m_numeric_argument = value;
 }
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
@@ -960,15 +994,6 @@ bool editor_context::elide_selected_text()
     return true;
 }
 
-void editor_context::clear_undo_internal()
-{
-    while (m_undo_head)
-        unlink_endo_entry(m_undo_head);
-    assert(!m_undo_head);
-    assert(!m_undo_tail);
-    m_undo_current = nullptr;
-}
-
 void editor_context::init_undo()
 {
     clear_undo_internal();
@@ -979,6 +1004,15 @@ void editor_context::init_undo()
     m_undo_tail->m_left = m_display.get_left();
     m_undo_tail->m_top = m_display.get_top();
     m_defer_init_undo = false;
+}
+
+void editor_context::clear_undo_internal()
+{
+    while (m_undo_head)
+        unlink_endo_entry(m_undo_head);
+    assert(!m_undo_head);
+    assert(!m_undo_tail);
+    m_undo_current = nullptr;
 }
 
 void editor_context::unlink_endo_entry(undo_entry* p)
@@ -1134,6 +1168,8 @@ void editor_context::transfer_text(cstring& out)
 
 int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept
 {
+    int32_t ret = -1;
+
     if (binding)
     {
         switch (binding->get_type())
@@ -1142,16 +1178,16 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
             {
                 const char* const name = binding->get_text();
                 editor_command_func_t func = lookup_command(name);
-                if (!func)
+                if (func)
                 {
-                    set_last_command(name);
-                    ding();
-                    return 0;
+                    ret = func(*this, key, name, params);
                 }
-
-                const int32_t result = func(*this, key, name, params);
+                else
+                {
+                    ret = 0;
+                    ding();
+                }
                 set_last_command(name);
-                return result;
             }
             break;
 
@@ -1161,8 +1197,11 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 const char c = binding->get_char();
                 if (c && uint8_t(c) < c_input_terminal_reserved_begin)
                     insert_char(c, get_overwrite_mode());
-                return 0;
+                if (m_auto_clear_numeric_argument)
+                    clear_numeric_argument();
+                ret = 0;
             }
+            break;
 
         default:
             assert("unexpected binding_type" == false);
@@ -1174,6 +1213,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
         if (is_self_insertable(key))
         {
             const char c = char(key);
+            bool handled = false;
             set_last_command("self-insert");
 
             // The self-insert optimization collects as much raw insertable
@@ -1186,7 +1226,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
             // extensibility framework) any invocations of the self_insert
             // editor command insert only a single character without reading
             // any further input from the terminal.
-            if (g_optimize_self_insert && m_allow_optimized_self_insert)
+            if (!has_numeric_argument() && g_optimize_self_insert && m_allow_optimized_self_insert)
             {
                 int32_t peek = term_in_peek();
                 if (is_self_insertable(peek))
@@ -1202,18 +1242,27 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                         peek = term_in_peek();
                     }
                     insert_text(input.c_str(), input.length(), get_overwrite_mode());
-                    return 0;
+                    handled = true;
                 }
             }
 
-            insert_char(c, get_overwrite_mode());
-            return 0;
+            if (!handled)
+            {
+                int32_t n = get_numeric_argument();
+                while (n-- > 0)
+                    insert_char(c, get_overwrite_mode());
+            }
+            ret = 0;
         }
-
-        ding();
+        else
+        {
+            ding();
+        }
     }
 
-    return -1;
+    if (m_auto_clear_numeric_argument)
+        clear_numeric_argument();
+    return ret;
 }
 
 #ifdef DEBUG

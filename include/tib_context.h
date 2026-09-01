@@ -102,21 +102,21 @@ public:
 
     void                begin_of_input(bool select=false);
     void                end_of_input(bool select=false);
-    void                move_left(uint8_t word=0, bool select=false);
-    void                move_right(uint8_t word=0, bool select=false);
-    void                backspace(uint8_t word=0);
-    void                del(uint8_t word=0);
+    bool                move_left(uint8_t word=0, bool select=false);
+    bool                move_right(uint8_t word=0, bool select=false);
+    bool                backspace(uint8_t word=0);
+    bool                del(uint8_t word=0);
     void                transpose(uint8_t word=0);
 
     void                clear_selection();
-    void                set_caret(textpos_t caret);
-    void                set_selection(textpos_t anchor, textpos_t caret);
-    void                select_word(bool bigword=false);
+    bool                set_caret(textpos_t caret);
+    bool                set_selection(textpos_t anchor, textpos_t caret);
+    bool                select_word(bool bigword=false);
 
 #if _WIN32
-    void                copy_to_clipboard();
-    void                cut_to_clipboard();
-    void                paste_from_clipboard();
+    bool                copy_to_clipboard();
+    bool                cut_to_clipboard();
+    bool                paste_from_clipboard();
 #endif
     bool                get_overwrite_mode() const noexcept { return m_overwrite_mode; }
     void                set_overwrite_mode(bool overwrite) noexcept;
@@ -129,6 +129,15 @@ public:
     void                set_named_value(const char* name, const char* value);
     void                set_named_value_int(const char* name, int32_t value);
     void                clear_named_value(const char* name);
+
+    void                set_auto_clear_numeric_argument(bool clear=true);
+    void                clear_numeric_argument();
+    bool                has_numeric_argument() const { return m_has_numeric_argument; }
+    int32_t             get_argument_sign() const { return m_has_numeric_argument; }
+    void                set_argument_sign(int32_t sign);
+    void                invert_argument_sign();
+    int32_t             get_numeric_argument() const;
+    void                set_numeric_argument(int32_t value);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
@@ -172,8 +181,8 @@ private:
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
-    void                begin_undo_group(bool merge);
     void                inc_change_counter();
+    void                begin_undo_group(bool merge);
     void                insert_raw_char(char c);
     void                clear_overwrite_input();
 
@@ -213,6 +222,12 @@ private:
     textpos_t           m_overwrite_input_caret = 0;
     cstring             m_last_command;
     std::map<cstring, cstring, cstring_less> m_named_values;
+
+    // Numeric argument.
+    bool                m_auto_clear_numeric_argument = false;
+    bool                m_has_numeric_argument = false;
+    int8_t              m_sign_numeric_argument = 0;
+    int32_t             m_numeric_argument = 0;
 
     // Display.
     display_manager     m_display;

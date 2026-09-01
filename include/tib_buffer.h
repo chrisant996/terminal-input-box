@@ -15,8 +15,8 @@ struct selection_state
                     selection_state(textpos_t caret) : m_anchor(caret), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
                     selection_state(textpos_t anchor, textpos_t caret) : m_anchor(anchor), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
 
-    void            set_caret(textpos_t caret) { set_selection(caret, caret); }
-    void            set_selection(textpos_t anchor, textpos_t caret);
+    bool            set_caret(textpos_t caret) { return set_selection(caret, caret); }
+    bool            set_selection(textpos_t anchor, textpos_t caret);
     bool            clear_selection();
 #if 0
     void            reset_word_anchor() { m_word_anchor_begin = m_anchor; m_word_anchor_end = m_caret; }

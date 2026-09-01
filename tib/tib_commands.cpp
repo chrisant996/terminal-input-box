@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_bindings.h"
+#include "tib_commands.h"
 #include "tib_context.h"
 #include <algorithm>
 #include <assert.h>
@@ -85,49 +86,185 @@ int32_t end_of_line(editor_context& ctx, int32_t key, const char* name, const bi
 
 int32_t backward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_left();
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return forward_char(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_left())
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t forward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_right();
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return backward_char(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_right())
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t backward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_left(true/*word*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return forward_word(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_left(true/*word*/))
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_right(true/*word*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return backward_word(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_right(true/*word*/))
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t backward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_left(2/*bigword*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return forward_bigword(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_left(2/*bigword*/))
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t forward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_right(2/*bigword*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return backward_bigword(ctx, key, name, params);
+    }
+
+    bool moved = false;
+    while (n > 0)
+    {
+        if (!ctx.move_right(2/*bigword*/))
+            break;
+        moved = true;
+        --n;
+    }
+
+    if (!moved)
+        ding();
     return 0;
 }
 
 int32_t screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands));
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return screen_line_up(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands)))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t screen_line_up(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands));
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return screen_line_down(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands)))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
@@ -135,37 +272,147 @@ int32_t screen_line_up(editor_context& ctx, int32_t key, const char* name, const
 
 int32_t del_char_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.backspace();
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_char_right(ctx, key, name, params);
+    }
+
+    // Don't switch from deleting a selection to deleting chars.
+    if (ctx.get_selection_state().has_selection())
+        n = 1;
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.backspace())
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t del_char_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.del();
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_char_right(ctx, key, name, params);
+    }
+
+    // Don't switch from deleting a selection to deleting chars.
+    if (ctx.get_selection_state().has_selection())
+        n = 1;
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.del())
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.backspace(true/*word*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_word_right(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.backspace(true/*word*/))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t del_word_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.del(true/*word*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_word_left(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.del(true/*word*/))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t del_bigword_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.backspace(2/*bigword*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_bigword_right(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.backspace(2/*bigword*/))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
 int32_t del_bigword_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.del(2/*bigword*/);
+    int32_t n = ctx.get_numeric_argument();
+    if (n < 0)
+    {
+        ctx.invert_argument_sign();
+        return del_bigword_left(ctx, key, name, params);
+    }
+
+    bool did = false;
+    while (n > 0)
+    {
+        if (!ctx.del(2/*bigword*/))
+            break;
+        did = true;
+        --n;
+    }
+
+    if (!did)
+        ding();
     return 0;
 }
 
@@ -173,12 +420,14 @@ int32_t del_bigword_right(editor_context& ctx, int32_t key, const char* name, co
 
 int32_t redo(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.redo();
     return 0;
 }
 
 int32_t undo(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.undo();
     return 0;
 }
@@ -229,36 +478,42 @@ int32_t cua_end_of_line(editor_context& ctx, int32_t key, const char* name, cons
 
 int32_t cua_backward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_left(false/*word*/, true/*select*/);
     return 0;
 }
 
 int32_t cua_forward_char(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_right(false/*word*/, true/*select*/);
     return 0;
 }
 
 int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_left(true/*word*/, true/*select*/);
     return 0;
 }
 
 int32_t cua_forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_right(true/*word*/, true/*select*/);
     return 0;
 }
 
 int32_t cua_screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_caret_vertically(1, cursor_column_continuation(ctx, "screen-line-down", nullptr, c_screen_line_commands), true/*select*/);
     return 0;
 }
 
 int32_t cua_screen_line_up(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands), true/*select*/);
     return 0;
 }
@@ -279,12 +534,14 @@ int32_t copy(editor_context& ctx, int32_t key, const char* name, const binding_p
 
 int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.paste_from_clipboard();
     return 0;
 }
 
 int32_t quoted_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     return c_dispatch_request_quoted_insert;
 }
 
@@ -298,18 +555,21 @@ int32_t toggle_overwrite_mode(editor_context& ctx, int32_t key, const char* name
 
 int32_t transpose_chars(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.transpose();
     return 0;
 }
 
 int32_t transpose_words(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.transpose(true/*word*/);
     return 0;
 }
 
 int32_t transpose_bigwords(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
+    // TODO: numeric argument...
     ctx.transpose(2/*bigword*/);
     return 0;
 }
@@ -655,6 +915,8 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const bi
 {
     if (key < 0)
         return -1;
+
+    // TODO: numeric argument...
 
     if (key <= 0xff)
     {
