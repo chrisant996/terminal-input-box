@@ -7,35 +7,35 @@ set __FLAVOR=debug
 set __FLAGS=
 
 :arg
-if x%1x == x?x goto :usage
-if x%1x == x/?x goto :usage
-if x%1x == x-?x goto :usage
-if x%1x == x/hx goto :usage
-if x%1x == x-hx goto :usage
-if x%1x == x/helpx goto :usage
-if x%1x == x--helpx goto :usage
-if x%1x == xhelpx goto :usage
-if x%1x == x/x64x set __CPU=x64& goto :nextarg
-if x%1x == x--x64x set __CPU=x64& goto :nextarg
-if x%1x == x/x86x set __CPU=x86& goto :nextarg
-if x%1x == x--x86x set __CPU=x86& goto :nextarg
-if x%1x == x/dbgx set __DBG=call devenv /debugexe& goto:nextarg
-if x%1x == x--dbgx set __DBG=call devenv /debugexe& goto:nextarg
-if x%1x == x/relx set __FLAVOR=release& goto:nextarg
-if x%1x == x--relx set __FLAVOR=release& goto:nextarg
-if x%1x == x/releasex set __FLAVOR=release& goto:nextarg
-if x%1x == x--releasex set __FLAVOR=release& goto:nextarg
-if x%1x == x/shipx set __FLAVOR=release& goto:nextarg
-if x%1x == x--shipx set __FLAVOR=release& goto:nextarg
-if x%1x == x--listx set __FLAGS= --list& goto:nextarg
-if x%1x == x--perfx set __FLAGS= --perf& goto:nextarg
+if "%~1" == "?" goto :usage
+if "%~1" == "/?" goto :usage
+if "%~1" == "-?" goto :usage
+if "%~1" == "/h" goto :usage
+if "%~1" == "-h" goto :usage
+if "%~1" == "/help" goto :usage
+if "%~1" == "--help" goto :usage
+if "%~1" == "help" goto :usage
+if "%~1" == "/x64" set __CPU=x64& goto :nextarg
+if "%~1" == "--x64" set __CPU=x64& goto :nextarg
+if "%~1" == "/x86" set __CPU=x86& goto :nextarg
+if "%~1" == "--x86" set __CPU=x86& goto :nextarg
+if "%~1" == "/dbg" set __DBG=call devenv /debugexe& goto:nextarg
+if "%~1" == "--dbg" set __DBG=call devenv /debugexe& goto:nextarg
+if "%~1" == "/rel" set __FLAVOR=release& goto:nextarg
+if "%~1" == "--rel" set __FLAVOR=release& goto:nextarg
+if "%~1" == "/release" set __FLAVOR=release& goto:nextarg
+if "%~1" == "--release" set __FLAVOR=release& goto:nextarg
+if "%~1" == "/ship" set __FLAVOR=release& goto:nextarg
+if "%~1" == "--ship" set __FLAVOR=release& goto:nextarg
+if "%~1" == "--list" set __FLAGS= --list& goto:nextarg
+if "%~1" == "--perf" set __FLAGS= --perf& goto:nextarg
 
-if x%2x == x/relx goto:oopsflag
-if x%2x == x-relx goto:oopsflag
-if x%2x == x/releasex goto:oopsflag
-if x%2x == x--releasex goto:oopsflag
-if x%2x == x/shipx goto:oopsflag
-if x%2x == x--shipx goto:oopsflag
+if "%~2" == "/rel" goto:oopsflag
+if "%~2" == "-rel" goto:oopsflag
+if "%~2" == "/release" goto:oopsflag
+if "%~2" == "--release" goto:oopsflag
+if "%~2" == "/ship" goto:oopsflag
+if "%~2" == "--ship" goto:oopsflag
 
 if "%__FLAGS%" == "" echo %__DBG% %__ME%.build\vs2022\bin\%__FLAVOR%\%__CPU%\test.exe%__FLAGS% %1 %2 %3
 %__DBG% %__ME%.build\vs2022\bin\%__FLAVOR%\%__CPU%\test.exe%__FLAGS% %1 %2 %3
