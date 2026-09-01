@@ -14,6 +14,7 @@ struct selection_state
                     selection_state() : m_anchor(0), m_caret(0), m_dirty(false) { reset_word_anchor(); }
                     selection_state(textpos_t caret) : m_anchor(caret), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
                     selection_state(textpos_t anchor, textpos_t caret) : m_anchor(anchor), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
+    selection_state& operator=(const selection_state& other);
 
     bool            set_caret(textpos_t caret) { return set_selection(caret, caret); }
     bool            set_selection(textpos_t anchor, textpos_t caret);
@@ -38,8 +39,10 @@ struct selection_state
     bool            is_dirty() const { return m_dirty; }
     void            clear_dirty() { m_dirty = false; }
 
-    textpos_t&      get_anchor_out() { return m_anchor; }
-    textpos_t&      get_caret_out() { return m_caret; }
+    uint32_t        get_navigation_counter() const { return m_navigation_counter; }
+
+private:
+    void            inc_navigation_counter();
 
 private:
     textpos_t       m_anchor;
@@ -49,6 +52,7 @@ private:
     short           m_word_anchor_end;
 #endif
     bool            m_dirty;
+    uint32_t        m_navigation_counter = 0;
 };
 
 class input_buffer

@@ -28,6 +28,21 @@ TEST_CASE("Overwrite mode state")
     REQUIRE(!context.get_overwrite_mode());
 }
 
+TEST_CASE("Selection navigation counter")
+{
+    tib::selection_state selection(1);
+    const tib::selection_state original(selection);
+
+    const uint32_t initial = selection.get_navigation_counter();
+    REQUIRE(selection.set_caret(2));
+    REQUIRE(selection.get_navigation_counter() != initial);
+
+    const uint32_t before_restore = selection.get_navigation_counter();
+    selection = original;
+    REQUIRE(selection.get_caret() == 1);
+    REQUIRE(selection.get_navigation_counter() != before_restore);
+}
+
 TEST_CASE("Overwrite text")
 {
     tib::editor_context context;
@@ -125,6 +140,30 @@ TEST_CASE("Overwrite respects grapheme boundaries")
         REQUIRE(context.get_text() == "ab");
         context.redo();
         REQUIRE(context.get_text() == "\xc2\xa2" "b");
+    }
+
+    SECTION("Navigation interrupts bytewise overwrite accumulation")
+    {
+        context.initialize("ab");
+        context.set_caret(0);
+        context.insert_char(char(0xc2), true);
+        REQUIRE(context.move_right());
+        REQUIRE(context.move_left());
+        context.insert_char(char(0xa2), true);
+        REQUIRE(context.get_text() == "\xc2\xa2" "b");
+        context.undo();
+        REQUIRE(context.get_text() == "\xc2" "b");
+    }
+
+    SECTION("Undo interrupts bytewise overwrite accumulation")
+    {
+        context.initialize("ab");
+        context.set_caret(0);
+        context.insert_char(char(0xc2), true);
+        context.undo();
+        REQUIRE(context.get_text() == "ab");
+        context.insert_char(char(0xa2), true);
+        REQUIRE(context.get_text() == "\xa2" "b");
     }
 
     SECTION("Invalid UTF8 follows str_iter replacement boundaries")

@@ -26,19 +26,3 @@
 - Maybe provide a simple in-memory history list, but without history searching or filtering or etc (delegate that to the host).
 
 # Work In Progress
-
-## Editor overwrite mode
-
-> The shape of this looks very nice.  What happens if the cursor is moved while
-> the overwrite accumulator is not empty, and then additional overwrite input
-> occurs?  What happens if undo occurs while the overwrite accumulator is not
-> empty, and then additional overwrite input occurs?
-
-Currently:
-
-- If the cursor moves to a different position, the stored caret no longer matches, so the next overwrite byte discards the accumulator and starts a new overwrite unit at the new caret.
-- If the cursor moves away and then returns to the stored position, the movement is not detected. The next byte continues the old accumulator, restores its original baseline, and merges into its undo record. That is undesirable.
-- Undo increments `m_change_counter`, so subsequent input detects the mismatch, discards the accumulator, and starts fresh from the undone state. A continuation byte after undo is therefore treated as standalone invalid UTF-8, which is appropriate because undo cancelled its lead bytes.
-- Undo followed by redo also invalidates the accumulator because both change the counter.
-
-So undo is safe, but caret movement has a round-trip hole. The proper refinement is to explicitly clear the accumulator whenever an operation interrupts self-insertion—caret/selection movement, deletion, undo/redo, transpose, etc.—rather than infer continuity solely from caret and change-counter equality. That also makes undo behavior intentional instead of incidental.

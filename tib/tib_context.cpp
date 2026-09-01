@@ -478,7 +478,9 @@ bool editor_context::backspace(uint8_t word)
 #ifdef DEBUG
         const textpos_t old_pos = m_selection.get_caret();
 #endif
-        const textpos_t moved = pos_mover(m_text.c_str(), m_text.length(), m_selection.get_caret_out(), false/*forward*/, word);
+        textpos_t caret = m_selection.get_caret();
+        const textpos_t moved = pos_mover(m_text.c_str(), m_text.length(), caret, false/*forward*/, word);
+        m_selection.set_caret(caret);
 #ifdef DEBUG
         assert(old_pos == m_selection.get_caret() + moved);
 #endif
@@ -852,7 +854,7 @@ void editor_context::insert_char(char c, bool overwrite)
 
     bool continuing = (!m_overwrite_input.empty() &&
                        m_overwrite_input_change_counter == m_change_counter &&
-                       m_overwrite_input_caret == m_selection.get_caret() &&
+                       m_overwrite_input_navigation_counter == m_selection.get_navigation_counter() &&
                        !m_selection.has_selection());
     if (continuing)
     {
@@ -886,7 +888,7 @@ void editor_context::insert_char(char c, bool overwrite)
         end_undo_group();
 
     m_overwrite_input_change_counter = m_change_counter;
-    m_overwrite_input_caret = m_selection.get_caret();
+    m_overwrite_input_navigation_counter = m_selection.get_navigation_counter();
 }
 
 void editor_context::insert_text(const char* s, size_t available, bool overwrite)

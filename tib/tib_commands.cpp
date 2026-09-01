@@ -797,8 +797,9 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\033[1;2B", binding_target_func("cua-screen-line-down") });   // Shift-Down
     t->add({ "\033[1;2A", binding_target_func("cua-screen-line-up") });     // Shift-Up
 
-    t->add({ "\033[3~", binding_target_func("del-char-right") });       // Del
-    t->add({ "\033[3;5~", binding_target_func("del-word-right") });     // Ctrl-Del
+    t->add({ "\033[2~", binding_target_func("toggle-overwrite-mode") });    // Ins
+    t->add({ "\033[3~", binding_target_func("del-char-right") });           // Del
+    t->add({ "\033[3;5~", binding_target_func("del-word-right") });         // Ctrl-Del
 
     t->add({ "\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse press
     t->add({ "\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse release

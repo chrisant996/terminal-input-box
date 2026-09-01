@@ -219,7 +219,7 @@ private:
     cstring             m_overwrite_input_original_text;
     selection_state     m_overwrite_input_original_selection;
     uint32_t            m_overwrite_input_change_counter = 0;
-    textpos_t           m_overwrite_input_caret = 0;
+    uint32_t            m_overwrite_input_navigation_counter = 0;
     cstring             m_last_command;
     std::map<cstring, cstring, cstring_less> m_named_values;
 
