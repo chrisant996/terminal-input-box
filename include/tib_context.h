@@ -228,6 +228,7 @@ private:
     bool                m_has_numeric_argument = false;
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
+    int32_t             m_quoted_insert_count = 1;
 
     // Display.
     display_manager     m_display;

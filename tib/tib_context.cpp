@@ -1186,6 +1186,8 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 if (func)
                 {
                     ret = func(*this, key, name, params);
+                    if (ret == c_dispatch_request_quoted_insert)
+                        m_quoted_insert_count = get_numeric_argument();
                 }
                 else
                 {
@@ -1198,13 +1200,25 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 
         case binding_type::quoted_insert:
             {
+                ret = 0;
                 set_last_command("self-insert");
                 const char c = binding->get_char();
+                int32_t repeat = m_quoted_insert_count;
+                if (repeat < 0)
+                {
+                    repeat = 1;
+                    if (++m_quoted_insert_count < 0)
+                        ret = c_dispatch_request_quoted_insert;
+                }
+                if (!ret)
+                    m_quoted_insert_count = 0;
                 if (c && uint8_t(c) < c_input_terminal_reserved_begin)
-                    insert_char(c, get_overwrite_mode());
+                {
+                    while (repeat-- > 0)
+                        insert_char(c, get_overwrite_mode());
+                }
                 if (m_auto_clear_numeric_argument)
                     clear_numeric_argument();
-                ret = 0;
             }
             break;
 

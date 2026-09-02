@@ -228,6 +228,11 @@ void dispatcher_target::set_bindings(std::shared_ptr<const key_table_list> bindi
     m_bindings = bindings;
 }
 
+resolved_binding::resolved_binding(std::shared_ptr<binding_resolver_state> state)
+: m_resolver_state(state)
+{
+}
+
 resolved_binding::operator bool()
 {
     return (outcome == dispatch_outcome::match ||
@@ -316,7 +321,7 @@ resolved_binding binding_resolver::step(uint8_t c)
         m_state->quoted_insert_target.reset();
         reset();
 
-        resolved_binding resolved;
+        resolved_binding resolved(m_state);
         resolved.sequence.append(reinterpret_cast<const char*>(&c), 1);
         resolved.key = c;
         resolved.dispatcher_target = weak;
@@ -372,13 +377,12 @@ resolved_binding binding_resolver::step(uint8_t c)
             {
                 if (found->sequence.length() == m_sequence.length())
                 {
-                    resolved_binding resolved;
+                    resolved_binding resolved(m_state);
                     resolved.sequence = m_sequence;
                     resolved.key = c;
                     resolved.binding_target = &found->target;
                     resolved.dispatcher_target = weak;
                     resolved.outcome = dispatch_outcome::match;
-                    resolved.m_resolver_state = m_state;
                     reset();
                     return resolved;
                 }
@@ -469,13 +473,12 @@ resolved_binding binding_resolver::step(uint8_t c)
                     {
                         if (sequence_pos == sequence_length)
                         {
-                            resolved_binding resolved;
+                            resolved_binding resolved(m_state);
                             resolved.sequence = m_sequence;
                             resolved.key = c;
                             resolved.binding_target = &pattern->target;
                             resolved.dispatcher_target = weak;
                             resolved.outcome = dispatch_outcome::match;
-                            resolved.m_resolver_state = m_state;
                             resolved.params = std::move(params);
                             reset();
                             return resolved;

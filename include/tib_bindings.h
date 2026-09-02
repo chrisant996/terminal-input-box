@@ -170,8 +170,8 @@ private:
 
 struct resolved_binding
 {
-    friend class binding_resolver;
-
+                        resolved_binding() = default;
+                        resolved_binding(std::shared_ptr<binding_resolver_state> state);
                         operator bool();
     bool                more() const { return outcome == dispatch_outcome::more; }
     bool                dispatch();

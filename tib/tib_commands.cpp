@@ -334,7 +334,6 @@ int32_t paste(editor_context& ctx, int32_t key, const char* name, const binding_
 
 int32_t quoted_insert(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    // TODO: numeric argument...
     return c_dispatch_request_quoted_insert;
 }
 

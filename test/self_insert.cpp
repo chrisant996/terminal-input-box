@@ -110,6 +110,44 @@ TEST_CASE("Quoted insert")
         REQUIRE(input->done());
     }
 
+    SECTION("Positive numeric argument repeats the next byte")
+    {
+        input->set_numeric_argument(5);
+        input->set_auto_clear_numeric_argument();
+        invoke_quoted_insert(resolver);
+        REQUIRE(!input->has_numeric_argument());
+
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == "xxxxx");
+
+        resolved = resolver.step('\r');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("accept-line"));
+    }
+
+    SECTION("Negative numeric argument quotes the next N bytes")
+    {
+        input->set_numeric_argument(-3);
+        input->set_auto_clear_numeric_argument();
+        invoke_quoted_insert(resolver);
+        REQUIRE(!input->has_numeric_argument());
+
+        const uint8_t bytes[] = { '\r', 0x1b, 'x' };
+        for (const uint8_t c : bytes)
+        {
+            auto resolved = resolver.step(c);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
+            REQUIRE(resolved.dispatch());
+        }
+        REQUIRE(input->get_text() == tib::cstring("\r\x1bx", 3));
+
+        auto resolved = resolver.step('\r');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("accept-line"));
+    }
+
     SECTION("Discards a pending binding prefix")
     {
         auto resolved = resolver.step('\x1b');
