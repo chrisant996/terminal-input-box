@@ -141,13 +141,15 @@ void display_line::append(const char* p, uint32_t len, uint32_t width, char face
     this->m_x2 += width;
 }
 
-void display_line::calculate_multiline_scroll_marker()
+void display_line::calculate_multiline_scroll_marker(uint16_t max_width)
 {
     assert(!m_trail_scroller_width_displaced);
     assert(!m_trail_scroller_len_displayed);
 
-    // NOTE: build() should always pad to max width, except on last line, and
-    // max width should always be at least 8.
+    while (width() < max_width)
+        append(" ", 1, 1, FACE_DEFAULT);
+
+    // NOTE: max width should always be at least 8.
     if (width() > c_horz_scroll_indicator_chars)
     {
         const uint32_t num = c_horz_scroll_indicator_chars;
@@ -187,11 +189,12 @@ void display_lines::clear()
     m_extent = { 0, 0 };
 }
 
-void display_lines::apply_scroll_markers(int32_t y_extent, int32_t total_rows)
+void display_lines::apply_scroll_markers(coord max_size, int32_t total_rows)
 {
     // NOTE:  Horizontal scroll markers work differently and are applied
     // separately.
     assert(!m_lines.empty());
+    const int32_t y_extent = max_size.y;
     if (y_extent <= 1 || y_extent >= total_rows)
         return;
 
@@ -203,10 +206,9 @@ void display_lines::apply_scroll_markers(int32_t y_extent, int32_t total_rows)
     {
         display_line& d = *m_lines.back();
         if (!d.m_trail_scroller_width_displaced && !d.m_trail_scroller_len_displayed)
-            d.calculate_multiline_scroll_marker();
+            d.calculate_multiline_scroll_marker(max_size.x);
 
-        // NOTE: build() should always pad to max width, except on last
-        // line, and max width should always be at least 8.
+        // NOTE: max width should always be at least 8.
         assert(d.width() > c_horz_scroll_indicator_chars);
         // if (d.width() > 2)
         if (d.m_trail_scroller_width_displaced && d.m_trail_scroller_len_displayed)
@@ -217,6 +219,7 @@ void display_lines::apply_scroll_markers(int32_t y_extent, int32_t total_rows)
 
             d.m_text.set_length(d.m_text.length() - len_displaced);
             d.m_faces.set_length(d.m_faces.length() - len_displaced);
+            d.m_x2 -= width_displaced;
 
             for (uint32_t i = num; i--;)
             {
@@ -1575,7 +1578,6 @@ again:
                 }
             }
         }
-
         if (index == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
             tmp.m_right_text = m_right_text;
 
@@ -1597,7 +1599,7 @@ again:
             // the row (it may not be at the very end, depending on grapheme
             // boundaries).
             auto bottom = build_row(tmp.m_top + y_extent - 1);
-            bottom->calculate_multiline_scroll_marker();
+            bottom->calculate_multiline_scroll_marker(max_size.x);
             if (bottom->m_trail_scroller_width_displaced &&
                 tmp.m_cursor.x >= bottom->width() - bottom->m_trail_scroller_width_displaced)
                 ++tmp.m_top;
@@ -1625,7 +1627,8 @@ again:
     tmp.m_cursor.y -= tmp.m_top;
 
     // Apply scroll markers.
-    tmp.apply_scroll_markers(y_extent, total_rows);
+    assert(y_extent == max_size.y);
+    tmp.apply_scroll_markers(max_size, total_rows);
 
     // Handle fixed height mode.
     while (tmp.m_lines.size() < y_extent)

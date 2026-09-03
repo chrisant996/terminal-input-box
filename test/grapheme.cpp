@@ -391,6 +391,55 @@ TEST_CASE("Display multiline wrapping")
     REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
 }
 
+TEST_CASE("Display multiline scroll markers")
+{
+    SECTION("Preserves line width when replacing trailing text")
+    {
+        tib::display_lines lines;
+        lines.m_lines.emplace_back(std::make_unique<tib::display_line>(1));
+        auto line = std::make_unique<tib::display_line>(1);
+        line->append("abc ", 4, 4, tib::FACE_DEFAULT);
+        lines.m_lines.emplace_back(std::move(line));
+
+        lines.apply_scroll_markers({ 4, 2 }, 3);
+        REQUIRE(lines.m_lines.back()->m_text.equals("abc>"));
+        REQUIRE(lines.m_lines.back()->width() == 4);
+    }
+
+    SECTION("Pads only the bottom row that needs a marker")
+    {
+        tib::display_lines lines;
+        auto first = std::make_unique<tib::display_line>(1);
+        first->append("x", 1, 1, tib::FACE_DEFAULT);
+        lines.m_lines.emplace_back(std::move(first));
+        auto bottom = std::make_unique<tib::display_line>(1);
+        bottom->append("abc ", 4, 4, tib::FACE_DEFAULT);
+        lines.m_lines.emplace_back(std::move(bottom));
+
+        lines.apply_scroll_markers({ 10, 2 }, 3);
+        REQUIRE(lines.m_lines.front()->width() == 1);
+        REQUIRE(lines.m_lines.back()->width() == 10);
+    }
+
+    SECTION("Pads newline-terminated rows before applying the marker")
+    {
+        display_test_fixture fixture(10, false, 2);
+        fixture.m_buffer.set_text("x\nabc \ndef", 2);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "abc      \x1b[m>") != nullptr);
+    }
+
+    SECTION("Pads rows when the next grapheme does not fit")
+    {
+        display_test_fixture fixture(10, false, 2);
+        fixture.m_buffer.set_text("x\n123456789\xe4\xb8\xadz", 2);
+
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "123456789\x1b[m>") != nullptr);
+    }
+}
+
 TEST_CASE("Display variable height scrolling")
 {
     display_test_fixture fixture(10, false, 3, true);

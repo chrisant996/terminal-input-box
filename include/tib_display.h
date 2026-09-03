@@ -126,7 +126,7 @@ struct display_line
                         display_line(uint16_t x1);
     void                append(const char* p, uint32_t len, uint32_t width, char face);
     uint16_t            width() const { return m_x2 - m_x1; }
-    void                calculate_multiline_scroll_marker();
+    void                calculate_multiline_scroll_marker(uint16_t max_width);
 
     cstring             m_text;
     cstring             m_faces;
@@ -149,7 +149,7 @@ struct display_row_start
 struct display_lines
 {
     void                clear();
-    void                apply_scroll_markers(int32_t y_extent, int32_t total_rows);
+    void                apply_scroll_markers(coord max_size, int32_t total_rows);
 
     int32_t             m_top = 0;
     textpos_t           m_pos = 0;
