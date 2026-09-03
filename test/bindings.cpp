@@ -73,6 +73,16 @@ TEST_CASE("Repeated key input")
 }
 #endif
 
+TEST_CASE("Adding a key binding moves its sequence storage")
+{
+    tib::key_table table;
+    tib::key_binding binding { "sequence", tib::binding_target_func("command") };
+    const char* const sequence_storage = binding.sequence.c_str();
+
+    REQUIRE(table.add(std::move(binding)));
+    REQUIRE(table.begin()->sequence.c_str() == sequence_storage);
+}
+
 TEST_CASE("Key bindings")
 {
     SECTION("Main")

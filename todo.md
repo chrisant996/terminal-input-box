@@ -12,7 +12,6 @@
   - [ ] Bash seems to go into a modal dispatch loop inside `digit-argument`??
   - [ ] Display message for the numeric argument (and add a color for it).
   - [ ] A `universal-argument` command that mimics the documented Readline behavior.
-  - [ ] Test whether the r-value ctor for a binding results in RVO and a single cstring ctor, or two cstring ctor invocations...
 - Commands:
   - An analog to `Ctrl-G` `abort` in Readline.  It needs to clear all the inputs as well (overwrite, quoted insert, numeric argument, etc).
   - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?

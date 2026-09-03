@@ -140,5 +140,5 @@ void install_test_terminal()
 
 bool add_binding(tib::key_table& table, const char* sequence, const char* name)
 {
-    return table.add({ sequence, tib::binding_target_func(name) });
+    return table.add(sequence, tib::binding_target_func(name));
 }

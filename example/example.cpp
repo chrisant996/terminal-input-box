@@ -136,10 +136,10 @@ int32_t insert_newline(tib::editor_context& ctx, int32_t key, const char* name, 
 std::shared_ptr<tib::key_table_list> make_key_tables()
 {
     auto t = std::make_shared<tib::key_table>();
-    t->add({ "\021", tib::binding_target_func("quoted-insert") });      // Ctrl-Q
-    t->add({ "\022", tib::binding_target_func("lorem-ipsum") });        // Ctrl-R
-    t->add({ "\033m", tib::binding_target_func("insert-newline") });    // Alt-M
-    t->add({ "\033T", tib::binding_target_macro("Macro Text") });       // Alt-Shift-T
+    t->add("\021", tib::binding_target_func("quoted-insert"));      // Ctrl-Q
+    t->add("\022", tib::binding_target_func("lorem-ipsum"));        // Ctrl-R
+    t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
+    t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
 
     tib::editor_context::register_command("insert-newline", insert_newline);
 

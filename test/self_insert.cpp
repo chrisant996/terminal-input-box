@@ -47,7 +47,7 @@ static std::shared_ptr<tib::key_table_list> make_quoted_insert_key_table(bool nu
 {
     auto tables = tib::make_default_key_table(numeric_argument);
     REQUIRE(!tables->empty());
-    REQUIRE(tables->back()->add({ "\021", tib::binding_target_func("quoted-insert") }));
+    REQUIRE(tables->back()->add("\021", tib::binding_target_func("quoted-insert")));
     return tables;
 }
 
@@ -235,7 +235,7 @@ TEST_CASE("Quoted insert")
         other->initialize();
 
         auto other_table = std::make_shared<tib::key_table>(false);
-        REQUIRE(other_table->add({ "x", tib::binding_target_func("accept-line") }));
+        REQUIRE(other_table->add("x", tib::binding_target_func("accept-line")));
         auto other_tables = std::make_shared<tib::key_table_list>();
         other_tables->emplace_back(std::move(other_table));
         other->set_bindings(std::move(other_tables));

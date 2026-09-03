@@ -78,7 +78,8 @@ private:
 
 struct key_binding
 {
-                        ~key_binding() = default;
+                        // No explicit dtor, otherwise it defeats r-value move.
+                        //~key_binding() = default;
 
     cstring             sequence;
     binding_target      target;
@@ -108,6 +109,7 @@ public:
 
     // TODO-FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
+    bool                add(const char* sequence, const binding_target& target, bool pattern=false);
     bool                remove(const cstring& sequence, bool pattern=false);
     void                clear();
 
