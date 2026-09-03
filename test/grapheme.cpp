@@ -186,6 +186,9 @@ TEST_CASE("Display differential updates")
         fixture.display_initial("abc", 0);
 
         fixture.m_display.set_left_text("new: ", 5);
+        // BUGBUG: display() always returns false -- it should return false
+        // only if the optimization prevent any display updates, otherwise it
+        // should return true.
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(strstr(s_display_output.c_str(), "new: ") != nullptr);
     }
@@ -195,6 +198,13 @@ TEST_CASE("Display differential updates")
         display_test_fixture fixture;
         fixture.m_display.set_right_text("xyz", 3);
         fixture.display_initial("abc", 0);
+
+        // BUGBUG: moving the caret should not force a rebuild; that's a bug
+        // that Codex introduced, and the test is incorrect and verifies that
+        // the bug exists and that the optimization is defeated.  But the
+        // whole point of the optimization is to optimize that kind of case.
+        // Codex didn't accurately understand how to implement or test the
+        // display optimization.
 
         // Moving the caret forces a rebuild with an unchanged line.  Reusing
         // the displayed line must avoid outputting either part of that line.
@@ -206,9 +216,10 @@ TEST_CASE("Display differential updates")
         // Right text is part of the first displayed line, so changing it
         // must prevent reuse even though the input text is unchanged.
         s_display_output.clear();
-        fixture.m_display.set_right_text("xyz", 3);
+        fixture.m_display.set_right_text("zzz", 3);
         REQUIRE(fixture.m_display.display() == false);
-        REQUIRE(strstr(s_display_output.c_str(), "xyz") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "zzz") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "xyz") == nullptr);
     }
 
     SECTION("Skips matching leading and trailing text")

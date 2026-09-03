@@ -95,6 +95,22 @@ struct style_info
     char                empty_face = FACE_EMPTY;
 };
 
+class text_and_width
+{
+public:
+    void                clear();
+    bool                set(const char* text, uint16_t width);
+    bool                set(cstring&& text, uint16_t width);
+    bool                operator==(const text_and_width& other) const;
+    const char*         c_str() const { return m_text.c_str(); }
+    size_t              length() const { return m_text.length(); }
+    uint16_t            width() const { return m_width; }
+
+private:
+    cstring             m_text;
+    uint16_t            m_width = 0;
+};
+
 struct additional_display_line
 {
     bool                operator==(const additional_display_line& other) const noexcept;
@@ -143,10 +159,8 @@ struct display_lines
 
     std::vector<std::unique_ptr<display_line>> m_lines;
     std::vector<display_row_start> m_rows;
-    cstring             m_left_text;
-    uint16_t            m_left_text_width = 0;
-    cstring             m_right_text;
-    uint16_t            m_right_text_width = 0;
+    text_and_width      m_left_text;
+    text_and_width      m_right_text;
     std::vector<additional_display_line> m_additional_lines;
     coord               m_cursor = { -1, -1 };  // Offset from m_inner_offset.
 
@@ -178,6 +192,7 @@ public:
 
     void                set_left_text(const char* left, uint16_t width);
     void                set_right_text(const char* right, uint16_t width);
+    void                set_message_text(const char* message, uint16_t width);
     void                set_additional_lines(const std::vector<additional_display_line>& lines);
     void                clear_additional_lines();
 
@@ -227,10 +242,9 @@ private:
     coord               m_term_size;
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
-    cstring             m_left_text;
-    uint16_t            m_left_text_width = 0;
-    cstring             m_right_text;
-    uint16_t            m_right_text_width = 0;
+    text_and_width      m_left_text;
+    text_and_width      m_right_text;
+    text_and_width      m_message_text;
     std::vector<additional_display_line> m_additional_lines;
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.

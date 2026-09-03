@@ -2,10 +2,12 @@
 
 # TODO
 
+- [ ] Bottom scroll marker is drawn at the wrong position if the bottom visible line contains an embedded newline.
+- [ ] The display reuse optimizations were implemented incorrectly by Codex, and they are completely defeated every time `invalidate()` occurs.  The `invalidate()` call was only supposed to get past the quick check whether things were definitely identical; any time `m_displayed` is not empty, then new display lines should be compared to the display lines in `m_displayed`, and minimal redraw comparison should be performed.
+- [ ] CLINK: the numeric argument message in Clink is only drawn on the first row, so if the display is scrolled then the message is not visible.  And if the whole line is reverted, then the place where the message would have been displayed does not get redrawn properly.  Make sure tib doesn't replicate that redraw problem.  And probably tib should display the message on the first displayed row, but that's going to have weird side effects, and probably should go on a FUTURE list.
 - Numeric argument:
   - [ ] `digit-argument` followed by non-meta digits should behave the same as meta digits.
   - [ ] Bash seems to go into a modal dispatch loop inside `digit-argument`??
-  - [ ] Display message for the numeric argument (and add a color for it).
   - [ ] A `universal-argument` command that mimics the documented Readline behavior.
 - Commands:
   - An analog to `Ctrl-G` `abort` in Readline.  It needs to clear all the inputs as well (overwrite, quoted insert, numeric argument, etc).

@@ -15,6 +15,7 @@ enum class color_element
 {
     base,
     border,
+    message,
     input,
     input_selection,
     input_horiz_scroll,

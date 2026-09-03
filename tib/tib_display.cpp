@@ -79,6 +79,45 @@ static int16_t get_horiz_scrolled_width(uint16_t width, uint16_t replaced_width)
     return width - replaced_width + c_horz_scroll_indicator_chars;
 }
 
+void text_and_width::clear()
+{
+    m_text.clear();
+    m_width = 0;
+}
+
+bool text_and_width::set(const char* text, uint16_t width)
+{
+    if (!text && !length())
+        return false;
+    if (text && length() && m_text == text && m_width == width)
+        return false;
+    m_text = text;
+    m_width = width;
+    return true;
+}
+
+bool text_and_width::set(cstring&& text, uint16_t width)
+{
+    if (!text.length() && !length())
+        return false;
+    if (text.length() && length() && m_text == text && m_width == width)
+        return false;
+    m_text = std::move(text);
+    m_width = width;
+    return true;
+}
+
+bool text_and_width::operator==(const text_and_width& other) const
+{
+    if (length() != other.length())
+        return false;
+    if (m_width != other.m_width)
+        return false;
+    if (!m_text.equals(other.m_text))
+        return false;
+    return true;
+}
+
 bool additional_display_line::operator==(const additional_display_line& other) const noexcept
 {
     return width == other.width && bounded == other.bounded && text == other.text;
@@ -140,9 +179,7 @@ void display_lines::clear()
     m_lines.clear();
     m_rows.clear();
     m_left_text.clear();
-    m_left_text_width = 0;
     m_right_text.clear();
-    m_right_text_width = 0;
     m_additional_lines.clear();
     m_cursor = { -1, -1 };
 
@@ -309,17 +346,26 @@ void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
 
 void display_manager::set_left_text(const char* left, uint16_t width)
 {
-    m_left_text = left;
-    m_left_text_width = width;
-    m_hwheel_exclusion = false;
-    invalidate();
+    if (m_left_text.set(left, width))
+    {
+        m_hwheel_exclusion = false;
+        invalidate();
+    }
 }
 
 void display_manager::set_right_text(const char* right, uint16_t width)
 {
-    m_right_text = right;
-    m_right_text_width = width;
-    invalidate();
+    if (m_right_text.set(right, width))
+        invalidate();
+}
+
+void display_manager::set_message_text(const char* message, uint16_t width)
+{
+    if (m_message_text.set(message, width))
+    {
+        m_hwheel_exclusion = false;
+        invalidate();
+    }
 }
 
 void display_manager::set_additional_lines(const std::vector<additional_display_line>& lines)
@@ -507,7 +553,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     display_row_start last = target;
     int32_t row = 0;
     const uint16_t left_text_width =
-        (m_left_text.length() && m_left_text_width < max_size.x) ? m_left_text_width : 0;
+        (m_left_text.length() && m_left_text.width() < max_size.x) ? m_left_text.width() : 0;
     uint16_t row_width = left_text_width;
     wcwidth_iter scan(text.c_str(), text.length());
 
@@ -672,9 +718,9 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     textpos_t caret = start.offset;
     uint32_t screen_column = 0;
 
-    if (row == 0 && m_displayed.m_left_text_width)
+    if (row == 0 && m_displayed.m_left_text.width())
     {
-        screen_column = m_displayed.m_left_text_width;
+        screen_column = m_displayed.m_left_text.width();
         if (uint32_t(column) < screen_column)
             return set_screen_caret(caret);
     }
@@ -722,7 +768,7 @@ void display_manager::ensure_left()
 
     const coord full_max_size = get_effective_max_size();
     const uint16_t left_text_width =
-        (m_left_text.length() && m_left_text_width < full_max_size.x) ? m_left_text_width : 0;
+        (m_left_text.length() && m_left_text.width() < full_max_size.x) ? m_left_text.width() : 0;
     const cstring& text = m_buffer->get_text();
     const selection_state& selection = m_buffer->get_selection_state();
     if (m_hwheel_exclusion)
@@ -798,7 +844,7 @@ bool display_manager::display()
     // Format content into display structures.
     display_lines tmp;
     if (!build(tmp))
-        return false;   // Nothing changed since list display (or OOM error).
+        return false;   // Nothing changed since last display (or OOM error).
 
     return display_internal(tmp);
 }
@@ -876,12 +922,11 @@ bool display_manager::display_internal(display_lines& lines)
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
                 const bool left_text_changed = (i == 0 &&
-                    (!lines.m_left_text.equals(m_displayed.m_left_text) ||
-                     lines.m_left_text_width != m_displayed.m_left_text_width));
+                    !(lines.m_left_text == m_displayed.m_left_text));
                 if (line->m_text.equals(displayed->m_text) &&
                     line->m_faces.equals(displayed->m_faces) &&
                     !left_text_changed &&
-                    (i || m_right_text.equals(m_displayed.m_right_text)))
+                    (i || m_right_text == m_displayed.m_right_text))
                 {
                     reuse_displayed_line = true;
                     continue;
@@ -949,7 +994,7 @@ bool display_manager::display_internal(display_lines& lines)
 
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
-        const uint16_t left_text_width = (i == 0) ? lines.m_left_text_width : 0;
+        const uint16_t left_text_width = (i == 0) ? lines.m_left_text.width() : 0;
         move_to_column(cursor, begin_width ? begin_width + left_text_width : 0, lines.m_inner_offset.x);
 
         // The left text is kept separate from the input text because it may
@@ -957,7 +1002,7 @@ bool display_manager::display_internal(display_lines& lines)
         if (i == 0 && begin == 0 && lines.m_left_text.length())
         {
             output(lines.m_left_text.c_str(), lines.m_left_text.length());
-            cursor.x += lines.m_left_text_width;
+            cursor.x += left_text_width;
         }
 
         // Display the text.
@@ -996,9 +1041,9 @@ bool display_manager::display_internal(display_lines& lines)
         {
             move_to_column(cursor, line->width(), lines.m_inner_offset.x);
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
-            if (i == 0 && m_right_text_width && line->width() + c_right_text_padding + m_right_text_width <= max_size.x)
+            if (i == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
             {
-                erase_row(max_size.x - (line->width() + m_right_text_width));
+                erase_row(max_size.x - (line->width() + m_right_text.width()));
                 output(m_right_text.c_str(), m_right_text.length());
             }
             else
@@ -1278,12 +1323,26 @@ bool display_manager::build(display_lines& out)
     // The left text is all-or-nothing and must leave at least one column
     // available for the input.  Its caller-provided width participates in
     // wrapping even though the text itself may contain terminal escapes.
-    const bool show_left_text = !left && m_left_text.length() && m_left_text_width < max_size.x;
-    const uint16_t left_text_width = show_left_text ? m_left_text_width : 0;
-    if (show_left_text)
+    uint16_t left_text_width = 0;
+    // REVIEW: should message be displayed regardless of left offset?
+    if (!left)
     {
-        tmp.m_left_text = m_left_text;
-        tmp.m_left_text_width = m_left_text_width;
+        if ((m_message_text.length() && m_message_text.width() < max_size.x) ||
+            (m_left_text.length() && m_left_text.width() < max_size.x))
+        {
+            if (m_message_text.length())
+            {
+                cstring tmp_text;
+                m_colors->append_color(tmp_text, color_element::base, color_element::message);
+                tmp_text.append(m_message_text.c_str());
+                tmp.m_left_text.set(std::move(tmp_text), m_message_text.width());
+            }
+            else
+            {
+                tmp.m_left_text = m_left_text;
+            }
+            left_text_width = tmp.m_left_text.width();
+        }
     }
 
     // Calculate row boundaries without allocating display_line strings.
@@ -1517,11 +1576,8 @@ again:
             }
         }
 
-        if (index == 0 && m_right_text_width && line->width() + c_right_text_padding + m_right_text_width <= max_size.x)
-        {
+        if (index == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
             tmp.m_right_text = m_right_text;
-            tmp.m_right_text_width = m_right_text_width;
-        }
 
         return line;
     };
@@ -1555,10 +1611,7 @@ again:
     // The left text belongs only to the first logical display line.  Its
     // width still influenced that line's wrapping when it is scrolled away.
     if (tmp.m_top != 0)
-    {
         tmp.m_left_text.clear();
-        tmp.m_left_text_width = 0;
-    }
 
     // Build only the rows that will be visible.
     const int32_t end = min<int32_t>(tmp.m_top + y_extent, total_rows);
@@ -1618,7 +1671,7 @@ void display_manager::append_border(coord extent)
     assert(extent.x == max_size.x + extra_border_width);
     assert(max_size.y >= extent.y - extra_border_height);
 
-    output_color(m_colors->get_color(tib::color_element::border));
+    output_color(m_colors->get_color(color_element::border));
 
     if (b.has_top())
     {

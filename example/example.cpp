@@ -273,6 +273,7 @@ int main(int argc, const char** argv)
     std::shared_ptr<tib::color_table> colors = std::make_shared<tib::color_table>();
     colors->set_color(tib::color_element::base, c_norm_base);
     colors->set_color(tib::color_element::border, "0;38;2;33;33;33");
+    colors->set_color(tib::color_element::message, "0;48;2;0;80;0;38;2;204;204;204");
 
     tib::face_definitions face_defs;
     face_defs.emplace(tib::FACE_SELECTION, "0;7");

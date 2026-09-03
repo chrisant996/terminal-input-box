@@ -194,6 +194,7 @@ private:
     void                begin_undo_group(bool merge);
     void                insert_raw_char(char c);
     void                clear_overwrite_input();
+    void                make_numeric_argument_message();
 
     static void         ensure_commands_sorted();
 

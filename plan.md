@@ -55,6 +55,10 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
     - [x] Variable height (grow up to max height).
 - [x] Max input size.
 
+## The Host Must Always Control The Input Loop
+
+Readline likes to go into modal dispatch loops.  That design choice creates problems for some hosts.  When tib wants a modal dispatch loop, it needs to find a stateful way to achieve the desired functional behaviors without actually using a modal dispatch loop.
+
 ## Internal encoding
 
 - Use UTF8 internally.

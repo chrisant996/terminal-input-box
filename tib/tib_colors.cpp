@@ -21,6 +21,7 @@ const char* color_table::get_color(color_element color) const
             "",
             "",
             "",
+            "",
             "7",
             "1",
         };

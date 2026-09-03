@@ -751,6 +751,8 @@ void editor_context::set_auto_clear_numeric_argument(bool clear)
 
 void editor_context::clear_numeric_argument()
 {
+    if (has_numeric_argument())
+        m_display.set_message_text(nullptr, 0);
     m_auto_clear_numeric_argument = false;
     m_has_numeric_argument = false;
     m_numeric_argument_has_digits = false;
@@ -761,11 +763,13 @@ void editor_context::clear_numeric_argument()
 void editor_context::set_argument_sign(int32_t sign)
 {
     m_sign_numeric_argument = (sign >= 0) ? 1 : -1;
+    make_numeric_argument_message();
 }
 
 void editor_context::invert_argument_sign()
 {
     m_sign_numeric_argument = 0 - m_sign_numeric_argument;
+    make_numeric_argument_message();
 }
 
 int32_t editor_context::get_numeric_argument() const
@@ -779,6 +783,7 @@ void editor_context::set_numeric_argument(int32_t value)
     m_numeric_argument_has_digits = true;
     m_sign_numeric_argument = (value >= 0) ? 1 : -1;
     m_numeric_argument = (value >= 0) ? value : 0 - value;
+    make_numeric_argument_message();
 }
 
 bool editor_context::numeric_digit(int32_t key)
@@ -843,6 +848,7 @@ bool editor_context::numeric_digit(int32_t key)
 
     // TODO: make sure display refreshes the numeric argument message.
     set_auto_clear_numeric_argument(false);
+    make_numeric_argument_message();
     return true;
 }
 
@@ -879,6 +885,21 @@ void editor_context::clear_overwrite_input()
 {
     m_overwrite_input.clear();
     m_overwrite_input_original_text.clear();
+}
+
+void editor_context::make_numeric_argument_message()
+{
+    if (has_numeric_argument())
+    {
+        static const char c_normal[] = "\x1b[m";
+        cstring msg;
+        msg.printf("(arg: %d) ", get_numeric_argument());
+        m_display.set_message_text(msg.c_str(), uint16_t(msg.length()));
+    }
+    else
+    {
+        m_display.set_message_text(nullptr, 0);
+    }
 }
 
 void editor_context::insert_raw_char(char c)

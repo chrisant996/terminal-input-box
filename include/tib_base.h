@@ -50,6 +50,7 @@ public:
                         cstring_t(const T* s, size_t len=c_auto_length) { raw_set(s, len); }
                         cstring_t(const cstring_t<T>& s) { raw_set(s.m_text, s.m_len); }
                         cstring_t(cstring_t<T>&& s) noexcept { *this = std::move(s); }
+    cstring_t<T>&       operator=(const T* s);
     cstring_t<T>&       operator=(const cstring_t<T>& s);
     cstring_t<T>&       operator=(cstring_t<T>&& s) noexcept;
     bool                operator==(const T* s) const noexcept;
@@ -85,6 +86,13 @@ private:
 
     static const T* const c_spaces;
 };
+
+template<class T>
+cstring_t<T>& cstring_t<T>::operator=(const T* s)
+{
+    set(s);
+    return *this;
+}
 
 template<class T>
 cstring_t<T>& cstring_t<T>::operator=(const cstring_t<T>& s)
