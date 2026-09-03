@@ -37,6 +37,11 @@ struct editor_callbacks : public std::enable_shared_from_this<editor_callbacks>
     virtual void        provide_faces(const input_buffer& buffer, cstring& faces) {}
 };
 
+struct editor_quirks
+{
+    bool                bash_digit_argument = false;    // Bash makes it impossible to enter -2 or -2345:  Alt-Minus Alt-2 becomes -12.
+};
+
 struct undo_entry
 {
                         undo_entry() = default;
@@ -85,6 +90,9 @@ public:
     void                set_color_table(std::shared_ptr<const color_table> colors);
     void                set_face_defs(const face_definitions* face_defs);
     void                set_empty_face(char face);
+    const editor_quirks& get_quirks() const noexcept { return m_quirks; }
+    void                set_quirks(const editor_quirks& quirks) noexcept { m_quirks = quirks; }
+
     void                set_left_text(const char* left, uint16_t width);
     void                set_right_text(const char* right, uint16_t width);
     void                set_additional_lines(const std::vector<additional_display_line>& lines);
@@ -138,6 +146,7 @@ public:
     void                invert_argument_sign();
     int32_t             get_numeric_argument() const;
     void                set_numeric_argument(int32_t value);
+    void                numeric_digit(int32_t key);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
@@ -203,6 +212,7 @@ private:
     editor_callbacks*   m_callbacks = nullptr;      // Borrowed.
     layout_info         m_layout;   // REVIEW: does tib_context actually need access to this?
     style_info          m_style;    // REVIEW: does tib_context actually need access to this?
+    editor_quirks       m_quirks;
     uint32_t            m_max_length = INT16_MAX;
 
     // State.
@@ -226,9 +236,10 @@ private:
     // Numeric argument.
     bool                m_auto_clear_numeric_argument = false;
     bool                m_has_numeric_argument = false;
+    bool                m_numeric_argument_has_digits = false;
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
-    int32_t             m_quoted_insert_count = 1;
+    int32_t             m_quoted_insert_count = 0;
 
     // Display.
     display_manager     m_display;

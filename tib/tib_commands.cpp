@@ -482,6 +482,14 @@ int32_t toggle_case(editor_context& ctx, int32_t key, const char* name, const bi
 
 //------------------------------------------------------------------------------
 
+int32_t numeric_digit(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.numeric_digit(key);
+    return 0;
+}
+
+//------------------------------------------------------------------------------
+
 static uint32_t get_scroll_lines(const editor_context& ctx)
 {
     uint32_t scroll_lines = 3;
@@ -709,11 +717,15 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const bi
         return -1;
 
     int32_t n = ctx.get_numeric_argument();
+    if (n <= 0)
+        return 0;
 
     if (key <= 0xff)
     {
+        ctx.begin_undo_group();
         while (n-- > 0)
             ctx.insert_char(char(key), ctx.get_overwrite_mode());
+        ctx.end_undo_group();
         return 0;
     }
 
@@ -747,15 +759,17 @@ int32_t self_insert(editor_context& ctx, int32_t key, const char* name, const bi
         return -1;
 
     // Insert the converted UTF8 characters.
+    ctx.begin_undo_group();
     while (n-- > 0)
         ctx.insert_text(utf8, length, ctx.get_overwrite_mode());
+    ctx.end_undo_group();
 
     return 0;
 }
 
 //------------------------------------------------------------------------------
 
-std::shared_ptr<key_table_list> make_default_key_table()
+std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
 {
     auto t = std::make_shared<key_table>(true/*can_self_insert*/);
 
@@ -803,6 +817,13 @@ std::shared_ptr<key_table_list> make_default_key_table()
     t->add({ "\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse press
     t->add({ "\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/ }); // Mouse release
 
+    if (numeric_argument)
+    {
+        for (char seq[3] = { '\033', '0', 0 }; seq[1] <= '9'; ++seq[1])
+            t->add({ seq, binding_target_func("digit-argument") });
+        t->add({ "-", binding_target_func("digit-argument") });
+    }
+
     auto tables = std::make_shared<key_table_list>();
     tables->emplace_back(std::move(t));
     return tables;
@@ -835,6 +856,7 @@ static const editor_command c_commands[] =
     { "del-char-right", del_char_right },
     { "del-word-left", del_word_left },
     { "del-word-right", del_word_right },
+    { "digit-argument", numeric_digit },
     { "end-of-line", end_of_line },
     { "forward-bigword", forward_bigword },
     { "forward-char", forward_char },

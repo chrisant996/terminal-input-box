@@ -61,12 +61,14 @@ int32_t lower_case(tib::editor_context& ctx, int32_t key, const char* name, cons
 int32_t capitalize(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t toggle_case(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
+int32_t numeric_digit(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+
 int32_t mouse_input(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
 int32_t redisplay(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
 int32_t lorem_ipsum(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
-std::shared_ptr<tib::key_table_list> make_default_key_table();
+std::shared_ptr<tib::key_table_list> make_default_key_table(bool numeric_argument=false);
 
 }

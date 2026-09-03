@@ -2,14 +2,25 @@
 
 # TODO
 
+- Numeric argument:
+  - [x] Begin undo grouping.
+  - [ ] Add tests for undo grouping and numeric argument.
+  - [ ] Add tests for negative numeric arguments and opposites for maybe 3 representative commands that use `do_with_numeric_argument`.
+  - [x] Fix tests that assumed numeric argument and/or quoted insert implementation are within the binding resolver.
+  - [x] Negative numeric argument stack exhaustion due to incorrect inversion.
+  - [ ] `digit-argument` followed by non-meta digits should behave the same as meta digits.
+  - [ ] Bash seems to go into a modal dispatch loop inside `digit-argument`??
+  - [ ] Display message for the numeric argument (and add a color for it).
+  - [ ] A `universal-argument` command that mimics the documented Readline behavior.
+  - [ ] Test whether the r-value ctor for a binding results in RVO and a single cstring ctor, or two cstring ctor invocations...
 - Commands:
+  - An analog to `Ctrl-G` `abort` in Readline.  It needs to clear all the inputs as well (overwrite, quoted insert, numeric argument, etc).
   - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 - Some way to automagically treat upper case keys the same as their lower case equivalent?  Not sure that even makes any sense without a trie.  Maybe it should be handled by default bindings for Alt-UpperLetter keys to signal reevaluating the binding with LowerLetter for the last byte?
 
 ## Open Questions
 
 - Does this need the concepts of `point` and `mark`?
-- Does this need support for numeric arguments?  Probably yes.  But it might be reasonable to abstain from providing commands for entering a numeric argument, and instead only provide an API such that a host (such as Clink) could implement commands for entering a numeric argument.  As long as the built-in commands respect the numeric argument similarly to how Readline does, then that could be a sufficient level of support built into the library.
 
 ## Sufficiency
 

@@ -212,12 +212,17 @@ void editor_context::initialize(const char* text, size_t len)
     }
 
     clear_undo_internal();
+    m_can_drag = false;
     m_selection.set_caret(0);
     insert_text(text, len);
     m_selection.clear_dirty();
     m_display.clear_scroll_offsets();
     m_named_values.clear();
     init_undo();
+
+    clear_numeric_argument();
+    m_quoted_insert_count = 0;
+    m_last_command.clear();
 
     assert(!m_selection.is_dirty());
     assert(m_selection.get_caret() == len);
@@ -739,13 +744,14 @@ void editor_context::clear_named_value(const char* name)
 
 void editor_context::set_auto_clear_numeric_argument(bool clear)
 {
-    m_auto_clear_numeric_argument = true;
+    m_auto_clear_numeric_argument = clear;
 }
 
 void editor_context::clear_numeric_argument()
 {
     m_auto_clear_numeric_argument = false;
     m_has_numeric_argument = false;
+    m_numeric_argument_has_digits = false;
     m_sign_numeric_argument = 1;
     m_numeric_argument = 0;
 }
@@ -762,14 +768,74 @@ void editor_context::invert_argument_sign()
 
 int32_t editor_context::get_numeric_argument() const
 {
-    return m_has_numeric_argument ? m_numeric_argument : 1;
+    return m_has_numeric_argument ? m_numeric_argument * m_sign_numeric_argument : 1;
 }
 
 void editor_context::set_numeric_argument(int32_t value)
 {
     m_has_numeric_argument = true;
+    m_numeric_argument_has_digits = true;
     m_sign_numeric_argument = (value >= 0) ? 1 : -1;
-    m_numeric_argument = value;
+    m_numeric_argument = (value >= 0) ? value : 0 - value;
+}
+
+void editor_context::numeric_digit(int32_t key)
+{
+    switch (key)
+    {
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+        if (m_has_numeric_argument)
+        {
+            if (!m_quirks.bash_digit_argument && !m_numeric_argument_has_digits)
+                m_numeric_argument = 0;
+            m_numeric_argument *= 10;
+            m_numeric_argument += (key - '0');
+        }
+        else
+        {
+            clear_numeric_argument();
+            m_has_numeric_argument = true;
+            m_numeric_argument = (key - '0');
+        }
+        m_numeric_argument_has_digits = true;
+        break;
+    case '-':
+        if (m_has_numeric_argument)
+        {
+            int32_t repeat = get_numeric_argument();
+            clear_numeric_argument();
+            if (repeat > 0)
+            {
+                begin_undo_group();
+                while (repeat-- > 0)
+                    insert_text("-", 1, get_overwrite_mode());
+                end_undo_group();
+            }
+            return;
+        }
+        else
+        {
+            clear_numeric_argument();
+            m_has_numeric_argument = true;
+            m_sign_numeric_argument = -1;
+            m_numeric_argument = 1;
+        }
+        break;
+    default:
+        return;
+    }
+
+    // TODO: make sure display refreshes the numeric argument message.
+    set_auto_clear_numeric_argument(false);
 }
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
@@ -1175,6 +1241,8 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 {
     int32_t ret = -1;
 
+    set_auto_clear_numeric_argument();
+
     if (binding)
     {
         switch (binding->get_type())
@@ -1212,13 +1280,13 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 }
                 if (!ret)
                     m_quoted_insert_count = 0;
-                if (c && uint8_t(c) < c_input_terminal_reserved_begin)
+                if (repeat > 0 && c && uint8_t(c) < c_input_terminal_reserved_begin)
                 {
+                    begin_undo_group();
                     while (repeat-- > 0)
                         insert_char(c, get_overwrite_mode());
+                    end_undo_group();
                 }
-                if (m_auto_clear_numeric_argument)
-                    clear_numeric_argument();
             }
             break;
 
@@ -1268,8 +1336,13 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
             if (!handled)
             {
                 int32_t n = get_numeric_argument();
-                while (n-- > 0)
-                    insert_char(c, get_overwrite_mode());
+                if (n > 0)
+                {
+                    begin_undo_group();
+                    while (n-- > 0)
+                        insert_char(c, get_overwrite_mode());
+                    end_undo_group();
+                }
             }
             ret = 0;
         }

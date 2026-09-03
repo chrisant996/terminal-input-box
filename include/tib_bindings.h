@@ -205,7 +205,6 @@ private:
     std::shared_ptr<binding_resolver_state> m_state;
 };
 
-std::shared_ptr<tib::key_table_list> make_default_key_table();
 bool is_self_insertable(char c);
 bool is_self_insertable(int32_t key);
 

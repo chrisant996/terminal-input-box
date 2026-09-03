@@ -43,9 +43,9 @@ static void dispatch_macro(const char* text, std::shared_ptr<self_insert_tester>
     }
 }
 
-static std::shared_ptr<tib::key_table_list> make_quoted_insert_key_table()
+static std::shared_ptr<tib::key_table_list> make_quoted_insert_key_table(bool numeric_argument=false)
 {
-    auto tables = tib::make_default_key_table();
+    auto tables = tib::make_default_key_table(numeric_argument);
     REQUIRE(!tables->empty());
     REQUIRE(tables->back()->add({ "\021", tib::binding_target_func("quoted-insert") }));
     return tables;
@@ -113,7 +113,6 @@ TEST_CASE("Quoted insert")
     SECTION("Positive numeric argument repeats the next byte")
     {
         input->set_numeric_argument(5);
-        input->set_auto_clear_numeric_argument();
         invoke_quoted_insert(resolver);
         REQUIRE(!input->has_numeric_argument());
 
@@ -130,7 +129,6 @@ TEST_CASE("Quoted insert")
     SECTION("Negative numeric argument quotes the next N bytes")
     {
         input->set_numeric_argument(-3);
-        input->set_auto_clear_numeric_argument();
         invoke_quoted_insert(resolver);
         REQUIRE(!input->has_numeric_argument());
 
@@ -146,6 +144,66 @@ TEST_CASE("Quoted insert")
         auto resolved = resolver.step('\r');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
         REQUIRE(resolved.binding_target->is_func_name("accept-line"));
+    }
+
+    SECTION("Proper negative digit argument quotes exactly N bytes")
+    {
+        tib::editor_quirks quirks;
+        quirks.bash_digit_argument = false;
+        input->set_quirks(quirks);
+        input->set_bindings(make_quoted_insert_key_table(true/*numeric_argument*/));
+
+        auto resolved = resolver.step('\x1b');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+        resolved = resolver.step('-');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_numeric_argument() == -1);
+
+        resolved = resolver.step('\x1b');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+        resolved = resolver.step('2');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_numeric_argument() == -2);
+
+        invoke_quoted_insert(resolver);
+        for (int32_t n = 0; n < 2; ++n)
+        {
+            resolved = resolver.step('\x7f');
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
+            REQUIRE(resolved.dispatch());
+        }
+        REQUIRE(input->get_text() == tib::cstring("\x7f\x7f", 2));
+
+        resolved = resolver.step('\x7f');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("del-char-left"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == tib::cstring("\x7f", 1));
+    }
+
+    SECTION("Bash digit argument includes the implicit one")
+    {
+        tib::editor_quirks quirks;
+        quirks.bash_digit_argument = true;
+        input->set_quirks(quirks);
+        input->set_bindings(make_quoted_insert_key_table(true/*numeric_argument*/));
+
+        auto resolved = resolver.step('\x1b');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+        resolved = resolver.step('-');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.dispatch());
+
+        resolved = resolver.step('\x1b');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+        resolved = resolver.step('2');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_numeric_argument() == -12);
     }
 
     SECTION("Discards a pending binding prefix")

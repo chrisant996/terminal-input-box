@@ -143,7 +143,7 @@ std::shared_ptr<tib::key_table_list> make_key_tables()
 
     tib::editor_context::register_command("insert-newline", insert_newline);
 
-    auto tables = tib::make_default_key_table();
+    auto tables = tib::make_default_key_table(true/*numeric_argument*/);
     tables->emplace_back(t);
     return tables;
 }
