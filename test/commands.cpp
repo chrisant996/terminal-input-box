@@ -22,6 +22,53 @@ static void invoke_command(tib::editor_context& context, const char* name)
     REQUIRE(command(context, 0, name, nullptr) == 0);
 }
 
+TEST_CASE("Commands honor numeric arguments")
+{
+    SECTION("Negative forward-char moves backward the requested count")
+    {
+        tib::editor_context context;
+        initialize_context(context, "abcdef", 5);
+        context.set_numeric_argument(-3);
+        invoke_command(context, "forward-char");
+        REQUIRE(context.get_caret() == 2);
+    }
+
+    SECTION("Negative forward-word moves backward the requested count")
+    {
+        tib::editor_context context;
+        initialize_context(context, "one two three four", 18);
+        context.set_numeric_argument(-2);
+        invoke_command(context, "forward-word");
+        REQUIRE(context.get_caret() == 8);
+    }
+
+    SECTION("Positive repeated deletion is one undo operation")
+    {
+        tib::editor_context context;
+        initialize_context(context, "abcdef", 1);
+        context.set_numeric_argument(3);
+        invoke_command(context, "del-char-right");
+        REQUIRE(context.get_text() == "aef");
+        REQUIRE(context.get_caret() == 1);
+        REQUIRE(context.undo());
+        REQUIRE(context.get_text() == "abcdef");
+        REQUIRE(context.get_caret() == 1);
+    }
+
+    SECTION("Negative repeated deletion inverts direction and is one undo operation")
+    {
+        tib::editor_context context;
+        initialize_context(context, "abcdef", 5);
+        context.set_numeric_argument(-3);
+        invoke_command(context, "del-char-right");
+        REQUIRE(context.get_text() == "abf");
+        REQUIRE(context.get_caret() == 2);
+        REQUIRE(context.undo());
+        REQUIRE(context.get_text() == "abcdef");
+        REQUIRE(context.get_caret() == 5);
+    }
+}
+
 TEST_CASE("Select word command")
 {
     SECTION("Selects the word containing the caret")

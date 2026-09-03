@@ -54,7 +54,10 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
     return int16_t(cursor_column);
 }
 
-static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const char* name, const binding_params* params, editor_command_func_t inverted, std::function<bool(void)> doit, bool ding=true) noexcept
+constexpr uint8_t NO_DING               = 1 << 0;
+constexpr uint8_t UNDO_GROUP            = 1 << 1;
+
+static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const char* name, const binding_params* params, editor_command_func_t inverted, std::function<bool(void)> doit, uint8_t flags=0) noexcept
 {
     int32_t n = ctx.get_numeric_argument();
     if (inverted && n < 0)
@@ -63,17 +66,27 @@ static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const 
         return inverted(ctx, key, name, params);
     }
 
-    const bool had_selection = ctx.get_selection_state().has_selection();
-
     bool did = false;
-    while (n-- > 0)
+    if (n > 0)
     {
-        did = doit();
-        if (!did || (had_selection && !ctx.get_selection_state().has_selection()))
-            break;
+        const bool had_selection = ctx.get_selection_state().has_selection();
+        const bool group = ((flags & UNDO_GROUP) && n > 1);
+
+        if (group)
+            ctx.begin_undo_group();
+
+        while (n-- > 0)
+        {
+            did = doit();
+            if (!did || (had_selection && !ctx.get_selection_state().has_selection()))
+                break;
+        }
+
+        if (group)
+            ctx.end_undo_group();
     }
 
-    if (!did && ding)
+    if (!did && !(flags & NO_DING))
         tib::ding();
     return 0;
 
@@ -128,28 +141,28 @@ int32_t backward_word(editor_context& ctx, int32_t key, const char* name, const 
 {
     return do_with_numeric_argument(ctx, key, name, params, forward_word, [&]() {
         return ctx.move_left(true/*word*/);
-    }, false/*ding*/);
+    }, NO_DING);
 }
 
 int32_t forward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, backward_word, [&]() {
         return ctx.move_right(true/*word*/);
-    }, false/*ding*/);
+    }, NO_DING);
 }
 
 int32_t backward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, forward_bigword, [&]() {
         return ctx.move_left(2/*bigword*/);
-    }, false/*ding*/);
+    }, NO_DING);
 }
 
 int32_t forward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, backward_bigword, [&]() {
         return ctx.move_right(2/*bigword*/);
-    }, false/*ding*/);
+    }, NO_DING);
 }
 
 int32_t screen_line_down(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
@@ -172,42 +185,42 @@ int32_t del_char_left(editor_context& ctx, int32_t key, const char* name, const 
 {
     return do_with_numeric_argument(ctx, key, name, params, del_char_right, [&]() {
         return ctx.backspace();
-    });
+    }, UNDO_GROUP);
 }
 
 int32_t del_char_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_char_left, [&]() {
         return ctx.del();
-    });
+    }, UNDO_GROUP);
 }
 
 int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_word_right, [&]() {
         return ctx.backspace(true/*word*/);
-    }, false/*ding*/);
+    }, NO_DING|UNDO_GROUP);
 }
 
 int32_t del_word_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_word_left, [&]() {
         return ctx.del(true/*word*/);
-    }, false/*ding*/);
+    }, NO_DING|UNDO_GROUP);
 }
 
 int32_t del_bigword_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_bigword_right, [&]() {
         return ctx.backspace(2/*bigword*/);
-    }, false/*ding*/);
+    }, NO_DING|UNDO_GROUP);
 }
 
 int32_t del_bigword_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_bigword_left, [&]() {
         return ctx.del(2/*bigword*/);
-    }, false/*ding*/);
+    }, NO_DING|UNDO_GROUP);
 }
 
 //------------------------------------------------------------------------------

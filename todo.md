@@ -3,11 +3,6 @@
 # TODO
 
 - Numeric argument:
-  - [x] Begin undo grouping.
-  - [ ] Add tests for undo grouping and numeric argument.
-  - [ ] Add tests for negative numeric arguments and opposites for maybe 3 representative commands that use `do_with_numeric_argument`.
-  - [x] Fix tests that assumed numeric argument and/or quoted insert implementation are within the binding resolver.
-  - [x] Negative numeric argument stack exhaustion due to incorrect inversion.
   - [ ] `digit-argument` followed by non-meta digits should behave the same as meta digits.
   - [ ] Bash seems to go into a modal dispatch loop inside `digit-argument`??
   - [ ] Display message for the numeric argument (and add a color for it).
