@@ -146,7 +146,7 @@ public:
     void                invert_argument_sign();
     int32_t             get_numeric_argument() const;
     void                set_numeric_argument(int32_t value);
-    void                numeric_digit(int32_t key);
+    bool                numeric_digit(int32_t key);
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);

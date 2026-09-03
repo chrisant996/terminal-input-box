@@ -497,7 +497,8 @@ int32_t toggle_case(editor_context& ctx, int32_t key, const char* name, const bi
 
 int32_t numeric_digit(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.numeric_digit(key);
+    if (!ctx.numeric_digit(key))
+        ding();
     return 0;
 }
 

@@ -15,6 +15,8 @@ namespace tib {
 
 bool g_optimize_self_insert = true;
 
+constexpr int32_t c_max_numeric_argument = 1000000; // REVIEW: add to editor_quirks?
+
 undo_entry::~undo_entry()
 {
     assert(!m_prev);
@@ -779,7 +781,7 @@ void editor_context::set_numeric_argument(int32_t value)
     m_numeric_argument = (value >= 0) ? value : 0 - value;
 }
 
-void editor_context::numeric_digit(int32_t key)
+bool editor_context::numeric_digit(int32_t key)
 {
     switch (key)
     {
@@ -799,6 +801,11 @@ void editor_context::numeric_digit(int32_t key)
                 m_numeric_argument = 0;
             m_numeric_argument *= 10;
             m_numeric_argument += (key - '0');
+            if (m_numeric_argument > c_max_numeric_argument)
+            {
+                clear_numeric_argument();
+                return false;
+            }
         }
         else
         {
@@ -820,7 +827,7 @@ void editor_context::numeric_digit(int32_t key)
                     insert_text("-", 1, get_overwrite_mode());
                 end_undo_group();
             }
-            return;
+            return true;
         }
         else
         {
@@ -831,11 +838,12 @@ void editor_context::numeric_digit(int32_t key)
         }
         break;
     default:
-        return;
+        return false;
     }
 
     // TODO: make sure display refreshes the numeric argument message.
     set_auto_clear_numeric_argument(false);
+    return true;
 }
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
