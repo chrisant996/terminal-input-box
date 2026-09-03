@@ -116,10 +116,10 @@ TEST_CASE("Quoted insert")
         invoke_quoted_insert(resolver);
         REQUIRE(!input->has_numeric_argument());
 
-        auto resolved = resolver.step('x');
+        auto resolved = resolver.step('\r');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
         REQUIRE(resolved.dispatch());
-        REQUIRE(input->get_text() == "xxxxx");
+        REQUIRE(input->get_text() == "\r\r\r\r\r");
 
         resolved = resolver.step('\r');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
@@ -132,14 +132,14 @@ TEST_CASE("Quoted insert")
         invoke_quoted_insert(resolver);
         REQUIRE(!input->has_numeric_argument());
 
-        const uint8_t bytes[] = { '\r', 0x1b, 'x' };
+        const uint8_t bytes[] = { '\r', 0x1b, 0x01 };
         for (const uint8_t c : bytes)
         {
             auto resolved = resolver.step(c);
             REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
             REQUIRE(resolved.dispatch());
         }
-        REQUIRE(input->get_text() == tib::cstring("\r\x1bx", 3));
+        REQUIRE(input->get_text() == "\r\x1b\x01");
 
         auto resolved = resolver.step('\r');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
