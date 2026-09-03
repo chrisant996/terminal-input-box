@@ -15,6 +15,6 @@ TEST_CASE("Terminal output interface")
     tib::term_out("defghi", 3);
     tib::ding();
 
-    REQUIRE(output == tib::cstring("abcdef"));
+    REQUIRE(output == "abcdef");
     REQUIRE(stream.get_ding_count() == 1);
 }

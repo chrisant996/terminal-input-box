@@ -101,7 +101,7 @@ TEST_CASE("Quoted insert")
         REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
         REQUIRE(resolved.dispatch());
         REQUIRE(!input->done());
-        REQUIRE(input->get_text() == tib::cstring("\r", 1));
+        REQUIRE(input->get_text() == "\r");
 
         resolved = resolver.step('\r');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
@@ -176,13 +176,13 @@ TEST_CASE("Quoted insert")
             REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
             REQUIRE(resolved.dispatch());
         }
-        REQUIRE(input->get_text() == tib::cstring("\x7f\x7f", 2));
+        REQUIRE(input->get_text() == "\x7f\x7f");
 
         resolved = resolver.step('\x7f');
         REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
         REQUIRE(resolved.binding_target->is_func_name("del-char-left"));
         REQUIRE(resolved.dispatch());
-        REQUIRE(input->get_text() == tib::cstring("\x7f", 1));
+        REQUIRE(input->get_text() == "\x7f");
     }
 
     SECTION("Bash digit argument includes the implicit one")
