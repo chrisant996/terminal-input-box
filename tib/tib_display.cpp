@@ -545,6 +545,8 @@ void display_manager::suppress_auto_horizontal_scroll(const selection_state& sel
 bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection, bool select)
 {
     const coord max_size = get_effective_max_size();
+    // BUGBUG: don't just give up; if it does then any invalidate() breaks all
+    // subsequent operations that rely on m_change_counter != 0.
     if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
         return false;
 
@@ -648,6 +650,8 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
 
 bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars, bool word_drag)
 {
+    // BUGBUG: this should not just give up; if it does then any invalidate()
+    // breaks all subsequent operations that require m_change_counter != 0.
     if (!m_displayed.m_change_counter)
         return false;
 
@@ -867,6 +871,7 @@ bool display_manager::display_internal(display_lines& lines)
     const coord displayed_input_extent = { m_displayed.m_extent.x, m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) };
     assert(input_extent.y >= 0);
     assert(displayed_input_extent.y >= 0);
+    // BUGBUG: the m_change_counter check is overly aggressive.
     if (!m_displayed.m_change_counter || input_extent != displayed_input_extent)
         m_border_dirty = true;
 
@@ -917,6 +922,9 @@ bool display_manager::display_internal(display_lines& lines)
         size_t end = line->m_text.length();
         uint16_t begin_width = 0;
         bool reuse_displayed_line = false;
+        // BUGBUG: why is this checking m_change_counter?  That seems totally
+        // wrong; doesn't it force every invalidate() to do a full redisplay?
+        // But that seems unnecessary.
         if (m_displayed.m_change_counter && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
@@ -1004,6 +1012,7 @@ bool display_manager::display_internal(display_lines& lines)
         const uint16_t left_text_width = (i == 0) ? lines.m_left_text.width() : 0;
         // BUGBUG: this seems wrong; won't it end up moving to a column
         // including the left_text_width and /THEN/ print the left text?
+        // However, in practice it seems to work out ok??
         move_to_column(cursor, begin_width ? begin_width + left_text_width : 0, lines.m_inner_offset.x);
 
         // The left text is kept separate from the input text because it may

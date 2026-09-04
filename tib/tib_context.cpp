@@ -846,7 +846,6 @@ bool editor_context::numeric_digit(int32_t key)
         return false;
     }
 
-    // TODO: make sure display refreshes the numeric argument message.
     set_auto_clear_numeric_argument(false);
     make_numeric_argument_message();
     return true;

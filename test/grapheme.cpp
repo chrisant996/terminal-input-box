@@ -197,13 +197,6 @@ TEST_CASE("Display differential updates")
         fixture.m_display.set_right_text("xyz", 3);
         REQUIRE(fixture.display_initial("abc", 0) == true);
 
-        // BUGBUG: moving the caret should not force a rebuild; that's a bug
-        // that Codex introduced, and the test is incorrect and verifies that
-        // the bug exists and that the optimization is defeated.  But the
-        // whole point of the optimization is to optimize that kind of case.
-        // Codex didn't accurately understand how to implement or test the
-        // display optimization.
-
         // Moving the caret forces a rebuild with an unchanged line.  Reusing
         // the displayed line must avoid outputting either part of that line.
         fixture.m_buffer.set_selection(1, 1);
