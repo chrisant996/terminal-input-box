@@ -10,12 +10,13 @@
     - An analog to `Ctrl-G` `abort` in Readline.  It needs to clear all the inputs as well (overwrite, quoted insert, numeric argument, etc).
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 - Display optimization:
-    - Does Clink do a full parse when the caret moves?
+    - Clink does a full parse even when the caret moves; but I'd still like to skip the parse in tib when possible.
     - Unit tests to verify some specific cases for the display optimizations.
     - Any time `m_displayed` is not empty, then new display lines should be compared to the display lines in `m_displayed`, even when `m_change_counter == 0`.
 
 ## Open Questions
 
+- Does tib already have the `preserve_window_horiz_scroll_position` from Clink?
 - Does this need the concepts of `point` and `mark`?
 - Should tib display the message on the first _displayed_ row?  But that's going to have weird side effects, and probably should go on a FUTURE list.
 - Some way to automagically treat upper case keys the same as their lower case equivalent?  Not sure that even makes any sense without a trie.  Maybe it should be handled by default bindings for Alt-UpperLetter keys to signal reevaluating the binding with LowerLetter for the last byte?
