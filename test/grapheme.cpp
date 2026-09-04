@@ -401,7 +401,7 @@ TEST_CASE("Display multiline scroll markers")
         line->append("abc ", 4, 4, tib::FACE_DEFAULT);
         lines.m_lines.emplace_back(std::move(line));
 
-        lines.apply_scroll_markers({ 4, 2 }, 3);
+        lines.apply_scroll_markers(4, 2, 3);
         REQUIRE(lines.m_lines.back()->m_text.equals("abc>"));
         REQUIRE(lines.m_lines.back()->width() == 4);
     }
@@ -416,7 +416,7 @@ TEST_CASE("Display multiline scroll markers")
         bottom->append("abc ", 4, 4, tib::FACE_DEFAULT);
         lines.m_lines.emplace_back(std::move(bottom));
 
-        lines.apply_scroll_markers({ 10, 2 }, 3);
+        lines.apply_scroll_markers(10, 2, 3);
         REQUIRE(lines.m_lines.front()->width() == 1);
         REQUIRE(lines.m_lines.back()->width() == 10);
     }

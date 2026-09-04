@@ -174,8 +174,8 @@ void display_lines::clear()
 {
     m_top = 0;
     m_pos = 0;
+    m_anchor = 0;
     m_left = 0;
-    m_selection_length = 0;
     m_change_counter = 0;
 
     m_lines.clear();
@@ -189,12 +189,11 @@ void display_lines::clear()
     m_extent = { 0, 0 };
 }
 
-void display_lines::apply_scroll_markers(coord max_size, int32_t total_rows)
+void display_lines::apply_scroll_markers(int16_t x_extent, int32_t y_extent, int32_t total_rows)
 {
     // NOTE:  Horizontal scroll markers work differently and are applied
     // separately.
     assert(!m_lines.empty());
-    const int32_t y_extent = max_size.y;
     if (y_extent <= 1 || y_extent >= total_rows)
         return;
 
@@ -206,7 +205,7 @@ void display_lines::apply_scroll_markers(coord max_size, int32_t total_rows)
     {
         display_line& d = *m_lines.back();
         if (!d.m_trail_scroller_width_displaced && !d.m_trail_scroller_len_displayed)
-            d.calculate_multiline_scroll_marker(max_size.x);
+            d.calculate_multiline_scroll_marker(x_extent);
 
         // NOTE: max width should always be at least 8.
         assert(d.width() > c_horz_scroll_indicator_chars);
@@ -1271,12 +1270,13 @@ bool display_manager::build(display_lines& out)
     const textpos_t sel_begin = sel_state.get_sel_begin();
     const textpos_t sel_end = sel_state.get_sel_end();
     const textpos_t pos = sel_state.get_caret();
+    const textpos_t anchor = sel_state.get_anchor();
     const textpos_t left = m_left;
 
     if (change_counter == m_displayed.m_change_counter &&
         pos == m_displayed.m_pos &&
+        anchor == m_displayed.m_anchor &&
         left == m_displayed.m_left &&
-        sel_end - sel_begin == m_displayed.m_selection_length &&
         m_additional_lines == m_displayed.m_additional_lines)
         return false;
 
@@ -1298,9 +1298,9 @@ bool display_manager::build(display_lines& out)
 
     display_lines tmp;
     tmp.m_pos = pos;
+    tmp.m_anchor = anchor;
     tmp.m_left = left;
     tmp.m_change_counter = change_counter;
-    tmp.m_selection_length = sel_end - sel_begin;
 
     // Set up border.
     coord term_size = m_term_size;
@@ -1627,8 +1627,7 @@ again:
     tmp.m_cursor.y -= tmp.m_top;
 
     // Apply scroll markers.
-    assert(y_extent == max_size.y);
-    tmp.apply_scroll_markers(max_size, total_rows);
+    tmp.apply_scroll_markers(max_size.x, y_extent, total_rows);
 
     // Handle fixed height mode.
     while (tmp.m_lines.size() < y_extent)

@@ -149,12 +149,12 @@ struct display_row_start
 struct display_lines
 {
     void                clear();
-    void                apply_scroll_markers(coord max_size, int32_t total_rows);
+    void                apply_scroll_markers(int16_t x_extent, int32_t y_extent, int32_t total_rows);
 
     int32_t             m_top = 0;
     textpos_t           m_pos = 0;
+    textpos_t           m_anchor = 0;
     textpos_t           m_left = 0;
-    size_t              m_selection_length = 0;
     uint32_t            m_change_counter = 0;
 
     std::vector<std::unique_ptr<display_line>> m_lines;
