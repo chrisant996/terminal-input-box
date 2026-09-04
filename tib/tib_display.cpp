@@ -853,6 +853,8 @@ bool display_manager::display()
 
 bool display_manager::display_internal(display_lines& lines)
 {
+    bool any_updates = false;
+
     if (lines.m_erase)
     {
         assert(lines.m_lines.empty());
@@ -899,6 +901,7 @@ bool display_manager::display_internal(display_lines& lines)
     // Draw border if needed.
     if (!lines.m_erase && m_style && m_style->border && m_border_dirty)
     {
+        any_updates = true;
         move_to_row(cursor, 0, 0);
         move_to_column(cursor, 0, 0);
         append_border(input_extent);
@@ -994,15 +997,20 @@ bool display_manager::display_internal(display_lines& lines)
         if (reuse_displayed_line)
             continue;
 
+        any_updates = true;
+
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
         const uint16_t left_text_width = (i == 0) ? lines.m_left_text.width() : 0;
+        // BUGBUG: this seems wrong; won't it end up moving to a column
+        // including the left_text_width and /THEN/ print the left text?
         move_to_column(cursor, begin_width ? begin_width + left_text_width : 0, lines.m_inner_offset.x);
 
         // The left text is kept separate from the input text because it may
         // contain terminal escape sequences whose width the caller attests.
         if (i == 0 && begin == 0 && lines.m_left_text.length())
         {
+            // TODO: only print the left text if it's actually different.
             output(lines.m_left_text.c_str(), lines.m_left_text.length());
             cursor.x += left_text_width;
         }
@@ -1075,6 +1083,7 @@ bool display_manager::display_internal(display_lines& lines)
             if (reuse_displayed_line)
                 continue;
         }
+        any_updates = true;
 
         // Move the cursor.
         output_color("");
@@ -1124,6 +1133,7 @@ bool display_manager::display_internal(display_lines& lines)
     // Erase rows in m_displayed but not in lines.
     if (lines.m_extent.y < m_displayed.m_extent.y)
     {
+        any_updates = true;
         output_color("");
         for (uint16_t i = lines.m_extent.y; i < m_displayed.m_extent.y; ++i)
         {
@@ -1163,7 +1173,7 @@ bool display_manager::display_internal(display_lines& lines)
     m_top = lines.m_top;
     m_displayed = std::move(lines);
     m_relative_cursor = cursor;
-    return false;
+    return any_updates;
 }
 
 void display_manager::erase_display()
