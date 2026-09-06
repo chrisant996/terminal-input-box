@@ -110,6 +110,25 @@ TEST_CASE("Quoted insert")
         REQUIRE(input->done());
     }
 
+    SECTION("Does not invoke an abort binding")
+    {
+        auto tables = make_quoted_insert_key_table();
+        REQUIRE(tables->back()->add("\007", tib::binding_target_func("abort")));
+        input->set_bindings(std::move(tables));
+
+        invoke_quoted_insert(resolver);
+        auto resolved = resolver.step('\007');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == tib::cstring("\007", 1));
+
+        resolved = resolver.step('\007');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("abort"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == tib::cstring("\007", 1));
+    }
+
     SECTION("Positive numeric argument repeats the next byte")
     {
         input->set_numeric_argument(5);

@@ -10,6 +10,7 @@
 
 namespace tib {
 
+int32_t abort(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t accept_line(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
 int32_t begin_of_line(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;

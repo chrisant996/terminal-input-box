@@ -94,6 +94,12 @@ static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const 
 
 //------------------------------------------------------------------------------
 
+int32_t abort(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.reset_state();
+    return 0;
+}
+
 int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.set_done();
@@ -789,6 +795,7 @@ std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
 
     t->add("\001", binding_target_func("select-all"));      // Ctrl-A
     t->add("\003", binding_target_func("copy"));            // Ctrl-C
+    t->add("\007", binding_target_func("abort"));           // Ctrl-G
     t->add("\010", binding_target_func("del-word-left"));   // VT sends 0x08 for Ctrl-Backspace.
     t->add("\r", binding_target_func("accept-line"));       // Ctrl-M / Enter
     t->add("\024", binding_target_func("transpose-chars")); // Ctrl-T
@@ -847,6 +854,7 @@ std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
 
 static const editor_command c_commands[] =
 {
+    { "abort", abort },
     { "accept-line", accept_line },
     { "backward-bigword", backward_bigword },
     { "backward-char", backward_char },

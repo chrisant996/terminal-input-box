@@ -66,6 +66,7 @@ public:
                         editor_context();
 
     void                initialize(const char* text=nullptr, size_t len=c_auto_length);
+    void                reset_state() noexcept;
     bool                done() const noexcept { return m_done; }
     void                set_done() noexcept { m_done = true; }
 

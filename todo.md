@@ -7,7 +7,6 @@
     - [ ] Bash seems to go into a modal dispatch loop inside `digit-argument`??
     - [ ] A `universal-argument` command that mimics the documented Readline behavior.
 - Commands:
-    - An analog to `Ctrl-G` `abort` in Readline.  It needs to clear all the inputs as well (overwrite, quoted insert, numeric argument, etc).
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 - Display optimization:
     - Clink does a full parse even when the caret moves; but I'd still like to skip the parse in tib when possible.

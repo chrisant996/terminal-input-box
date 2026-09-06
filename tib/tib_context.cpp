@@ -237,6 +237,15 @@ void editor_context::initialize(const char* text, size_t len)
 #endif
 }
 
+void editor_context::reset_state() noexcept
+{
+    m_can_drag = false;
+    clear_overwrite_input();
+    m_last_command.clear();
+    m_named_values.clear();
+    clear_numeric_argument();
+}
+
 void editor_context::set_callbacks(editor_callbacks* callbacks)
 {
     m_callbacks = callbacks;

@@ -22,6 +22,47 @@ static void invoke_command(tib::editor_context& context, const char* name)
     REQUIRE(command(context, 0, name, nullptr) == 0);
 }
 
+TEST_CASE("Abort command resets editor state")
+{
+    tib::editor_context context;
+    tib::border_definition border;
+    border.left = "|";
+    initialize_context(context, "abc", 2);
+    context.set_border(&border);
+    context.set_selection(0, 2);
+    context.set_overwrite_mode(true);
+    context.set_named_value("operation", "pending");
+    context.set_numeric_argument(-12);
+    context.set_last_command("previous-command");
+
+    invoke_command(context, "abort");
+
+    REQUIRE(context.get_text() == "abc");
+    REQUIRE(context.get_selection_state().get_anchor() == 0);
+    REQUIRE(context.get_selection_state().get_caret() == 2);
+    REQUIRE(context.get_overwrite_mode());
+    REQUIRE(context.get_border() == &border);
+    REQUIRE(context.get_named_value("operation") == nullptr);
+    REQUIRE(!context.has_numeric_argument());
+    REQUIRE(!strcmp(context.get_last_command(), ""));
+}
+
+TEST_CASE("Abort command interrupts pending overwrite input")
+{
+    tib::editor_context context;
+    context.initialize("ab");
+    context.set_caret(0);
+    context.set_overwrite_mode(true);
+    context.insert_char(char(0xc2), true);
+
+    invoke_command(context, "abort");
+    context.insert_char(char(0xa2), true);
+    REQUIRE(context.get_text() == "\xc2\xa2" "b");
+
+    REQUIRE(context.undo());
+    REQUIRE(context.get_text() == "\xc2" "b");
+}
+
 TEST_CASE("Commands honor numeric arguments")
 {
     SECTION("Negative forward-char moves backward the requested count")
