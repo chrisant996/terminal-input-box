@@ -922,23 +922,23 @@ bool display_manager::display_internal(display_lines& lines)
         size_t end = line->m_text.length();
         uint16_t begin_width = 0;
         bool reuse_displayed_line = false;
+        bool reuse_left_text = false;
         // BUGBUG: why is this checking m_change_counter?  That seems totally
         // wrong; doesn't it force every invalidate() to do a full redisplay?
         // But that seems unnecessary.
         if (m_displayed.m_change_counter && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
+            reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
             if (displayed->m_x1 == line->m_x1)
             {
                 // First do a simple memcmp comparison to check if the new
                 // line exactly matches the previously displayed line.  The
                 // grapheme comparison for a whole line is more than 3 orders
                 // of magnitude slower than the memcmp comparison.
-                const bool left_text_changed = (i == 0 &&
-                    !(lines.m_left_text == m_displayed.m_left_text));
-                if (line->m_text.equals(displayed->m_text) &&
+                if (reuse_left_text &&
+                    line->m_text.equals(displayed->m_text) &&
                     line->m_faces.equals(displayed->m_faces) &&
-                    !left_text_changed &&
                     (i || m_right_text == m_displayed.m_right_text))
                 {
                     reuse_displayed_line = true;
@@ -950,7 +950,7 @@ bool display_manager::display_internal(display_lines& lines)
                 // Walk forward past a leading portion that exactly matches.
                 size_t displayed_begin = 0;
                 const size_t displayed_length = displayed->m_text.length();
-                while (!left_text_changed && begin < end && displayed_begin < limit_forward_skip)
+                while (reuse_left_text && begin < end && displayed_begin < limit_forward_skip)
                 {
                     uint16_t width;
                     const size_t next = forward_one_grapheme(line->m_text.c_str(), end, uint32_t(begin), &width);
@@ -1017,9 +1017,8 @@ bool display_manager::display_internal(display_lines& lines)
 
         // The left text is kept separate from the input text because it may
         // contain terminal escape sequences whose width the caller attests.
-        if (i == 0 && begin == 0 && lines.m_left_text.length())
+        if (i == 0 && !reuse_left_text && begin == 0 && lines.m_left_text.length())
         {
-            // TODO: only print the left text if it's actually different.
             output(lines.m_left_text.c_str(), lines.m_left_text.length());
             cursor.x += left_text_width;
         }
@@ -1059,14 +1058,18 @@ bool display_manager::display_internal(display_lines& lines)
         if (line->width() < max_size.x)
         {
             move_to_column(cursor, line->width(), lines.m_inner_offset.x);
+            // TODO: only print the color if something will be erased or printed.
             output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
             if (i == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
             {
+                // TODO: only erase between the main text and the right text if that area is actually different.
                 erase_row(max_size.x - (line->width() + m_right_text.width()));
+                // TODO: only print the right text if it's actually different.
                 output(m_right_text.c_str(), m_right_text.length());
             }
             else
             {
+                // TODO: only erase the rest if that area is actually different.
                 erase_row(max_size.x - line->width());
             }
         }
