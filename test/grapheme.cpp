@@ -188,7 +188,9 @@ TEST_CASE("Display differential updates")
 
         fixture.m_display.set_left_text("new: ", 5);
         REQUIRE(fixture.m_display.display() == true);
-        REQUIRE(strstr(s_display_output.c_str(), "new: ") != nullptr);
+        // A changed left text is printed from the beginning of the row, and
+        // the input follows it without an intervening column move.
+        REQUIRE(strstr(s_display_output.c_str(), "\rnew: ") != nullptr);
     }
 
     SECTION("Does not redraw unchanged left text during minimal input updates")
@@ -201,6 +203,7 @@ TEST_CASE("Display differential updates")
         // optimization while leaving begin at zero.
         fixture.m_buffer.set_text("Xbcde", 5);
         REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[7G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "left: ") == nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "bcde") == nullptr);
@@ -209,6 +212,7 @@ TEST_CASE("Display differential updates")
         s_display_output.clear();
         fixture.m_buffer.set_text("XbcdY", 5);
         REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[11G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "left: ") == nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Xbcd") == nullptr);
@@ -224,6 +228,7 @@ TEST_CASE("Display differential updates")
         // optimization while leaving begin at zero.
         fixture.m_buffer.set_text("Xbcde", 5);
         REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[10G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "message: ") == nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "bcde") == nullptr);
@@ -232,6 +237,7 @@ TEST_CASE("Display differential updates")
         s_display_output.clear();
         fixture.m_buffer.set_text("XbcdY", 5);
         REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[14G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "message: ") == nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Xbcd") == nullptr);

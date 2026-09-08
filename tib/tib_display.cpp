@@ -1010,17 +1010,18 @@ bool display_manager::display_internal(display_lines& lines)
         // Move the cursor to the start of the text to display.
         move_to_row(cursor, i, lines.m_inner_offset.y);
         const uint16_t left_text_width = (i == 0) ? lines.m_left_text.width() : 0;
-        // BUGBUG: this seems wrong; won't it end up moving to a column
-        // including the left_text_width and /THEN/ print the left text?
-        // However, in practice it seems to work out ok??
-        move_to_column(cursor, begin_width ? begin_width + left_text_width : 0, lines.m_inner_offset.x);
 
         // The left text is kept separate from the input text because it may
         // contain terminal escape sequences whose width the caller attests.
         if (i == 0 && !reuse_left_text && begin == 0 && lines.m_left_text.length())
         {
+            move_to_column(cursor, 0, lines.m_inner_offset.x);
             output(lines.m_left_text.c_str(), lines.m_left_text.length());
             cursor.x += left_text_width;
+        }
+        else
+        {
+            move_to_column(cursor, begin_width + left_text_width, lines.m_inner_offset.x);
         }
 
         // Display the text.
