@@ -51,6 +51,16 @@ static std::shared_ptr<tib::key_table_list> make_quoted_insert_key_table(bool nu
     return tables;
 }
 
+static std::shared_ptr<tib::key_table_list> make_universal_argument_key_table(bool quoted_insert=false)
+{
+    auto tables = tib::make_default_key_table(true/*numeric_argument*/);
+    REQUIRE(!tables->empty());
+    REQUIRE(tables->back()->add("\025", tib::binding_target_func("universal-argument")));
+    if (quoted_insert)
+        REQUIRE(tables->back()->add("\021", tib::binding_target_func("quoted-insert")));
+    return tables;
+}
+
 static void invoke_quoted_insert(tib::binding_resolver& resolver)
 {
     auto resolved = resolver.step('\021');
@@ -315,6 +325,132 @@ TEST_CASE("Digit argument uses a modal key table")
     REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
     REQUIRE(resolved.dispatch());
     REQUIRE(input->get_text() == "xxxxxxxxxxxx3");
+}
+
+TEST_CASE("Universal argument uses a modal key table")
+{
+    auto input = std::make_shared<self_insert_tester>();
+    input->initialize();
+    input->set_bindings(make_universal_argument_key_table());
+
+    tib::binding_resolver resolver;
+    resolver.add_target(input);
+
+    auto invoke_universal_argument = [&]()
+    {
+        auto resolved = resolver.step('\025');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("universal-argument"));
+        REQUIRE(resolved.dispatch());
+    };
+
+    auto invoke_digit_argument = [&](char digit)
+    {
+        auto resolved = resolver.step('\x1b');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+        resolved = resolver.step(digit);
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+        REQUIRE(resolved.dispatch());
+    };
+
+    SECTION("Supplies four and repeated invocations multiply by four")
+    {
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 4);
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 16);
+
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == "xxxxxxxxxxxxxxxx");
+        REQUIRE(!input->has_numeric_argument());
+    }
+
+    SECTION("Raw digits replace the implicit value")
+    {
+        invoke_universal_argument();
+        for (const char c : "12")
+        {
+            if (!c)
+                break;
+            auto resolved = resolver.step(c);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+            REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+            REQUIRE(resolved.dispatch());
+        }
+        REQUIRE(input->get_numeric_argument() == 12);
+
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 12);
+
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == "xxxxxxxxxxxx");
+    }
+
+    SECTION("First invocation preserves an existing digit argument")
+    {
+        input->set_bindings(make_universal_argument_key_table());
+        invoke_digit_argument('5');
+        REQUIRE(input->get_numeric_argument() == 5);
+
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 5);
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 20);
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 80);
+    }
+
+    SECTION("First invocation after raw digits preserves their value")
+    {
+        invoke_universal_argument();
+
+        auto resolved = resolver.step('5');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_numeric_argument() == 5);
+
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 5);
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 20);
+        invoke_universal_argument();
+        REQUIRE(input->get_numeric_argument() == 80);
+    }
+
+    SECTION("Accepts a leading minus before raw digits")
+    {
+        input->set_bindings(make_universal_argument_key_table(true/*quoted_insert*/));
+        invoke_universal_argument();
+
+        for (const char c : "-3")
+        {
+            if (!c)
+                break;
+            auto resolved = resolver.step(c);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+            REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+            REQUIRE(resolved.dispatch());
+        }
+        REQUIRE(input->get_numeric_argument() == -3);
+
+        invoke_quoted_insert(resolver);
+        for (const char c : "abc")
+        {
+            if (!c)
+                break;
+            auto resolved = resolver.step(c);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::quoted_insert);
+            REQUIRE(resolved.dispatch());
+        }
+        REQUIRE(input->get_text() == "abc");
+        REQUIRE(!input->has_numeric_argument());
+    }
 }
 
 TEST_CASE("Quoted insert does not read ahead")

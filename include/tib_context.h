@@ -141,13 +141,14 @@ public:
 
     void                set_auto_clear_numeric_argument(bool clear=true);
     void                clear_numeric_argument();
-    bool                has_numeric_argument() const { return m_has_numeric_argument; }
-    int32_t             get_argument_sign() const { return m_has_numeric_argument; }
+    bool                has_numeric_argument() const;
+    int32_t             get_argument_sign() const;
     void                set_argument_sign(int32_t sign);
     void                invert_argument_sign();
     int32_t             get_numeric_argument() const;
     void                set_numeric_argument(int32_t value);
     bool                numeric_digit(int32_t key);
+    bool                universal_argument();
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
@@ -196,7 +197,8 @@ private:
     void                begin_undo_group(bool merge);
     void                insert_raw_char(char c);
     void                clear_overwrite_input();
-    void                make_numeric_argument_message();
+    void                apply_message_text();
+    void                apply_override_bindings();
 
     static void         ensure_commands_sorted();
 
@@ -237,10 +239,7 @@ private:
     std::map<cstring, cstring, cstring_less> m_named_values;
 
     // Numeric argument.
-    bool                m_auto_clear_numeric_argument = false;
-    bool                m_has_numeric_argument = false;
-    bool                m_numeric_argument_has_digits = false;
-    bool                m_digit_argument_mode = false;
+    uint8_t             m_numflags = 0;
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
     int32_t             m_quoted_insert_count = 0;

@@ -508,6 +508,13 @@ int32_t digit_argument(tib::editor_context& ctx, int32_t key, const char* name, 
     return 0;
 }
 
+int32_t universal_argument(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    if (!ctx.universal_argument())
+        ding();
+    return 0;
+}
+
 //------------------------------------------------------------------------------
 
 static uint32_t get_scroll_lines(const editor_context& ctx)
@@ -902,6 +909,7 @@ static const editor_command c_commands[] =
     { "transpose-words", transpose_words },
     { "undo", undo },
     { "undo-all", undo_all },
+    { "universal-argument", universal_argument },
     { "upper-case", upper_case },
 };
 

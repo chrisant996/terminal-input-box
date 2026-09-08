@@ -2,8 +2,6 @@
 
 # TODO
 
-- Numeric argument:
-    - [ ] A `universal-argument` command that mimics the documented Readline behavior.
 - Commands:
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 - Display optimization:

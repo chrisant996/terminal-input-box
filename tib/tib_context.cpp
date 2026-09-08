@@ -17,14 +17,28 @@ bool g_optimize_self_insert = true;
 
 constexpr int32_t c_max_numeric_argument = 1000000; // REVIEW: add to editor_quirks?
 
-static std::shared_ptr<const key_table_list> make_digit_argument_key_table()
+constexpr uint8_t NUMFLAG_AUTO_CLEAR        = 0x01; // Clears numeric argument at end of dispatch.
+constexpr uint8_t NUMFLAG_HAS_ARGUMENT      = 0x02; // An explicit numeric argument is present.
+constexpr uint8_t NUMFLAG_ARGUMENT_MODE     = 0x04; // Digit-argument mode; behaves slightly differently than universal-argument mode.
+constexpr uint8_t NUMFLAG_HAS_ARG_DIGITS    = 0x08; // Because minus sign is not a digit.
+constexpr uint8_t NUMFLAG_UNIVERSAL_MODE    = 0x10; // Universal-argument mode; behaves slightly differently than digit-argument mode.
+constexpr uint8_t NUMFLAG_HAS_UNI_DIGITS    = 0x20; // Digits entered since the last universal-argument.
+
+static std::shared_ptr<const key_table_list> make_digit_argument_key_table(bool leading_minus=false)
 {
     auto table = std::make_shared<key_table>(false/*can_self_insert*/);
-    char seq[2] = { '0' };
-    while (seq[0] <= '9')
+    char seq[3] = { 0x1b, '0' };
+    while (seq[1] <= '9')
     {
         table->add(seq, binding_target_func("digit-argument"));
-        ++seq[0];
+        table->add(seq + 1, binding_target_func("digit-argument"));
+        ++seq[1];
+    }
+    if (leading_minus)
+    {
+        seq[1] = '-';
+        table->add(seq, binding_target_func("digit-argument"));
+        table->add(seq + 1, binding_target_func("digit-argument"));
     }
 
     auto table_list = std::make_shared<key_table_list>();
@@ -36,6 +50,12 @@ static std::shared_ptr<const key_table_list> get_digit_argument_key_table()
 {
     static const auto s_digits_table_list = make_digit_argument_key_table();
     return s_digits_table_list;
+}
+
+static std::shared_ptr<const key_table_list> get_universal_argument_key_table()
+{
+    static const auto s_universal_table_list = make_digit_argument_key_table(true/*leading_minus*/);
+    return s_universal_table_list;
 }
 
 undo_entry::~undo_entry()
@@ -776,45 +796,54 @@ void editor_context::clear_named_value(const char* name)
 
 void editor_context::set_auto_clear_numeric_argument(bool clear)
 {
-    m_auto_clear_numeric_argument = clear;
+    if (clear)
+        m_numflags |= NUMFLAG_AUTO_CLEAR;
+    else
+        m_numflags &= ~NUMFLAG_AUTO_CLEAR;
 }
 
 void editor_context::clear_numeric_argument()
 {
-    if (has_numeric_argument())
-        m_display.set_message_text(nullptr, 0);
-    m_auto_clear_numeric_argument = false;
-    m_has_numeric_argument = false;
-    m_numeric_argument_has_digits = false;
-    m_digit_argument_mode = false;
+    m_numflags = 0;
     m_sign_numeric_argument = 1;
     m_numeric_argument = 0;
+    apply_override_bindings();
+    apply_message_text();
+}
+
+bool editor_context::has_numeric_argument() const
+{
+    return !!(m_numflags & NUMFLAG_HAS_ARGUMENT);
+}
+
+int32_t editor_context::get_argument_sign() const
+{
+    return m_sign_numeric_argument;
 }
 
 void editor_context::set_argument_sign(int32_t sign)
 {
     m_sign_numeric_argument = (sign >= 0) ? 1 : -1;
-    make_numeric_argument_message();
+    apply_message_text();
 }
 
 void editor_context::invert_argument_sign()
 {
     m_sign_numeric_argument = 0 - m_sign_numeric_argument;
-    make_numeric_argument_message();
+    apply_message_text();
 }
 
 int32_t editor_context::get_numeric_argument() const
 {
-    return m_has_numeric_argument ? m_numeric_argument * m_sign_numeric_argument : 1;
+    return has_numeric_argument() ? m_numeric_argument * m_sign_numeric_argument : 1;
 }
 
 void editor_context::set_numeric_argument(int32_t value)
 {
-    m_has_numeric_argument = true;
-    m_numeric_argument_has_digits = true;
+    m_numflags |= NUMFLAG_HAS_ARGUMENT|NUMFLAG_HAS_ARG_DIGITS;
     m_sign_numeric_argument = (value >= 0) ? 1 : -1;
     m_numeric_argument = (value >= 0) ? value : 0 - value;
-    make_numeric_argument_message();
+    apply_message_text();
 }
 
 bool editor_context::numeric_digit(int32_t key)
@@ -831,9 +860,9 @@ bool editor_context::numeric_digit(int32_t key)
     case '7':
     case '8':
     case '9':
-        if (m_has_numeric_argument)
+        if (has_numeric_argument())
         {
-            if (!m_quirks.bash_digit_argument && !m_numeric_argument_has_digits)
+            if (!m_quirks.bash_digit_argument && !(m_numflags & NUMFLAG_HAS_ARG_DIGITS))
                 m_numeric_argument = 0;
             m_numeric_argument *= 10;
             m_numeric_argument += (key - '0');
@@ -846,13 +875,22 @@ bool editor_context::numeric_digit(int32_t key)
         else
         {
             clear_numeric_argument();
-            m_has_numeric_argument = true;
+            m_numflags |= NUMFLAG_HAS_ARGUMENT;
             m_numeric_argument = (key - '0');
         }
-        m_numeric_argument_has_digits = true;
+        m_numflags |= NUMFLAG_HAS_ARG_DIGITS;
+        if (m_numflags & NUMFLAG_UNIVERSAL_MODE)
+            m_numflags |= NUMFLAG_HAS_UNI_DIGITS;
         break;
     case '-':
-        if (m_has_numeric_argument)
+        if ((m_numflags & NUMFLAG_UNIVERSAL_MODE) &&
+            !(m_numflags & NUMFLAG_HAS_ARG_DIGITS) &&
+            m_sign_numeric_argument > 0)
+        {
+            m_sign_numeric_argument = -1;
+            m_numeric_argument = 1;
+        }
+        else if (has_numeric_argument())
         {
             int32_t repeat = get_numeric_argument();
             clear_numeric_argument();
@@ -868,7 +906,7 @@ bool editor_context::numeric_digit(int32_t key)
         else
         {
             clear_numeric_argument();
-            m_has_numeric_argument = true;
+            m_numflags |= NUMFLAG_HAS_ARGUMENT;
             m_sign_numeric_argument = -1;
             m_numeric_argument = 1;
         }
@@ -878,9 +916,51 @@ bool editor_context::numeric_digit(int32_t key)
     }
 
     set_auto_clear_numeric_argument(false);
-    m_digit_argument_mode = true;
-    override_bindings(get_digit_argument_key_table());
-    make_numeric_argument_message();
+    m_numflags |= NUMFLAG_ARGUMENT_MODE;
+    apply_override_bindings();
+    apply_message_text();
+    return true;
+}
+
+bool editor_context::universal_argument()
+{
+    const bool uni_mode = !!(m_numflags & NUMFLAG_UNIVERSAL_MODE);
+    const bool uni_digits = !!(m_numflags & NUMFLAG_HAS_UNI_DIGITS);
+    assert(implies(!uni_mode, !uni_digits));
+
+    if (uni_mode && uni_digits)
+    {
+        m_numflags &= ~(NUMFLAG_ARGUMENT_MODE|NUMFLAG_HAS_UNI_DIGITS);
+    }
+    else
+    {
+        if (uni_mode || !has_numeric_argument())
+        {
+            if (!uni_mode)
+            {
+                clear_numeric_argument();
+                m_numflags |= NUMFLAG_HAS_ARGUMENT;
+                m_sign_numeric_argument = 1;
+                m_numeric_argument = 1;
+            }
+
+            m_numeric_argument *= 4;
+            if (m_numeric_argument > c_max_numeric_argument)
+            {
+                clear_numeric_argument();
+                return false;
+            }
+
+            m_numflags |= NUMFLAG_ARGUMENT_MODE;
+            m_numflags &= ~NUMFLAG_HAS_ARG_DIGITS;
+        }
+
+        m_numflags |= NUMFLAG_UNIVERSAL_MODE;
+    }
+
+    set_auto_clear_numeric_argument(false);
+    apply_override_bindings();
+    apply_message_text();
     return true;
 }
 
@@ -919,7 +999,7 @@ void editor_context::clear_overwrite_input()
     m_overwrite_input_original_text.clear();
 }
 
-void editor_context::make_numeric_argument_message()
+void editor_context::apply_message_text()
 {
     if (has_numeric_argument())
     {
@@ -932,6 +1012,21 @@ void editor_context::make_numeric_argument_message()
     {
         m_display.set_message_text(nullptr, 0);
     }
+}
+
+void editor_context::apply_override_bindings()
+{
+    std::shared_ptr<const key_table_list> bindings;
+
+    if (m_numflags & NUMFLAG_ARGUMENT_MODE)
+    {
+        const bool uni = ((m_numflags & NUMFLAG_UNIVERSAL_MODE) &&
+                          !(m_numflags & NUMFLAG_HAS_ARG_DIGITS) &&
+                          m_sign_numeric_argument > 0);
+        bindings = (uni ? get_universal_argument_key_table() : get_digit_argument_key_table());
+    }
+
+    override_bindings(bindings);
 }
 
 void editor_context::insert_raw_char(char c)
@@ -1413,18 +1508,19 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
         }
     }
 
-    if (m_auto_clear_numeric_argument)
+    if (m_numflags & NUMFLAG_AUTO_CLEAR)
         clear_numeric_argument();
     return ret;
 }
 
 bool editor_context::on_binding_miss(const cstring&, int32_t) noexcept
 {
-    if (!m_digit_argument_mode)
+    if (!(m_numflags & NUMFLAG_ARGUMENT_MODE))
         return false;
 
-    m_digit_argument_mode = false;
-    override_bindings(nullptr);
+    m_numflags &= ~NUMFLAG_ARGUMENT_MODE;
+    apply_override_bindings();
+    apply_message_text();
     return true;
 }
 
