@@ -210,8 +210,9 @@ public:
     bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll(const selection_state& selection);
 
-    void                invalidate() { m_displayed.m_change_counter = 0; }
+    void                invalidate() { m_invalidated = true; }
     void                invalidate_border() { m_border_dirty = true; }
+    void                force_redisplay() { m_invalidated = true; m_force_redisplay = true; }
     bool                display();
     void                erase_display();
     void                move_to_end_of_display();
@@ -249,6 +250,8 @@ private:
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.
     bool                m_border_dirty = false;
+    bool                m_invalidated = false;
+    bool                m_force_redisplay = false;
     bool                m_hwheel_exclusion = false;
     textpos_t           m_hwheel_exclusion_left = 0;
     textpos_t           m_hwheel_exclusion_caret = 0;

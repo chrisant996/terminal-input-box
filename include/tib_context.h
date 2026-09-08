@@ -104,6 +104,7 @@ public:
 #endif
     void                invalidate();
     void                invalidate_border();
+    void                force_redisplay();
     void                display();
     void                erase_display();
     void                move_to_end_of_display();

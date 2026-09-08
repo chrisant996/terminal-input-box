@@ -180,6 +180,26 @@ private:
 
 TEST_CASE("Display differential updates")
 {
+    SECTION("Invalidation preserves matching display content")
+    {
+        display_test_fixture fixture;
+        REQUIRE(fixture.display_initial("abc", 3) == true);
+
+        fixture.m_display.invalidate();
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(strstr(s_display_output.c_str(), "abc") == nullptr);
+    }
+
+    SECTION("Forced redisplay redraws matching display content")
+    {
+        display_test_fixture fixture;
+        REQUIRE(fixture.display_initial("abc", 3) == true);
+
+        fixture.m_display.force_redisplay();
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "abc") != nullptr);
+    }
+
     SECTION("Redraws changed left text")
     {
         display_test_fixture fixture;
@@ -378,6 +398,7 @@ TEST_CASE("Display vertical caret movement")
     REQUIRE(fixture.display_initial("abc\ndef\nghi", 1, 0) == true);
 
     const int32_t cursor_column = fixture.m_display.get_relative_cursor().x;
+    fixture.m_display.invalidate();
     REQUIRE(fixture.m_display.move_caret_vertically(
                 1, cursor_column, fixture.m_buffer.get_selection_state_out(), true/*select*/));
     REQUIRE(fixture.m_buffer.get_selection_state().get_anchor() == 0);

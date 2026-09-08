@@ -7,7 +7,6 @@
 - Display optimization:
     - Clink does a full parse even when the caret moves; but I'd still like to skip the parse in tib when possible.
     - Unit tests to verify some specific cases for the display optimizations.
-    - Any time `m_displayed` is not empty, then new display lines should be compared to the display lines in `m_displayed`, even when `m_change_counter == 0`.
 
 ## Open Questions
 

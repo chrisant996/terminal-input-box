@@ -311,7 +311,7 @@ void editor_context::set_face_defs(const face_definitions* face_defs)
 void editor_context::set_empty_face(char face)
 {
     m_style.empty_face = face;
-    m_display.invalidate();
+    m_display.force_redisplay();
 }
 
 void editor_context::set_left_text(const char* left, uint16_t width)
@@ -427,6 +427,11 @@ int32_t editor_context::go(void* cookie)
 void editor_context::invalidate()
 {
     m_display.invalidate();
+}
+
+void editor_context::force_redisplay()
+{
+    m_display.force_redisplay();
 }
 
 void editor_context::invalidate_border()

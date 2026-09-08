@@ -715,7 +715,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
 
 int32_t redisplay(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
-    ctx.invalidate();
+    ctx.force_redisplay();
     ctx.invalidate_border();
     ctx.display();
     return 0;

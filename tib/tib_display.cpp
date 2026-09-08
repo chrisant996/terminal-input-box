@@ -308,19 +308,20 @@ void display_manager::init_buffer(const input_buffer* buffer)
 void display_manager::init_style(const style_info* style)
 {
     m_style = style;
-    invalidate();
+    force_redisplay();
     invalidate_border();
 }
 
 void display_manager::init_faces(const face_definitions* face_defs)
 {
     m_face_defs = face_defs;
-    invalidate();
+    force_redisplay();
 }
 
 void display_manager::init_callbacks(editor_callbacks* callbacks)
 {
     m_callbacks = callbacks;
+    invalidate();
 }
 
 void display_manager::set_origin(int32_t x, int32_t y)
@@ -342,7 +343,7 @@ std::shared_ptr<const color_table> display_manager::get_color_table() const
 void display_manager::set_color_table(std::shared_ptr<const color_table> colors)
 {
     m_colors = colors;
-    invalidate();
+    force_redisplay();
     invalidate_border();
 }
 
@@ -545,8 +546,6 @@ void display_manager::suppress_auto_horizontal_scroll(const selection_state& sel
 bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection, bool select)
 {
     const coord max_size = get_effective_max_size();
-    // BUGBUG: don't just give up; if it does then any invalidate() breaks all
-    // subsequent operations that rely on m_change_counter != 0.
     if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
         return false;
 
@@ -650,8 +649,6 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
 
 bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars, bool word_drag)
 {
-    // BUGBUG: this should not just give up; if it does then any invalidate()
-    // breaks all subsequent operations that require m_change_counter != 0.
     if (!m_displayed.m_change_counter)
         return false;
 
@@ -871,8 +868,7 @@ bool display_manager::display_internal(display_lines& lines)
     const coord displayed_input_extent = { m_displayed.m_extent.x, m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) };
     assert(input_extent.y >= 0);
     assert(displayed_input_extent.y >= 0);
-    // BUGBUG: the m_change_counter check is overly aggressive.
-    if (!m_displayed.m_change_counter || input_extent != displayed_input_extent)
+    if (m_force_redisplay || input_extent != displayed_input_extent)
         m_border_dirty = true;
 
     m_accumulator.clear();
@@ -923,10 +919,7 @@ bool display_manager::display_internal(display_lines& lines)
         uint16_t begin_width = 0;
         bool reuse_displayed_line = false;
         bool reuse_left_text = false;
-        // BUGBUG: why is this checking m_change_counter?  That seems totally
-        // wrong; doesn't it force every invalidate() to do a full redisplay?
-        // But that seems unnecessary.
-        if (m_displayed.m_change_counter && i < m_displayed.m_lines.size())
+        if (!m_force_redisplay && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
             reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
@@ -1089,7 +1082,7 @@ bool display_manager::display_internal(display_lines& lines)
         const additional_display_line* displayed = nullptr;
         if (row >= displayed_additional_begin && row < m_displayed.m_extent.y)
             displayed = &m_displayed.m_additional_lines[row - displayed_additional_begin];
-        if (m_displayed.m_change_counter)
+        if (!m_force_redisplay)
         {
             const bool reuse_displayed_line = displayed && line == *displayed &&
                 (!line.bounded || input_extent.x == displayed_input_extent.x);
@@ -1186,6 +1179,8 @@ bool display_manager::display_internal(display_lines& lines)
     m_top = lines.m_top;
     m_displayed = std::move(lines);
     m_relative_cursor = cursor;
+    m_invalidated = false;
+    m_force_redisplay = false;
     return any_updates;
 }
 
@@ -1296,7 +1291,8 @@ bool display_manager::build(display_lines& out)
     const textpos_t anchor = sel_state.get_anchor();
     const textpos_t left = m_left;
 
-    if (change_counter == m_displayed.m_change_counter &&
+    if (!m_invalidated &&
+        change_counter == m_displayed.m_change_counter &&
         pos == m_displayed.m_pos &&
         anchor == m_displayed.m_anchor &&
         left == m_displayed.m_left &&
