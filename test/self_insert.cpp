@@ -274,6 +274,49 @@ TEST_CASE("Quoted insert")
     }
 }
 
+TEST_CASE("Digit argument uses a modal key table")
+{
+    auto input = std::make_shared<self_insert_tester>();
+    input->initialize();
+    input->set_bindings(tib::make_default_key_table(true/*numeric_argument*/));
+
+    tib::binding_resolver resolver;
+    resolver.add_target(input);
+
+    auto resolved = resolver.step('\x1b');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+    resolved = resolver.step('0');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+    REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+    REQUIRE(resolved.dispatch());
+    REQUIRE(input->get_numeric_argument() == 0);
+
+    resolved = resolver.step('1');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+    REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+    REQUIRE(resolved.dispatch());
+    REQUIRE(input->get_numeric_argument() == 1);
+
+    resolved = resolver.step('\x1b');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+    resolved = resolver.step('2');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+    REQUIRE(resolved.binding_target->is_func_name("digit-argument"));
+    REQUIRE(resolved.dispatch());
+    REQUIRE(input->get_numeric_argument() == 12);
+
+    resolved = resolver.step('x');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+    REQUIRE(resolved.dispatch());
+    REQUIRE(input->get_text() == "xxxxxxxxxxxx");
+    REQUIRE(!input->has_numeric_argument());
+
+    resolved = resolver.step('3');
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+    REQUIRE(resolved.dispatch());
+    REQUIRE(input->get_text() == "xxxxxxxxxxxx3");
+}
+
 TEST_CASE("Quoted insert does not read ahead")
 {
     REQUIRE(!tib::g_optimize_self_insert);

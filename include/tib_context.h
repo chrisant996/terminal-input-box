@@ -181,7 +181,8 @@ public:
     static editor_command_func_t lookup_command(const char* name);
 
                         // Methods on the tib::dispatcher_target interface.
-    int32_t             dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept;
+    int32_t             dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept override;
+    bool                on_binding_miss(const cstring& sequence, int32_t key) noexcept override;
 
 protected:
     bool                get_allow_optimized_self_insert() const { return m_allow_optimized_self_insert; }
@@ -239,6 +240,7 @@ private:
     bool                m_auto_clear_numeric_argument = false;
     bool                m_has_numeric_argument = false;
     bool                m_numeric_argument_has_digits = false;
+    bool                m_digit_argument_mode = false;
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
     int32_t             m_quoted_insert_count = 0;

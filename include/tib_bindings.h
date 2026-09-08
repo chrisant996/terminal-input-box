@@ -150,6 +150,7 @@ class dispatcher_target : public std::enable_shared_from_this<dispatcher_target>
 public:
     std::shared_ptr<const key_table_list> get_bindings() const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
+    void                override_bindings(std::shared_ptr<const key_table_list> bindings);
 
     // The binding_resolver::step() produces a resolved_binding in three cases:
     //
@@ -166,8 +167,17 @@ public:
     // translated through key bindings.
     virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept = 0;
 
+    // Called when the current input sequence neither matches nor partially
+    // matches any key table from get_bindings(), and is not self-insertable
+    // by this dispatcher_target.  Returning true asks the binding_resolver to
+    // fetch the bindings again and retry the same input sequence against this
+    // dispatcher_target; the callback must first change the applicable state.
+    // Only one retry is allowed per input per dispatcher_target.
+    virtual bool        on_binding_miss(const cstring& sequence, int32_t key) noexcept { return false; }
+
 private:
     std::shared_ptr<const key_table_list> m_bindings;
+    std::shared_ptr<const key_table_list> m_override_bindings;
 };
 
 struct resolved_binding

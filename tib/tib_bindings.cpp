@@ -229,12 +229,19 @@ void key_table::clear()
 
 std::shared_ptr<const key_table_list> dispatcher_target::get_bindings() const
 {
+    if (m_override_bindings)
+        return m_override_bindings;
     return m_bindings;
 }
 
 void dispatcher_target::set_bindings(std::shared_ptr<const key_table_list> bindings)
 {
     m_bindings = bindings;
+}
+
+void dispatcher_target::override_bindings(std::shared_ptr<const key_table_list> bindings)
+{
+    m_override_bindings = bindings;
 }
 
 resolved_binding::resolved_binding(std::shared_ptr<binding_resolver_state> state)
@@ -324,6 +331,8 @@ void binding_resolver::reset()
 
 resolved_binding binding_resolver::step(uint8_t c)
 {
+    constexpr uint32_t c_max_binding_retries = 1;
+
     if (!m_state->quoted_insert_target.expired())
     {
         const std::weak_ptr<dispatcher_target> weak = m_state->quoted_insert_target;
@@ -340,17 +349,26 @@ resolved_binding binding_resolver::step(uint8_t c)
 
     m_sequence.append(reinterpret_cast<const char*>(&c), 1);
 
+    struct step_state
+    {
+        bool            is_prefix = false;
+        int8_t          can_self_insert = -1;
+        bool            has_self_insert_target = false;
+        std::weak_ptr<dispatcher_target> self_insert_target;
+    };
+
     // Search the key tables in priority order (later tables overlay earlier
     // tables) looking for an exact match or a prefix match.
-    bool is_prefix = false;
-    int8_t can_self_insert = -1;
-    bool has_self_insert_target = false;
-    std::weak_ptr<dispatcher_target> self_insert_target;
+    step_state state;
     for (auto& weak : m_registrants)
     {
         std::shared_ptr<dispatcher_target> target = weak.lock();
         if (!target)
             continue;
+
+        uint32_t retry_count = 0;
+retry_target:
+        const step_state saved_state = state;
 
         const auto bindings_list = target->get_bindings();
         if (!bindings_list)
@@ -358,16 +376,17 @@ resolved_binding binding_resolver::step(uint8_t c)
 
         for (auto& table = bindings_list->rbegin(); table != bindings_list->rend(); ++table)
         {
-            // Only one table can accept self-insert input; last one in the
-            // bindings list wins.
-            assert(can_self_insert <= 0);
-            if (can_self_insert < 0)
-                can_self_insert = (*table)->can_self_insert();
+            // Only one table can accept self-insert input; the last one in
+            // the bindings list from the first dispatcher_target with a
+            // self-insert table wins.
+            assert(state.can_self_insert <= 0);
+            if (state.can_self_insert < 0)
+                state.can_self_insert = (*table)->can_self_insert();
 
-            if (can_self_insert > 0 && m_sequence.length() == 1 && !has_self_insert_target)
+            if (state.can_self_insert > 0 && m_sequence.length() == 1 && !state.has_self_insert_target)
             {
-                self_insert_target = target;
-                has_self_insert_target = true;
+                state.self_insert_target = target;
+                state.has_self_insert_target = true;
             }
 
             const auto& bindings = (*table)->m_bindings;
@@ -395,7 +414,7 @@ resolved_binding binding_resolver::step(uint8_t c)
                     reset();
                     return resolved;
                 }
-                is_prefix = true;
+                state.is_prefix = true;
             }
 
             if (found == patterns ||
@@ -492,7 +511,7 @@ resolved_binding binding_resolver::step(uint8_t c)
                             reset();
                             return resolved;
                         }
-                        is_prefix = true;
+                        state.is_prefix = true;
                     }
 
 continue_label:
@@ -501,12 +520,20 @@ continue_label:
             }
 
             // Only one table gets to accept self-insert input.
-            if (can_self_insert > 0)
-                can_self_insert = 0;
+            if (state.can_self_insert > 0)
+                state.can_self_insert = 0;
+        }
+
+        if (!state.is_prefix && target->on_binding_miss(m_sequence, c))
+        {
+            state = saved_state;
+            if (++retry_count <= c_max_binding_retries)
+                goto retry_target;
+            assert(false && "dispatcher_target exceeded binding miss retry limit");
         }
     }
 
-    if (is_prefix)
+    if (state.is_prefix)
     {
         resolved_binding resolved;
         resolved.sequence = m_sequence;
@@ -523,12 +550,12 @@ continue_label:
         return step(c);
     }
 
-    if (m_sequence.length() == 1 && has_self_insert_target && is_self_insertable(m_sequence.c_str()[0]))
+    if (m_sequence.length() == 1 && state.has_self_insert_target && is_self_insertable(m_sequence.c_str()[0]))
     {
         resolved_binding resolved;
         resolved.sequence = m_sequence;
         resolved.key = c;
-        resolved.dispatcher_target = self_insert_target;
+        resolved.dispatcher_target = state.self_insert_target;
         resolved.outcome = dispatch_outcome::self_insert;
         reset();
         return resolved;

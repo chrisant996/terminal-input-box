@@ -501,7 +501,7 @@ int32_t toggle_case(editor_context& ctx, int32_t key, const char* name, const bi
 
 //------------------------------------------------------------------------------
 
-int32_t numeric_digit(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+int32_t digit_argument(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     if (!ctx.numeric_digit(key))
         ding();
@@ -878,7 +878,7 @@ static const editor_command c_commands[] =
     { "del-char-right", del_char_right },
     { "del-word-left", del_word_left },
     { "del-word-right", del_word_right },
-    { "digit-argument", numeric_digit },
+    { "digit-argument", digit_argument },
     { "end-of-line", end_of_line },
     { "forward-bigword", forward_bigword },
     { "forward-char", forward_char },

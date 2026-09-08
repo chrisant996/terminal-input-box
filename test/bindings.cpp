@@ -83,6 +83,48 @@ TEST_CASE("Adding a key binding moves its sequence storage")
     REQUIRE(table.begin()->sequence.c_str() == sequence_storage);
 }
 
+class binding_miss_tester : public dispatcher_tester
+{
+public:
+    uint32_t            get_miss_count() const noexcept { return m_miss_count; }
+    bool                on_binding_miss(const tib::cstring&, int32_t) noexcept override;
+
+private:
+    uint32_t            m_miss_count = 0;
+};
+
+bool binding_miss_tester::on_binding_miss(const tib::cstring&, int32_t) noexcept
+{
+    ++m_miss_count;
+    return false;
+}
+
+TEST_CASE("Partial match suppresses later binding miss")
+{
+    auto prefix_table = std::make_shared<tib::key_table>();
+    REQUIRE(prefix_table->add("ab", tib::binding_target_func("prefix-command")));
+    auto prefix_tables = std::make_shared<tib::key_table_list>();
+    prefix_tables->emplace_back(std::move(prefix_table));
+    auto prefix_target = std::make_shared<dispatcher_tester>();
+    prefix_target->set_bindings(std::move(prefix_tables));
+
+    auto miss_table = std::make_shared<tib::key_table>();
+    REQUIRE(miss_table->add("z", tib::binding_target_func("miss-command")));
+    auto miss_tables = std::make_shared<tib::key_table_list>();
+    miss_tables->emplace_back(std::move(miss_table));
+
+    auto miss_target = std::make_shared<binding_miss_tester>();
+    miss_target->set_bindings(std::move(miss_tables));
+
+    tib::binding_resolver resolver;
+    resolver.add_target(prefix_target);
+    resolver.add_target(miss_target);
+
+    const auto resolved = resolver.step('a');
+    REQUIRE(miss_target->get_miss_count() == 0);
+    REQUIRE(resolved.outcome == tib::dispatch_outcome::more);
+}
+
 TEST_CASE("Key bindings")
 {
     SECTION("Main")

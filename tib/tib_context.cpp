@@ -17,6 +17,27 @@ bool g_optimize_self_insert = true;
 
 constexpr int32_t c_max_numeric_argument = 1000000; // REVIEW: add to editor_quirks?
 
+static std::shared_ptr<const key_table_list> make_digit_argument_key_table()
+{
+    auto table = std::make_shared<key_table>(false/*can_self_insert*/);
+    char seq[2] = { '0' };
+    while (seq[0] <= '9')
+    {
+        table->add(seq, binding_target_func("digit-argument"));
+        ++seq[0];
+    }
+
+    auto table_list = std::make_shared<key_table_list>();
+    table_list->emplace_back(std::move(table));
+    return table_list;
+}
+
+static std::shared_ptr<const key_table_list> get_digit_argument_key_table()
+{
+    static const auto s_digits_table_list = make_digit_argument_key_table();
+    return s_digits_table_list;
+}
+
 undo_entry::~undo_entry()
 {
     assert(!m_prev);
@@ -765,6 +786,7 @@ void editor_context::clear_numeric_argument()
     m_auto_clear_numeric_argument = false;
     m_has_numeric_argument = false;
     m_numeric_argument_has_digits = false;
+    m_digit_argument_mode = false;
     m_sign_numeric_argument = 1;
     m_numeric_argument = 0;
 }
@@ -856,6 +878,8 @@ bool editor_context::numeric_digit(int32_t key)
     }
 
     set_auto_clear_numeric_argument(false);
+    m_digit_argument_mode = true;
+    override_bindings(get_digit_argument_key_table());
     make_numeric_argument_message();
     return true;
 }
@@ -1392,6 +1416,16 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
     if (m_auto_clear_numeric_argument)
         clear_numeric_argument();
     return ret;
+}
+
+bool editor_context::on_binding_miss(const cstring&, int32_t) noexcept
+{
+    if (!m_digit_argument_mode)
+        return false;
+
+    m_digit_argument_mode = false;
+    override_bindings(nullptr);
+    return true;
 }
 
 #ifdef DEBUG
