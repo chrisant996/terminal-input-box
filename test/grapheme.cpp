@@ -191,6 +191,52 @@ TEST_CASE("Display differential updates")
         REQUIRE(strstr(s_display_output.c_str(), "new: ") != nullptr);
     }
 
+    SECTION("Does not redraw unchanged left text during minimal input updates")
+    {
+        display_test_fixture fixture(20);
+        fixture.m_display.set_left_text("left: ", 6);
+        REQUIRE(fixture.display_initial("abcde", 5) == true);
+
+        // A change at the beginning exercises the matching-suffix
+        // optimization while leaving begin at zero.
+        fixture.m_buffer.set_text("Xbcde", 5);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "left: ") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "bcde") == nullptr);
+
+        // A change at the end exercises the matching-prefix optimization.
+        s_display_output.clear();
+        fixture.m_buffer.set_text("XbcdY", 5);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "left: ") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "Xbcd") == nullptr);
+    }
+
+    SECTION("Does not redraw unchanged message text during minimal input updates")
+    {
+        display_test_fixture fixture(20);
+        fixture.m_display.set_message_text("message: ", 9);
+        REQUIRE(fixture.display_initial("abcde", 5) == true);
+
+        // A change at the beginning exercises the matching-suffix
+        // optimization while leaving begin at zero.
+        fixture.m_buffer.set_text("Xbcde", 5);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "message: ") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "bcde") == nullptr);
+
+        // A change at the end exercises the matching-prefix optimization.
+        s_display_output.clear();
+        fixture.m_buffer.set_text("XbcdY", 5);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "message: ") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "Xbcd") == nullptr);
+    }
+
     SECTION("Reuses a line only when all displayed text matches")
     {
         display_test_fixture fixture;
