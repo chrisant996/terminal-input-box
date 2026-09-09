@@ -23,6 +23,7 @@ static const char c_long_usage[] =
 "                      first-line, none).\n"
 "  --left TEXT       Display TEXT at the left of the first line.\n"
 "  --right TEXT      Display TEXT at the right of the first line.\n"
+"  --origin X        Set origin X coordinate (1-based).\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
 ;
@@ -290,6 +291,7 @@ int main(int argc, const char** argv)
     tib::mouse_input_mode mode = tib::mouse_input_mode::none;
     bool sgr_encoding = true;
     bool set_mouse_input_mode = false;
+    int32_t origin_x = -1;
 
     for (int i = 0; i < argc; ++i)
     {
@@ -396,6 +398,24 @@ no_border:
             else
             {
                 fputs("Missing right text.\n", stderr);
+                return 1;
+            }
+        }
+        else if (_stricmp(argv[i], "--origin") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                origin_x = atoi(argv[i]);
+                if (origin_x <= 0)
+                {
+                    fputs("Invalid origin coordinate.\n", stderr);
+                    return 1;
+                }
+            }
+            else
+            {
+                fputs("Missing origin coordinate.\n", stderr);
                 return 1;
             }
         }
@@ -523,6 +543,9 @@ no_border:
     tib->set_border(border);
     tib->set_left_text(left_text.c_str(), left_width);
     tib->set_right_text(right_text.c_str(), right_width);
+
+    if (origin_x > 0)
+        tib->set_origin(origin_x);
 #pragma endregion // Example customizations.
 
     tib->initialize("hello world");
