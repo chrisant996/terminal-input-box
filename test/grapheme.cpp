@@ -130,6 +130,17 @@ public:
     }
 };
 
+class display_test_callbacks : public tib::editor_callbacks
+{
+public:
+    void provide_faces(const tib::input_buffer&, tib::cstring&) override
+    {
+        ++m_calls;
+    }
+
+    uint32_t m_calls = 0;
+};
+
 static tib::cstring s_display_output;
 
 class display_test_fixture
@@ -283,6 +294,106 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "zzz") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "xyz") == nullptr);
+    }
+
+    SECTION("Caret-only updates skip rebuilding display rows")
+    {
+        display_test_fixture fixture(5, false, 3);
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("abcde12345", 1) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(7, 7);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(callbacks.m_calls == 1);
+        const tib::coord expected = { 2, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+        REQUIRE(strstr(s_display_output.c_str(), "abcde") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "12345") == nullptr);
+    }
+
+    SECTION("Caret-only updates preserve grapheme columns")
+    {
+        display_test_fixture fixture(10, false, 2);
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("a\xe4\xb8\xad" "b", 0) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(4, 4);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(callbacks.m_calls == 1);
+        const tib::coord expected = { 3, 0 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Caret-only updates handle split controls and phantom rows")
+    {
+        display_test_fixture fixture(8, false, 3);
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("aaaaaaa\t", 8) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(7, 7);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(callbacks.m_calls == 1);
+        const tib::coord before_control = { 7, 0 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == before_control);
+
+        fixture.m_buffer.set_text("abcdefgh", 0);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(callbacks.m_calls == 2);
+        fixture.m_buffer.set_selection(8, 8);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(callbacks.m_calls == 2);
+        const tib::coord phantom_row = { 0, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == phantom_row);
+    }
+
+    SECTION("Padding rows do not masquerade as end-of-input rows")
+    {
+        display_test_fixture fixture(8, false, 3);
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("abc", 0) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(3, 3);
+        REQUIRE(fixture.m_display.display() == false);
+        REQUIRE(callbacks.m_calls == 1);
+        const tib::coord expected = { 3, 0 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Caret-only updates fall back when the viewport must scroll")
+    {
+        display_test_fixture fixture(5, false, 2);
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("abcdefghijklmno", 1) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(12, 12);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(callbacks.m_calls == 2);
+        REQUIRE(fixture.m_display.get_top() == 1);
+        const tib::coord expected = { 2, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Selection changes still rebuild display rows")
+    {
+        display_test_fixture fixture;
+        display_test_callbacks callbacks;
+        fixture.m_display.init_callbacks(&callbacks);
+        REQUIRE(fixture.display_initial("abc", 0) == true);
+        REQUIRE(callbacks.m_calls == 1);
+
+        fixture.m_buffer.set_selection(0, 1);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(callbacks.m_calls == 2);
     }
 
     SECTION("Skips matching leading and trailing text")

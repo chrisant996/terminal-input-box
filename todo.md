@@ -5,9 +5,6 @@
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 - Commands:
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
-- Display optimization:
-    - Clink does a full parse even when the caret moves; but I'd still like to skip the parse in tib when possible.
-    - Unit tests to verify some specific cases for the display optimizations.
 - `autowrap_bug` from Clink.
 - `pending_wrap` from Clink.
 - `end_prompt_lf` from Clink.

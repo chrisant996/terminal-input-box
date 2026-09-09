@@ -224,6 +224,7 @@ private:
     void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
     void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
     const char*         get_face_def(char face) const;
+    bool                try_update_caret_only();
     bool                display_internal(display_lines& lines);
     void                ensure_left();
     bool                build(display_lines& out);

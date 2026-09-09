@@ -20,6 +20,7 @@ bool g_coalesce_output = true;
 bool g_show_hide_cursor = true;
 
 constexpr uint16_t c_right_text_padding = 2;
+constexpr textpos_t c_padding_row_offset = INT32_MAX;
 
 const border_definition c_light_border =
 {
@@ -811,6 +812,8 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
         return true;
     };
     const display_row_start& start = m_displayed.m_rows[row];
+    if (start.offset == c_padding_row_offset)
+        return set_screen_caret(textpos_t(text.length()));
     textpos_t caret = start.offset;
     uint32_t screen_column = 0;
 
@@ -937,12 +940,115 @@ bool display_manager::display()
 
     ensure_left();
 
+    // If only the caret has changed, then the cursor can simply be updated.
+    if (try_update_caret_only())
+        return false;
+
     // Format content into display structures.
     display_lines tmp;
     if (!build(tmp))
         return false;   // Nothing changed since last display (or OOM error).
 
     return display_internal(tmp);
+}
+
+bool display_manager::try_update_caret_only()
+{
+    if (m_invalidated ||
+        !m_displayed.m_change_counter ||
+        m_buffer->get_change_counter() != m_displayed.m_change_counter ||
+        m_displayed.m_anchor != m_displayed.m_pos ||
+        m_left != m_displayed.m_left ||
+        int32_t(m_top) != m_displayed.m_top ||
+        m_additional_lines != m_displayed.m_additional_lines ||
+        m_displayed.m_rows.empty())
+        return false;
+
+    const selection_state& selection = m_buffer->get_selection_state();
+    const textpos_t caret = selection.get_caret();
+    if (selection.has_selection() ||
+        caret == m_displayed.m_pos)
+        return false;
+
+    const cstring& text = m_buffer->get_text();
+    if (caret > text.length())
+        return false;
+
+    size_t row = 0;
+    while (row + 1 < m_displayed.m_rows.size() && m_displayed.m_rows[row + 1].offset <= caret)
+        ++row;
+
+    const display_row_start* start = &m_displayed.m_rows[row];
+    if (caret < start->offset)
+        return false;
+
+    // A pending row begins with the second displayed cell of a control
+    // character.  The caret at its byte offset belongs before the control
+    // character, on the preceding row.
+    if (start->pending && caret == start->offset)
+    {
+        if (!row)
+            return false;
+        start = &m_displayed.m_rows[--row];
+    }
+
+    const coord max_size = get_effective_max_size();
+    if (max_size.x <= 0 || max_size.y <= 0)
+        return false;
+    const bool multiline = (max_size.y > 1);
+
+    uint32_t column = (m_displayed.m_top + row == 0) ? m_displayed.m_left_text.width() : 0;
+    textpos_t pos = start->offset;
+    if (start->pending)
+    {
+        pos = forward_one_grapheme(text.c_str(), text.length(), pos, nullptr);
+        column = 1;
+    }
+
+    while (pos < caret)
+    {
+        uint16_t width;
+        const textpos_t next = forward_one_grapheme(text.c_str(), text.length(), pos, &width);
+        if (next <= pos)
+            return false;
+        if (next > caret)
+            break;
+        if (multiline && text.c_str()[pos] == '\n')
+            return false;
+        if (column + width > uint32_t(max_size.x))
+            return false;
+        column += width;
+        pos = next;
+    }
+
+    if (!multiline && m_left && m_style->horiz_scroll_markers)
+    {
+        uint16_t replaced_width;
+        forward_one_grapheme(text.c_str(), text.length(), m_left, &replaced_width);
+        column = get_horiz_scrolled_width(uint16_t(column), replaced_width);
+    }
+    if (column >= uint32_t(max_size.x))
+        return false;
+
+    // A full build moves the viewport rather than putting the caret under a
+    // multiline scroll marker.  Defer to it in those cases.
+    if (multiline && m_displayed.m_top && !row && column < c_horz_scroll_indicator_chars)
+        return false;
+    if (multiline && row + 1 == m_displayed.m_rows.size())
+    {
+        const display_line& line = *m_displayed.m_lines[row];
+        if (line.m_trail_scroller_width_displaced &&
+            column >= uint32_t(line.width() - line.m_trail_scroller_width_displaced))
+            return false;
+    }
+
+    m_displayed.m_pos = caret;
+    m_displayed.m_anchor = caret;
+    m_displayed.m_cursor = { int32_t(column), int32_t(row) };
+
+    init_horizpos_workaround();
+    move_to_caret_position();
+    return true;
 }
 
 bool display_manager::display_internal(display_lines& lines)
@@ -1783,7 +1889,6 @@ again:
         tmp.m_lines.emplace_back(build_row(i));
         tmp.m_rows.emplace_back(rows[i]);
     }
-
     // Adjust the cursor to be relative to the origin.
     tmp.m_cursor.y -= tmp.m_top;
 
@@ -1794,7 +1899,7 @@ again:
     while (tmp.m_lines.size() < y_extent)
     {
         tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
-        tmp.m_rows.push_back({ textpos_t(text.length()), false });
+        tmp.m_rows.push_back({ c_padding_row_offset, false });
     }
 
     assert(implies(!multiline, !tmp.m_top));
