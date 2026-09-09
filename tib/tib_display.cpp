@@ -899,6 +899,18 @@ bool display_manager::display_internal(display_lines& lines)
     if (g_show_hide_cursor)
         output(c_hide_cursor);
 
+#ifdef DEBUG
+    {
+        tib::cstring v;
+        if (tib::getenv("TIB_SHOW_INCREMENTAL_UPDATES", v) && !v.empty())
+        {
+            move_to_row(cursor, 0, 0);
+            move_to_column(cursor, 0, 0);
+            output("\x1b[J");
+        }
+    }
+#endif
+
     // Draw border if needed.
     if (!lines.m_erase && m_style && m_style->border && m_border_dirty)
     {
