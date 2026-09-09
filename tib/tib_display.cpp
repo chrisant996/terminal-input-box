@@ -52,6 +52,97 @@ int8_t border_definition::get_width(const char* s, int8_t width) const
     return (!s || !*s) ? 0 : (width < 0) ? __wcswidth(s, -1) : width;
 }
 
+#ifdef _WIN32
+// When the Windows legacy console window's visible area is a subset of the
+// console width, then the visible area can jitter around or can accidentally
+// clip the region that gets cleared by CSI K (Erase in Line, aka EL).  The
+// technique encapsulated in preserve_window_horiz_scroll_position minimizes
+// the amount of jitter.
+class preserve_window_horiz_scroll_position
+{
+public:
+                        preserve_window_horiz_scroll_position(HANDLE h, display_manager* mgr);
+                        ~preserve_window_horiz_scroll_position();
+private:
+    static int32_t      s_nested;
+    static bool         s_saved_can_use_clreol;
+    static HANDLE       s_h;
+    static display_manager* s_mgr;
+    static CONSOLE_SCREEN_BUFFER_INFO s_window;
+};
+
+static bool s_can_use_clreol = true;
+
+int32_t preserve_window_horiz_scroll_position::s_nested = 0;
+bool preserve_window_horiz_scroll_position::s_saved_can_use_clreol = true;
+HANDLE preserve_window_horiz_scroll_position::s_h = nullptr;
+display_manager* preserve_window_horiz_scroll_position::s_mgr = nullptr;
+CONSOLE_SCREEN_BUFFER_INFO preserve_window_horiz_scroll_position::s_window;
+
+preserve_window_horiz_scroll_position::preserve_window_horiz_scroll_position(HANDLE h, display_manager* mgr)
+{
+    assert(implies(!s_nested, !s_h));
+    ++s_nested;
+    if (!s_h && h)
+    {
+        s_saved_can_use_clreol = s_can_use_clreol;
+        // TODO: have a global setting to always allow clreol (e.g. Clink's
+        // internal terminal emulator implementation of CSI K doesn't have the
+        // clipping issue).
+        s_can_use_clreol = false;
+
+        s_h = h;
+        s_mgr = mgr;
+        s_mgr->do_flush();
+        GetConsoleScreenBufferInfo(s_h, &s_window);
+    }
+}
+
+preserve_window_horiz_scroll_position::~preserve_window_horiz_scroll_position()
+{
+    assert(s_nested > 0);
+    if (s_h)
+    {
+        s_mgr->do_flush();
+        CONSOLE_SCREEN_BUFFER_INFO cursor;
+        GetConsoleScreenBufferInfo(s_h, &cursor);
+        if (cursor.srWindow.Right - cursor.srWindow.Left == s_window.srWindow.Right - s_window.srWindow.Left &&
+            cursor.srWindow.Bottom - cursor.srWindow.Top == s_window.srWindow.Bottom - s_window.srWindow.Top &&
+            cursor.srWindow.Left != s_window.srWindow.Left &&
+            cursor.dwCursorPosition.Y >= s_window.srWindow.Top &&
+            cursor.dwCursorPosition.Y <= s_window.srWindow.Bottom)
+        {
+            // Only restore the horizontal scroll position.  If the vertical
+            // scroll position is also restored, then this interferes with
+            // text output scrolling the terminal vertically when it goes past
+            // the bottom of the visible window.
+            const SHORT currentLeft = cursor.srWindow.Left;
+            SHORT delta = 0;
+            cursor.srWindow.Left = s_window.srWindow.Left;
+            cursor.srWindow.Right = s_window.srWindow.Right;
+            if (cursor.dwCursorPosition.X < cursor.srWindow.Left)
+                delta = cursor.dwCursorPosition.X - cursor.srWindow.Left;
+            else if (cursor.dwCursorPosition.X > cursor.srWindow.Right)
+                delta = cursor.dwCursorPosition.X - cursor.srWindow.Right;
+            cursor.srWindow.Left += delta;
+            cursor.srWindow.Right += delta;
+            if (cursor.srWindow.Left != currentLeft)
+                SetConsoleWindowInfo(s_h, true, &cursor.srWindow);
+        }
+    }
+    --s_nested;
+    if (!s_nested)
+    {
+        if (s_h)
+            s_can_use_clreol = s_saved_can_use_clreol;
+        s_saved_can_use_clreol = true;
+
+        s_h = nullptr;
+        s_mgr = nullptr;
+    }
+}
+#endif // _WIN32
+
 static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
 {
     while (pos > 0 && backup)
@@ -656,6 +747,8 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     int32_t screen_origin_x = m_origin.x;
     int32_t screen_origin_y = m_origin.y;
 #ifdef _WIN32
+    // BUGBUG: when the console wrapping is off and the console window is
+    // narrower than the console buffer, the origin X is handled wrongly.
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
         return false;
@@ -871,6 +964,9 @@ bool display_manager::display_internal(display_lines& lines)
     if (m_force_redisplay || input_extent != displayed_input_extent)
         m_border_dirty = true;
 
+    init_horizpos_workaround();
+    preserve_window_horiz_scroll_position preserve(m_horizpos_workaround, this);
+
     m_accumulator.clear();
     m_coalesce_output = g_coalesce_output;
 
@@ -887,7 +983,7 @@ bool display_manager::display_internal(display_lines& lines)
             return;
         if (m_origin.x + cursor.x + width - 1 >= term_size.x)
         {
-            output(term_erase_to_eol());
+            clr_to_eol(term_size.x - (m_origin.x + cursor.x + width - 1));
         }
         else
         {
@@ -925,13 +1021,19 @@ bool display_manager::display_internal(display_lines& lines)
     {
         auto const& line = lines.m_lines[i];
 
+#ifdef _WIN32
+        const bool can_optimize = !m_horizpos_workaround;
+#else
+        const bool can_optimize = true;
+#endif
+
         // Does the new line exactly match the previously displayed line?
         size_t begin = 0;
         size_t end = line->m_text.length();
         uint16_t begin_width = 0;
         bool reuse_displayed_line = false;
         bool reuse_left_text = false;
-        if (!m_force_redisplay && i < m_displayed.m_lines.size())
+        if (!m_force_redisplay && can_optimize && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
             reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
@@ -1018,6 +1120,8 @@ bool display_manager::display_internal(display_lines& lines)
 
         // The left text is kept separate from the input text because it may
         // contain terminal escape sequences whose width the caller attests.
+        // BUGBUG: when the console wrapping is off and the console window is
+        // narrower than the console buffer, the origin X is handled wrongly.
         if (i == 0 && !reuse_left_text && begin == 0 && lines.m_left_text.length())
         {
             move_to_column(cursor, 0, lines.m_inner_offset.x);
@@ -1111,7 +1215,7 @@ bool display_manager::display_internal(display_lines& lines)
         {
             output(term_col(1));
             cursor.x = 1 - m_origin.x;
-            output(term_erase_to_eol());
+            clr_to_eol(term_size.x);
         }
         if (line.bounded)
         {
@@ -1144,7 +1248,7 @@ bool display_manager::display_internal(display_lines& lines)
         }
         else if (line.width < term_size.x)
         {
-            output(term_erase_to_eol());
+            clr_to_eol(term_size.x - line.width);
         }
     }
 
@@ -1226,6 +1330,14 @@ void display_manager::move_to_caret_position()
 void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset)
 {
     y += inner_offset;
+
+    if (y == cursor.y)
+        return;
+
+#ifdef _WIN32
+    preserve_window_horiz_scroll_position preserve(m_horizpos_workaround, this);
+#endif
+
     if (y < cursor.y)
     {
         if (m_origin.y > 0)
@@ -1249,7 +1361,7 @@ void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offs
     }
     else
     {
-        return;
+        assert(false);
     }
 
     cursor.y = y;
@@ -1259,10 +1371,28 @@ void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_o
 {
     x += inner_offset;
     const uint16_t term_x = m_origin.x + x;
-    if (term_x > 0)
-        output(term_col(term_x));
+
+#ifdef _WIN32
+    if (m_horizpos_workaround)
+    {
+        do_flush();
+
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        GetConsoleScreenBufferInfo(m_horizpos_workaround, &csbi);
+        csbi.dwCursorPosition.X = term_x - 1;
+
+        preserve_window_horiz_scroll_position preserve(m_horizpos_workaround, this);
+        SetConsoleCursorPosition(m_horizpos_workaround, csbi.dwCursorPosition);
+    }
     else
-        output("\r");
+#endif _WIN32
+    {
+        if (term_x > 0)
+            output(term_col(term_x));
+        else
+            output("\r");
+    }
+
     cursor.x = x;
 }
 
@@ -1785,8 +1915,55 @@ void display_manager::maybe_flush()
     if (m_coalesce_output)
         return;
 
+    do_flush();
+}
+
+void display_manager::do_flush()
+{
     term_out(m_accumulator.c_str(), m_accumulator.length());
     m_accumulator.clear();
 }
+
+#ifdef _WIN32
+static HANDLE is_horizpos_workaround_needed()
+{
+    if (is_test_harness())
+        return nullptr;
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(h, &csbi))
+        return nullptr;
+    if (csbi.srWindow.Left == 0 && csbi.srWindow.Right == csbi.dwSize.X - 1)
+        return nullptr;
+    return h;
+}
+
+void display_manager::init_horizpos_workaround()
+{
+    assert(m_layout);
+    assert(m_buffer);
+    assert(m_style);
+
+    m_horizpos_workaround = is_horizpos_workaround_needed();
+}
+#endif // _WIN32
+
+#ifdef _WIN32
+void display_manager::clr_to_eol(int32_t spaces)
+{
+    if (spaces <= 0)
+        return;
+
+    if (s_can_use_clreol)
+        output(term_erase_to_eol());
+    else
+        output_spaces(spaces);
+}
+#else
+void display_manager::clr_to_eol(int32_t /*spaces*/)
+{
+    output(term_erase_to_eol());
+}
+#endif
 
 } // namespace tib

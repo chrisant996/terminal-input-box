@@ -382,4 +382,7 @@ double clock();
 bool getenv(const char* name, cstring& out);
 inline bool implies(bool a, bool b) { return !a || b; }
 
+void set_test_harness();
+bool is_test_harness();
+
 } // namespace tib

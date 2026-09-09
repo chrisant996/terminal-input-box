@@ -42,6 +42,7 @@ int main(int argc, char** argv)
 
     reset_wcwidths();
 
+    tib::set_test_harness();
     install_test_terminal();
     tib::term_begin();
 

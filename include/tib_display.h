@@ -174,6 +174,8 @@ class input_buffer;
 
 class display_manager
 {
+    friend class preserve_window_horiz_scroll_position;
+
 public:
                         ~display_manager() = default;
                         display_manager();
@@ -232,6 +234,12 @@ private:
     void                output_color(const char* color);
     void                output_spaces(size_t n);
     void                maybe_flush();
+    void                do_flush();
+
+#ifdef _WIN32
+    void                init_horizpos_workaround();
+#endif
+    void                clr_to_eol(int32_t spaces);
 
 private:
     const layout_info*  m_layout = nullptr;         // Borrowed.
@@ -260,6 +268,10 @@ private:
 
     cstring             m_accumulator;
     bool                m_coalesce_output = false;
+
+#ifdef _WIN32
+    HANDLE              m_horizpos_workaround = 0;
+#endif
 
     std::vector<grapheme_info> m_tmp_graphemes;
 };
