@@ -601,7 +601,7 @@ continue_label:
         return resolved;
     }
 
-    if (m_sequence.length() > 1)
+    if (m_sequence.length() > 1 && (c & 0xc0) != 0x80)
     {
         // Discard the sequence before c and try again.
         reset();
