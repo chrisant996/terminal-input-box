@@ -1140,11 +1140,31 @@ bool display_manager::display_internal(display_lines& lines)
         bool reuse_displayed_line = false;
         bool reuse_left_text = false;
         bool reuse_right_text = false;
+        int16_t right_gap_dirty_width = INT16_MAX;
+        int16_t rest_dirty_width = INT16_MAX;
         if (!m_force_redisplay && can_optimize && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
             reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
             reuse_right_text = !(i == 0 && !(lines.m_right_text == m_displayed.m_right_text));
+            if (input_extent.x == displayed_input_extent.x)
+            {
+                rest_dirty_width = (displayed->width() > line->width() ?
+                                    displayed->width() - line->width() : 0);
+                if (i == 0)
+                {
+                    if (m_displayed.m_right_text.width() <= lines.m_right_text.width())
+                        right_gap_dirty_width = rest_dirty_width;
+                    if (m_displayed.m_right_text.width())
+                    {
+                        const auto consumed_width = (displayed->width() +
+                                                     c_right_text_padding +
+                                                     m_displayed.m_right_text.width());
+                        if (consumed_width <= displayed_input_extent.x)
+                            rest_dirty_width = max_size.x - line->width();
+                    }
+                }
+            }
             if (displayed->m_x1 == line->m_x1)
             {
                 // First do a simple memcmp comparison to check if the new
@@ -1275,20 +1295,33 @@ bool display_manager::display_internal(display_lines& lines)
         // Fill remaining width.
         if (line->width() < max_size.x)
         {
-            move_to_column(cursor, line->width(), lines.m_inner_offset.x);
-            // TODO: only print the color if something will be erased or printed.
-            output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
             if (i == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
             {
-                // TODO: only erase between the main text and the right text if that area is actually different.
-                erase_row(max_size.x - (line->width() + m_right_text.width()));
+                const int16_t gap_width = max_size.x - (line->width() + m_right_text.width());
+                const int16_t erase_width = min(gap_width, right_gap_dirty_width);
+                if (erase_width > 0 || !reuse_right_text)
+                    output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
+                if (erase_width > 0)
+                {
+                    move_to_column(cursor, line->width(), lines.m_inner_offset.x);
+                    erase_row(min(gap_width, right_gap_dirty_width));
+                }
                 if (!reuse_right_text)
+                {
+                    move_to_column(cursor, max_size.x - m_right_text.width(), lines.m_inner_offset.x);
                     output(m_right_text.c_str(), m_right_text.length());
+                }
             }
             else
             {
-                // TODO: only erase the rest if that area is actually different.
-                erase_row(max_size.x - line->width());
+                const int16_t rest_width = max_size.x - line->width();
+                const int16_t erase_width = min(rest_width, rest_dirty_width);
+                if (erase_width > 0)
+                {
+                    move_to_column(cursor, line->width(), lines.m_inner_offset.x);
+                    output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
+                    erase_row(erase_width);
+                }
             }
         }
     }
