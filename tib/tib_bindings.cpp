@@ -39,6 +39,11 @@ binding_target::binding_target(binding_type type, const char* text, size_t len) 
         assert(*text && uint8_t(*text) < c_input_terminal_reserved_begin);
         set_quoted_insert(*text);
         break;
+    case binding_type::lowercase_version:
+        assert(!text);
+        assert(!len);
+        set_lowercase_version();
+        break;
     default:
         assert(false);
         break;
@@ -60,6 +65,11 @@ binding_target binding_target_quoted_insert(char c)
     return binding_target(binding_type::quoted_insert, &c, 1);
 }
 
+binding_target binding_target_lowercase_version()
+{
+    return binding_target(binding_type::lowercase_version, nullptr, 0);
+}
+
 bool binding_target::operator==(const binding_target& t) const noexcept
 {
     if (m_type != t.m_type)
@@ -67,6 +77,7 @@ bool binding_target::operator==(const binding_target& t) const noexcept
     switch (m_type)
     {
     case binding_type::none:
+    case binding_type::lowercase_version:
         break;
     case binding_type::func:
         if (!m_text != !t.m_text)
@@ -126,6 +137,13 @@ void binding_target::set_quoted_insert(char c) noexcept
     m_length = uint8_t(c);
 }
 
+void binding_target::set_lowercase_version() noexcept
+{
+    m_type = binding_type::lowercase_version;
+    m_text = nullptr;
+    m_length = 0;
+}
+
 binding_target_copy::binding_target_copy(const binding_target& t) noexcept
 {
     *this = t;
@@ -150,6 +168,11 @@ binding_target_copy& binding_target_copy::operator=(const binding_target& t) noe
     case binding_type::quoted_insert:
         m_owned_text.clear();
         set_quoted_insert(char(t.get_char()));
+        break;
+    case binding_type::lowercase_version:
+        m_owned_text.clear();
+        set_lowercase_version();
+        break;
     default:
         assert(false);
         m_owned_text.clear();
@@ -184,6 +207,14 @@ bool key_table::add(key_binding&& binding)
     assert(binding.sequence.length() > 0);
     if (!binding.sequence.length())
         return false;
+
+    if (binding.target.get_type() == binding_type::lowercase_version)
+    {
+        const char last = binding.sequence.c_str()[binding.sequence.length() - 1];
+        assert(!binding.pattern && last >= 'A' && last <= 'Z');
+        if (binding.pattern || last < 'A' || last > 'Z')
+            return false;
+    }
 
     const auto found = std::lower_bound(m_bindings.begin(), m_bindings.end(), binding, sort_predicate);
 
@@ -393,11 +424,14 @@ retry_target:
             const auto patterns = std::partition_point(bindings.begin(), bindings.end(), [](const key_binding& binding) {
                 return !binding.pattern;
             });
-            const auto found = std::lower_bound(bindings.begin(), patterns, m_sequence, [](const key_binding& candidate, const cstring& sequence) {
-                const size_t common_length = min(candidate.sequence.length(), sequence.length());
-                const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
-                return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
-            });
+            const auto find_literal = [&](const cstring& sequence) {
+                return std::lower_bound(bindings.begin(), patterns, sequence, [](const key_binding& candidate, const cstring& sequence) {
+                    const size_t common_length = min(candidate.sequence.length(), sequence.length());
+                    const int comparison = memcmp(candidate.sequence.c_str(), sequence.c_str(), common_length);
+                    return comparison < 0 || (comparison == 0 && candidate.sequence.length() < sequence.length());
+                });
+            };
+            const auto found = find_literal(m_sequence);
 
             if (found != patterns &&
                 found->sequence.length() >= m_sequence.length() &&
@@ -405,10 +439,34 @@ retry_target:
             {
                 if (found->sequence.length() == m_sequence.length())
                 {
+                    cstring matched_sequence(m_sequence);
+                    auto matched = found;
+                    int32_t matched_key = c;
+
+                    if (found->target.get_type() == binding_type::lowercase_version)
+                    {
+                        if (c >= 'A' && c <= 'Z')
+                        {
+                            matched_key = c + ('a' - 'A');
+                            matched_sequence.set_at(matched_sequence.length() - 1, char(matched_key));
+                            matched = find_literal(matched_sequence);
+                        }
+
+                        if (matched == patterns ||
+                            !(matched->sequence == matched_sequence) ||
+                            matched->target.get_type() == binding_type::lowercase_version)
+                        {
+                            // If there's no matching lowercase binding, then
+                            // ignore the lowercase_version binding and just
+                            // continue searching the key_tables.
+                            continue;
+                        }
+                    }
+
                     resolved_binding resolved(m_state);
-                    resolved.sequence = m_sequence;
-                    resolved.key = c;
-                    resolved.binding_target = &found->target;
+                    resolved.sequence = std::move(matched_sequence);
+                    resolved.key = matched_key;
+                    resolved.binding_target = &matched->target;
                     resolved.dispatcher_target = weak;
                     resolved.outcome = dispatch_outcome::match;
                     reset();

@@ -453,6 +453,131 @@ TEST_CASE("Universal argument uses a modal key table")
     }
 }
 
+TEST_CASE("Uppercase Alt input resolves in the same key table")
+{
+    auto input = std::make_shared<self_insert_tester>();
+    input->initialize();
+    input->set_bindings(tib::make_default_key_table());
+
+    tib::binding_resolver resolver;
+    resolver.add_target(input);
+
+    SECTION("Resolves defined lowercase alternatives directly")
+    {
+        struct test_case
+        {
+            char key;
+            const char* command;
+        };
+        static const test_case cases[] =
+        {
+            { 'C', "capitalize" },
+            { 'L', "lower-case" },
+            { 'T', "transpose-words" },
+            { 'U', "upper-case" },
+        };
+
+        for (const auto& test : cases)
+        {
+            REQUIRE(resolver.step('\x1b').more());
+            const auto resolved = resolver.step(test.key);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+            REQUIRE(resolved.key == test.key + ('a' - 'A'));
+            REQUIRE(resolved.sequence.length() == 2);
+            REQUIRE(resolved.sequence.c_str()[0] == '\x1b');
+            REQUIRE(resolved.sequence.c_str()[1] == resolved.key);
+            REQUIRE(resolved.binding_target->is_func_name(test.command));
+        }
+    }
+
+    SECTION("Dispatches the lowercase alternative without replaying input")
+    {
+        input->initialize("mIXEd");
+        input->set_caret(0);
+
+        REQUIRE(resolver.step('\x1b').more());
+        auto resolved = resolver.step('C');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "\x1b" "c");
+        REQUIRE(resolved.binding_target->is_func_name("capitalize"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_text() == "Mixed");
+        REQUIRE(input->get_dispatch_count() == 1);
+    }
+
+    SECTION("Preserves a numeric argument until dispatch")
+    {
+        input->initialize("one two three");
+        input->set_caret(4);
+        input->set_numeric_argument(3);
+
+        REQUIRE(resolver.step('\x1b').more());
+        auto resolved = resolver.step('T');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("transpose-words"));
+        REQUIRE(input->has_numeric_argument());
+        REQUIRE(resolved.dispatch());
+        REQUIRE(!input->has_numeric_argument());
+    }
+
+    SECTION("Missing lowercase alternative falls back normally")
+    {
+        auto table = std::make_shared<tib::key_table>(true/*can_self_insert*/);
+        REQUIRE(table->add("\x1b" "X", tib::binding_target_lowercase_version()));
+        auto tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(std::move(table));
+        input->set_bindings(std::move(tables));
+
+        REQUIRE(resolver.step('\x1b').more());
+        auto resolved = resolver.step('X');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+        REQUIRE(resolved.sequence == "X");
+        REQUIRE(!resolved.binding_target);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(input->get_dispatch_count() == 1);
+        REQUIRE(input->get_text() == "X");
+    }
+
+    SECTION("Missing lowercase alternative continues searching other key tables")
+    {
+        auto base = std::make_shared<tib::key_table>();
+        REQUIRE(base->add("\x1b" "X", tib::binding_target_func("accept-line")));
+        auto overlay = std::make_shared<tib::key_table>();
+        REQUIRE(overlay->add("\x1b" "X", tib::binding_target_lowercase_version()));
+        auto tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(std::move(base));
+        tables->emplace_back(std::move(overlay));
+        input->set_bindings(std::move(tables));
+
+        REQUIRE(resolver.step('\x1b').more());
+        const auto resolved = resolver.step('X');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "\x1b" "X");
+        REQUIRE(resolved.key == 'X');
+        REQUIRE(resolved.binding_target);
+        REQUIRE(resolved.binding_target->is_func_name("accept-line"));
+    }
+
+    SECTION("Does not use a lowercase binding from another key table")
+    {
+        auto base = std::make_shared<tib::key_table>();
+        REQUIRE(base->add("\x1b" "x", tib::binding_target_func("accept-line")));
+        auto overlay = std::make_shared<tib::key_table>();
+        REQUIRE(overlay->add("\x1b" "X", tib::binding_target_lowercase_version()));
+        auto tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(std::move(base));
+        tables->emplace_back(std::move(overlay));
+        input->set_bindings(std::move(tables));
+
+        REQUIRE(resolver.step('\x1b').more());
+        const auto resolved = resolver.step('X');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
+        REQUIRE(resolved.sequence == "X");
+        REQUIRE(!resolved.binding_target);
+        REQUIRE(!input->done());
+    }
+}
+
 TEST_CASE("Quoted insert does not read ahead")
 {
     REQUIRE(!tib::g_optimize_self_insert);

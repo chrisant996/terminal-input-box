@@ -21,6 +21,7 @@ enum class binding_type : uint8_t
     func,
     macro,
     quoted_insert,
+    lowercase_version,  // Resolve the same-table binding with a lowercase final byte.
 };
 
 class key_table;
@@ -51,6 +52,7 @@ public:
     void                set_func(const char* name) noexcept;
     void                set_macro(const char* text, size_t len=c_auto_length) noexcept;
     void                set_quoted_insert(char c) noexcept;
+    void                set_lowercase_version() noexcept;
 
 protected:
     binding_type        m_type = binding_type::none;
@@ -61,6 +63,7 @@ protected:
 binding_target binding_target_func(const char* name);
 binding_target binding_target_macro(const char* text, size_t len=c_auto_length);
 binding_target binding_target_quoted_insert(char c);
+binding_target binding_target_lowercase_version();
 
 class binding_target_copy : public binding_target
 {
@@ -161,10 +164,10 @@ public:
     //
     // Returning negative means the input sequence was not handled, and
     // implies permission for something else to choose to handle the input
-    // sequence.  Returning c_dispatch_request_quoted_insert asks the
-    // binding_resolver to send the next input byte back to this
-    // dispatcher_target as a quoted insert i.e. as literal input not
-    // translated through key bindings.
+    // sequence.
+    // Returning c_dispatch_request_quoted_insert asks the binding_resolver to
+    // send the next input byte back to this dispatcher_target as a quoted
+    // insert i.e. as literal input not translated through key bindings.
     virtual int32_t     dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const binding_params* params) noexcept = 0;
 
     // Called when the current input sequence neither matches nor partially

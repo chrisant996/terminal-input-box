@@ -845,6 +845,9 @@ std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
     t->add("\033[<%#;%#;%#M", binding_target_func("mouse-input"), true/*pattern*/); // Mouse press
     t->add("\033[<%#;%#;%#m", binding_target_func("mouse-input"), true/*pattern*/); // Mouse release
 
+    for (char seq[3] = { '\033', 'A', 0 }; seq[1] <= 'Z'; ++seq[1])
+        t->add(seq, binding_target_lowercase_version());
+
     if (numeric_argument)
     {
         for (char seq[3] = { '\033', '0', 0 }; seq[1] <= '9'; ++seq[1])

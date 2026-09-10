@@ -14,8 +14,6 @@
 
 - Does this need the concepts of `point` and `mark`?
 - Should tib display the message on the first _displayed_ row?  But that's going to have weird side effects, and probably should go on a FUTURE list.
-- Some way to automagically treat upper case keys the same as their lower case equivalent?  Not sure that even makes any sense without a trie.  Maybe it should be handled by default bindings for Alt-UpperLetter keys to signal reevaluating the binding with LowerLetter for the last byte?
-
 - CLINK: the numeric argument message in Clink is only drawn on the first row, so if the display is scrolled then the message is not visible.  And if the whole line is reverted, then the place where the message would have been displayed does not get redrawn properly.
 
 ## Sufficiency
@@ -23,6 +21,7 @@
 - [ ] Clink needs to be able to integrate its auto-suggestions and suggestion list with `editor_context`.
     - [ ] Hooks so Clink can exert appropriate influence.
     - [ ] Expose enough internal states for a caller to manipulate its other features based on `editor_context` state; e.g. to suppress an external suggestion list while certain `editor_context` modal states are active, such as incremental history search or execute-command or etc.
+- [ ] Readline supports "shadowing", where `a` can be bound to one thing, `abc` can be bound to another thing, and typing `abx` dispatches the `a` binding with `bx` still in the input queue.  But how quirky is its behavior, i.e. are there limitations that tib will need to mimic, or is tib free to provide full-fledged support for arbitrarily complex/numerous shadowing combinations?
 - [x] Make sure a host (e.g. example.exe) can provide a command/mode to read a command name and invoke it. _[The host can erase the current tib and do whatever they want (including start a new tib) to select a command, and then show the original tib again and run the command (or even run the command and then show the tib).]_
 - [x] Enough built-in capabilities for a host to support recording keyboard macros. _[The `dispatcher_target::dispatch` callback has everything that the host needs -- the host can track the reocrding state, and `dispatch` receives the key sequence.]_
 - [x] Make sure the host has enough influence to easily allow some hooks:
