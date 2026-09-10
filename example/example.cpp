@@ -625,6 +625,12 @@ no_border:
                 /*Custom*/  update_sequence_before_step(c);
 
         auto resolved = resolver.step(c);                   // Required.
+
+        // An ambiguous sequence contains a complete fallback, but can still
+        // become a longer binding.  The host owns this timeout policy.
+        if (resolved.ambiguous() && !tib::term_in_avail(500))
+            resolved = resolver.resolve_pending();
+
         resolved.dispatch();                                // Required.
 
                 /*Custom*/  update_sequence_after_step(resolved.outcome);

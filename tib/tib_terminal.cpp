@@ -55,6 +55,33 @@ bool pushed_input::push(uint8_t c) noexcept
     return true;
 }
 
+bool pushed_input::push_front(const char* text, size_t len) noexcept
+{
+#ifdef _WIN32
+    // BUGBUG: m_high_surrogate is about push() at the tail, and
+    // push_invalid() pushes at the tail -- neither of those seems relevant
+    // when pushing at the front.  I think pushing at the front can simply
+    // push raw bytes and let downstream consumers deal with any invalid UTF8
+    // encoding issues.
+    if (m_high_surrogate && !push_invalid())
+        return false;
+#endif
+
+    if (!len)
+        return true;
+    if (!ensure_capacity(len))
+        return false;
+
+    const size_t offset = len % m_size; // In case len == m_size.
+    m_head = (m_head >= offset) ? m_head - offset : m_size - (offset - m_head);
+    const size_t first = min(len, m_size - m_head);
+    memcpy(m_data + m_head, text, first);
+    if (len > first)
+        memcpy(m_data, text + first, len - first);
+    m_count += len;
+    return true;
+}
+
 #ifdef _WIN32
 int32_t pushed_input::push_utf16(WCHAR c) noexcept
 {
@@ -339,6 +366,18 @@ bool term_in_avail(const DWORD _timeout)
         return true;
 
     return s_terminal_in->avail(_timeout);
+}
+
+bool term_push_input(const char* text, size_t len)
+{
+#ifdef _WIN32
+#ifdef DEBUG
+    assert(c_idMainThread == GetCurrentThreadId());
+#endif
+#endif
+
+    len = resolve_auto_length(len, text);
+    return s_pushed.push_front(text, len);
 }
 
 bool term_push_macro_text(const char* text, size_t len)

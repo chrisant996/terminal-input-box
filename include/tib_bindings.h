@@ -189,6 +189,9 @@ struct resolved_binding
                         resolved_binding(std::shared_ptr<binding_resolver_state> state);
                         operator bool();
     bool                more() const { return outcome == dispatch_outcome::more; }
+                        // True when the pending sequence contains a complete
+                        // fallback and remains a prefix of a longer binding.
+    bool                ambiguous() const { return more() && m_ambiguous; }
     bool                dispatch();
 
     cstring             sequence;
@@ -199,7 +202,11 @@ struct resolved_binding
     binding_params      params;
 
 private:
+    friend class binding_resolver;
+
     std::shared_ptr<binding_resolver_state> m_resolver_state;
+    cstring             m_replay;
+    bool                m_ambiguous = false;
 };
 
 class binding_resolver
@@ -213,8 +220,13 @@ public:
 
     void                reset();
     resolved_binding    step(uint8_t c);
+                        // Commit the longest complete binding in the pending
+                        // sequence, normally after an ambiguity timeout.
+    resolved_binding    resolve_pending();
 
 private:
+    resolved_binding    resolve(bool force);
+
     std::vector<std::weak_ptr<dispatcher_target>> m_registrants;
     cstring             m_sequence;
     std::shared_ptr<binding_resolver_state> m_state;

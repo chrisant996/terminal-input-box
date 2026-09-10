@@ -70,6 +70,19 @@ TEST_CASE("Repeated key input")
             REQUIRE(input.read() == 'c');
         REQUIRE(input.empty());
     }
+
+    SECTION("Prepends input")
+    {
+        tib::pushed_input input;
+        REQUIRE(input.push('c'));
+        REQUIRE(input.push('d'));
+        REQUIRE(input.push_front("ab", 2));
+        REQUIRE(input.read() == 'a');
+        REQUIRE(input.read() == 'b');
+        REQUIRE(input.read() == 'c');
+        REQUIRE(input.read() == 'd');
+        REQUIRE(input.empty());
+    }
 }
 #endif
 
@@ -304,6 +317,280 @@ TEST_CASE("Key bindings")
     }
 }
 
+TEST_CASE("Shadowed key bindings")
+{
+    const auto make_resolver = [](std::shared_ptr<tib::key_table> table,
+                                  std::shared_ptr<dispatcher_tester>& tester) {
+        auto tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(std::move(table));
+        tester = std::make_shared<dispatcher_tester>();
+        tester->set_bindings(std::move(tables));
+        tib::binding_resolver resolver;
+        resolver.add_target(tester);
+        return resolver;
+    };
+
+    SECTION("Longer binding wins")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        auto resolved = resolver.step('a');
+        REQUIRE(resolved.more());
+        REQUIRE(resolved.ambiguous());
+        resolved = resolver.step('b');
+        REQUIRE(resolved.more());
+        REQUIRE(resolved.ambiguous());
+        resolved = resolver.step('c');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "abc");
+        REQUIRE(resolved.key == 'c');
+        REQUIRE(resolved.binding_target->is_func_name("long"));
+    }
+
+    SECTION("Mismatch replays the suffix")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "a");
+        REQUIRE(resolved.key == 'a');
+        REQUIRE(resolved.binding_target->is_func_name("short"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'b');
+        REQUIRE(tib::term_in() == 'x');
+    }
+
+    SECTION("Nearest nested binding wins")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+        REQUIRE(add_binding(*table, "abc", "middle"));
+        REQUIRE(add_binding(*table, "abcde", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        REQUIRE(resolver.step('c').ambiguous());
+        REQUIRE(resolver.step('d').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "abc");
+        REQUIRE(resolved.binding_target->is_func_name("middle"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'd');
+        REQUIRE(tib::term_in() == 'x');
+    }
+
+    SECTION("Pending binding can be resolved explicitly")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.resolve_pending();
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "a");
+        REQUIRE(resolved.binding_target->is_func_name("short"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'b');
+    }
+
+    SECTION("Self insert is an implicit fallback")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        table->set_can_self_insert(true);
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        auto miss_table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*miss_table, "z", "miss"));
+        auto miss_tables = std::make_shared<tib::key_table_list>();
+        miss_tables->emplace_back(std::move(miss_table));
+        auto miss_target = std::make_shared<binding_miss_tester>();
+        miss_target->set_bindings(std::move(miss_tables));
+        resolver.add_target(miss_target);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+        REQUIRE(resolved.sequence == "a");
+        REQUIRE(resolved.key == 'a');
+        REQUIRE(!resolved.binding_target);
+        REQUIRE(miss_target->get_miss_count() == 0);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'b');
+        REQUIRE(tib::term_in() == 'x');
+    }
+
+    SECTION("Replayed suffix retains pushed-input priority")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(table->add("a", tib::binding_target_macro("M")));
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+        test_input_stream pending("P");
+        REQUIRE(tib::term_in_peek() == 'P');
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->get_type() == tib::binding_type::macro);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'b');
+        REQUIRE(tib::term_in() == 'x');
+        REQUIRE(tib::term_in() == 'P');
+        REQUIRE(tib::term_in() == 'M');
+    }
+
+    SECTION("Pattern binding can be the fallback")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(table->add({ "a%#", tib::binding_target_func("pattern"), true }));
+        REQUIRE(add_binding(*table, "a12z", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').more());
+        REQUIRE(resolver.step('1').ambiguous());
+        REQUIRE(resolver.step('2').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "a12");
+        REQUIRE(resolved.binding_target->is_func_name("pattern"));
+        REQUIRE(resolved.params.size() == 1);
+        REQUIRE(resolved.params[0] == "12");
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'x');
+    }
+
+    SECTION("Longer overlay binding shadows a base binding")
+    {
+        auto base = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*base, "a", "base"));
+        auto overlay = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*overlay, "abc", "overlay"));
+        auto tables = std::make_shared<tib::key_table_list>();
+        tables->emplace_back(std::move(base));
+        tables->emplace_back(std::move(overlay));
+        auto tester = std::make_shared<dispatcher_tester>();
+        tester->set_bindings(std::move(tables));
+        tib::binding_resolver resolver;
+        resolver.add_target(tester);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.step('c');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("overlay"));
+    }
+
+    SECTION("Lowercase-version binding can be a fallback")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "ax", "lower"));
+        REQUIRE(table->add("aX", tib::binding_target_lowercase_version()));
+        REQUIRE(add_binding(*table, "aXz", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').more());
+        REQUIRE(resolver.step('X').ambiguous());
+        auto resolved = resolver.step('q');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.sequence == "ax");
+        REQUIRE(resolved.key == 'x');
+        REQUIRE(resolved.binding_target->is_func_name("lower"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'q');
+    }
+
+    SECTION("Shadow fallback suppresses binding miss callbacks")
+    {
+        auto prefix_table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*prefix_table, "a", "short"));
+        REQUIRE(add_binding(*prefix_table, "abc", "long"));
+        auto prefix_tables = std::make_shared<tib::key_table_list>();
+        prefix_tables->emplace_back(std::move(prefix_table));
+        auto prefix_target = std::make_shared<dispatcher_tester>();
+        prefix_target->set_bindings(std::move(prefix_tables));
+
+        auto miss_table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*miss_table, "z", "miss"));
+        auto miss_tables = std::make_shared<tib::key_table_list>();
+        miss_tables->emplace_back(std::move(miss_table));
+        auto miss_target = std::make_shared<binding_miss_tester>();
+        miss_target->set_bindings(std::move(miss_tables));
+
+        tib::binding_resolver resolver;
+        resolver.add_target(prefix_target);
+        resolver.add_target(miss_target);
+        REQUIRE(resolver.step('a').ambiguous());
+        REQUIRE(resolver.step('b').ambiguous());
+        auto resolved = resolver.step('x');
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+        REQUIRE(resolved.binding_target->is_func_name("short"));
+        REQUIRE(miss_target->get_miss_count() == 0);
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 'b');
+        REQUIRE(tib::term_in() == 'x');
+    }
+
+    SECTION("UTF8 suffix is replayed before unread terminal input")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        table->set_can_self_insert(true);
+        REQUIRE(add_binding(*table, "\xf0\x9fX", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+        test_input_stream remaining("\x80", 1);
+
+        REQUIRE(resolver.step(0xf0).ambiguous());
+        REQUIRE(resolver.step(0x9f).ambiguous());
+        auto resolved = resolver.step(0x98);
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::self_insert);
+        REQUIRE(resolved.sequence == tib::cstring("\xf0", 1));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(tib::term_in() == 0x9f);
+        REQUIRE(tib::term_in() == 0x98);
+        REQUIRE(tib::term_in() == 0x80);
+    }
+
+    SECTION("Reset discards an ambiguous sequence")
+    {
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+        REQUIRE(add_binding(*table, "abc", "long"));
+        std::shared_ptr<dispatcher_tester> tester;
+        auto resolver = make_resolver(std::move(table), tester);
+
+        REQUIRE(resolver.step('a').ambiguous());
+        resolver.reset();
+        auto resolved = resolver.resolve_pending();
+        REQUIRE(resolved.outcome == tib::dispatch_outcome::miss);
+        REQUIRE(resolved.sequence.empty());
+    }
+}
+
 TEST_CASE("UTF8 multi-byte input")
 {
     SECTION("Dispatcher preserves UTF8 bytes")
@@ -490,6 +777,77 @@ PERF_CASE("PERF, resolve 26000 bindings")
         REQUIRE(num_resolved == c_passes * std::size(c_sequences));
 
         static_assert(c_passes * std::size(c_sequences) == 26000);
+    }
+}
+
+PERF_CASE("PERF, resolve 1000 pathological shadowed sequences")
+{
+    SECTION("Main")
+    {
+        constexpr size_t c_binding_count = 100;
+        constexpr size_t c_average_length = 20;
+        constexpr size_t c_middle_length = 20;
+        constexpr size_t c_long_length = 39;
+        constexpr size_t c_passes = 1000;
+        static_assert(1 + (c_binding_count - 2) * c_middle_length + c_long_length ==
+                      c_binding_count * c_average_length);
+
+        auto table = std::make_shared<tib::key_table>();
+        REQUIRE(add_binding(*table, "a", "short"));
+
+        // These 98 bindings share a 19-byte prefix, making their binary-search
+        // comparisons relatively expensive, but none matches the test input.
+        char sequence[c_middle_length + 1];
+        memset(sequence, 'a', c_middle_length);
+        sequence[c_middle_length] = '\0';
+        for (size_t i = 0; i < c_binding_count - 2; ++i)
+        {
+            uint8_t discriminator = uint8_t(i + 1);
+            if (discriminator >= 'a')
+                ++discriminator;
+            sequence[c_middle_length - 1] = char(discriminator);
+            REQUIRE(add_binding(*table, sequence, "middle"));
+        }
+
+        // Together with the one-byte binding and 98 twenty-byte bindings,
+        // this makes the average binding length exactly 20 bytes.
+        char long_sequence[c_long_length + 1];
+        memset(long_sequence, 'a', c_long_length);
+        long_sequence[c_long_length - 1] = 'z';
+        long_sequence[c_long_length] = '\0';
+        REQUIRE(add_binding(*table, long_sequence, "long"));
+
+        auto bindings = std::make_shared<tib::key_table_list>();
+        bindings->emplace_back(table);
+        auto tester = std::make_shared<dispatcher_tester>();
+        tester->set_bindings(bindings);
+        tib::binding_resolver resolver;
+        resolver.add_target(tester);
+
+        // Match the long binding through its penultimate byte, then mismatch.
+        // Resolving must search every shorter length before finding "a" as the
+        // shadow fallback and treating the remaining 38 bytes as replay text.
+        char input[c_long_length];
+        memset(input, 'a', sizeof(input));
+        input[c_long_length - 1] = 'x';
+
+        uint32_t num_resolved = 0;
+        for (size_t pass = 0; pass < c_passes; ++pass)
+        {
+            bool all_prefixes = true;
+            for (size_t i = 0; i + 1 < sizeof(input); ++i)
+                all_prefixes = resolver.step(uint8_t(input[i])).more() && all_prefixes;
+
+            const auto resolved = resolver.step(uint8_t(input[sizeof(input) - 1]));
+            REQUIRE(all_prefixes);
+            REQUIRE(resolved.outcome == tib::dispatch_outcome::match);
+            REQUIRE(resolved.sequence == "a");
+            REQUIRE(resolved.binding_target);
+            REQUIRE(resolved.binding_target->is_func_name("short"));
+            ++num_resolved;
+        }
+
+        REQUIRE(num_resolved == c_passes);
     }
 }
 

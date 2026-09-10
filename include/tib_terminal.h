@@ -51,6 +51,8 @@ void term_sigint();
 int32_t term_in();
 int32_t term_in_peek();
 bool term_in_avail(DWORD timeout=0);
+// Prepend text to the highest-priority pushed-input queue.
+bool term_push_input(const char* text, size_t len=-1);
 bool term_push_macro_text(const char* text, size_t len=-1);
 bool enable_mouse_input(mouse_input_mode mode, bool sgr_encoding=true);
 
@@ -71,6 +73,7 @@ public:
     pushed_input&       operator=(const pushed_input&) = delete;
     bool                empty() const noexcept { return !m_count; }
     bool                push(uint8_t c) noexcept;
+    bool                push_front(const char* text, size_t len) noexcept;
 #ifdef _WIN32
     int32_t             push_utf16(WCHAR c) noexcept;
     int32_t             push_key_event(const KEY_EVENT_RECORD& record) noexcept;
