@@ -1139,10 +1139,12 @@ bool display_manager::display_internal(display_lines& lines)
         uint16_t begin_width = 0;
         bool reuse_displayed_line = false;
         bool reuse_left_text = false;
+        bool reuse_right_text = false;
         if (!m_force_redisplay && can_optimize && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
             reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
+            reuse_right_text = !(i == 0 && !(lines.m_right_text == m_displayed.m_right_text));
             if (displayed->m_x1 == line->m_x1)
             {
                 // First do a simple memcmp comparison to check if the new
@@ -1152,7 +1154,7 @@ bool display_manager::display_internal(display_lines& lines)
                 if (reuse_left_text &&
                     line->m_text.equals(displayed->m_text) &&
                     line->m_faces.equals(displayed->m_faces) &&
-                    (i || m_right_text == m_displayed.m_right_text))
+                    reuse_right_text)
                 {
                     reuse_displayed_line = true;
                     continue;
@@ -1280,8 +1282,8 @@ bool display_manager::display_internal(display_lines& lines)
             {
                 // TODO: only erase between the main text and the right text if that area is actually different.
                 erase_row(max_size.x - (line->width() + m_right_text.width()));
-                // TODO: only print the right text if it's actually different.
-                output(m_right_text.c_str(), m_right_text.length());
+                if (!reuse_right_text)
+                    output(m_right_text.c_str(), m_right_text.length());
             }
             else
             {
