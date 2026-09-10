@@ -19,6 +19,104 @@ struct binding_resolver_state
     std::weak_ptr<dispatcher_target> quoted_insert_target;
 };
 
+enum class binding_match
+{
+    none,
+    prefix,
+    complete,
+};
+
+struct pattern_match
+{
+    binding_match       match = binding_match::none;
+    size_t              length = 0;
+    binding_params      params;
+};
+
+static pattern_match match_pattern(const key_binding* pattern, const char* input, size_t input_length)
+{
+    const char* const sequence = pattern->sequence.c_str();
+    const size_t sequence_length = pattern->sequence.length();
+    size_t input_pos = 0;
+    size_t sequence_pos = 0;
+    pattern_match result;
+
+    while (input_pos < input_length && sequence_pos < sequence_length)
+    {
+        if (sequence[sequence_pos] == '%')
+        {
+            if (sequence_pos + 1 >= sequence_length)
+            {
+                assert(false && "malformed binding pattern");
+                return result;
+            }
+
+            const char op = sequence[sequence_pos + 1];
+            switch (op)
+            {
+            case '#':
+                // Match 1 or more digits.
+                if (input[input_pos] >= '0' && input[input_pos] <= '9')
+                {
+                    const size_t param_begin = input_pos;
+                    do
+                    {
+                        ++input_pos;
+                    } while (input_pos < input_length && input[input_pos] >= '0' && input[input_pos] <= '9');
+                    result.params.emplace_back(input + param_begin, input_pos - param_begin);
+                    sequence_pos += 2;
+                    continue;
+                }
+                // Not a digit; pattern does not match.
+                return result;
+
+            case '!':
+                // Match 1 character in the range 0x20..0xff or 0x00.
+                // If >= 0x20 then subtract 0x20 and convert it to a numeric
+                // string.  If 0x00 then convert 0 to a numeric string.  This
+                // lets consumers of tib support the default mouse encoding
+                // without needing to parse the raw bytes themselves.
+                if (!input[input_pos] || uint8_t(input[input_pos]) >= 0x20)
+                {
+                    cstring param;
+                    const uint8_t value = uint8_t(input[input_pos]);
+                    if (value >= 0x20)
+                        param.printf("%u", value - 0x20);
+                    result.params.emplace_back(std::move(param));
+                    sequence_pos += 2;
+                    ++input_pos;
+                    continue;
+                }
+                return result;
+
+            case '%':
+            default:
+                ++sequence_pos;
+                break;
+            }
+        }
+
+        if (input[input_pos] != sequence[sequence_pos])
+            return result;
+        ++input_pos;
+        ++sequence_pos;
+    }
+
+    if (input_pos == input_length)
+    {
+        if (sequence_pos == sequence_length)
+        {
+            result.match = binding_match::complete;
+            result.length = input_pos;
+        }
+        else
+        {
+            result.match = binding_match::prefix;
+        }
+    }
+    return result;
+}
+
 binding_target::binding_target(binding_type type, const char* text, size_t len) noexcept
 {
     switch (type)
@@ -483,97 +581,23 @@ retry_target:
                 const size_t input_length = m_sequence.length();
                 for (auto pattern = patterns; pattern != bindings.end(); ++pattern)
                 {
-                    const char* const sequence = pattern->sequence.c_str();
-                    const size_t sequence_length = pattern->sequence.length();
-                    size_t input_pos = 0;
-                    size_t sequence_pos = 0;
-                    binding_params params;
-
-                    while (input_pos < input_length && sequence_pos < sequence_length)
+                    pattern_match result = match_pattern(&*pattern, input, input_length);
+                    if (result.match == binding_match::complete)
                     {
-                        if (sequence[sequence_pos] == '%')
-                        {
-                            if (sequence_pos + 1 >= sequence_length)
-                            {
-                                // Malformed pattern string.
-                                assert(false);
-                                goto continue_label;
-                            }
-
-                            const char op = sequence[sequence_pos + 1];
-                            switch (op)
-                            {
-                            case '#':
-                                // Match 1 or more digits.
-                                if (input[input_pos] >= '0' && input[input_pos] <= '9')
-                                {
-                                    const size_t param_begin = input_pos;
-                                    do
-                                    {
-                                        ++input_pos;
-                                    } while (input_pos < input_length && input[input_pos] >= '0' && input[input_pos] <= '9');
-                                    params.emplace_back(input + param_begin, input_pos - param_begin);
-                                    sequence_pos += 2;
-                                    continue;
-                                }
-                                else
-                                {
-                                    // Not a digit; pattern does not match.
-                                    goto continue_label;
-                                }
-                                break;
-                            case '!':
-                                // Match 1 character in the range 0x20..0xff or
-                                // 0x00.  If >= 0x20 then subtract 0x20 and
-                                // convert it to a numeric string.  If 0x00 then
-                                // convert 0 to a numeric string.  This lets
-                                // consumers of tib support the default mouse
-                                // encoding without
-                                // needing to parse the raw bytes themselves.
-                                if (!input[input_pos] || uint8_t(input[input_pos]) >= 0x20)
-                                {
-                                    cstring param;
-                                    const uint8_t value = uint8_t(input[input_pos]);
-                                    if (value >= 0x20)
-                                        param.printf("%u", value - 0x20);
-                                    params.emplace_back(std::move(param));
-                                    sequence_pos += 2;
-                                    ++input_pos;
-                                    continue;
-                                }
-                                goto continue_label;
-                            case '%':
-                            default:
-                                ++sequence_pos;
-                                break;
-                            }
-                        }
-
-                        if (input[input_pos] != sequence[sequence_pos])
-                            break;
-                        ++input_pos;
-                        ++sequence_pos;
+                        resolved_binding resolved(m_state);
+                        resolved.sequence = m_sequence;
+                        resolved.key = c;
+                        resolved.binding_target = &pattern->target;
+                        resolved.dispatcher_target = weak;
+                        resolved.outcome = dispatch_outcome::match;
+                        resolved.params = std::move(result.params);
+                        reset();
+                        return resolved;
                     }
-
-                    if (input_pos == input_length)
+                    else if (result.match == binding_match::prefix)
                     {
-                        if (sequence_pos == sequence_length)
-                        {
-                            resolved_binding resolved(m_state);
-                            resolved.sequence = m_sequence;
-                            resolved.key = c;
-                            resolved.binding_target = &pattern->target;
-                            resolved.dispatcher_target = weak;
-                            resolved.outcome = dispatch_outcome::match;
-                            resolved.params = std::move(params);
-                            reset();
-                            return resolved;
-                        }
                         state.is_prefix = true;
                     }
-
-continue_label:
-                    ;
                 }
             }
 
