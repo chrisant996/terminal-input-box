@@ -85,6 +85,8 @@ public:
     coord               get_relative_cursor() const { return m_display.get_relative_cursor(); }
     coord               get_extent() const { return m_display.get_extent(); }
     coord               get_inner_extent() const { return m_display.get_inner_extent(); }
+    textpos_t           get_left() const { return m_display.get_left(); }
+    uint32_t            get_top() const { return m_display.get_top(); }
 
     void                set_callbacks(editor_callbacks* callbacks);
     std::shared_ptr<const color_table> get_color_table() const;

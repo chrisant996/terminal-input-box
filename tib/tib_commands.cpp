@@ -591,7 +591,13 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         uint32_t button = UINT32_MAX;
         uint32_t x = 0;
         uint32_t y = 0;
+        textpos_t left = 0;
+        uint32_t top = 0;
     };
+    // TODO: no no no, I didn't notice the static variable and using a context
+    // pointer to pretend it's per-editor_context.  If something destroys a
+    // context and then creates a new one but gets the same pointer value as
+    // before, then this goes wrong.
     static mouse_click_state s_last_click;
 
     struct mouse_drag_state
@@ -601,6 +607,10 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         textpos_t end = 0;
         bool word = false;
     };
+    // TODO: no no no, I didn't notice the static variable and using a context
+    // pointer to pretend it's per-editor_context.  The selection_state has
+    // commented-out word anchor members which are how this was supposed to be
+    // implemented.
     static mouse_drag_state s_drag;
 
     const uint32_t button = uint32_t(strtoul((*params)[0].c_str(), nullptr, 10));
@@ -609,6 +619,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
     const uint32_t y = uint32_t(strtoul((*params)[2].c_str(), nullptr, 10));
 
     bool double_click = false;
+    bool double_click_scrolled = false;
     if (key == 'M')
     {
         const auto now = std::chrono::steady_clock::now();
@@ -621,11 +632,15 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
                         s_last_click.button == base_button &&
                         s_last_click.x == x && s_last_click.y == y &&
                         now - s_last_click.time <= double_click_time);
+        double_click_scrolled = double_click &&
+                                (s_last_click.left != ctx.get_left() || s_last_click.top != ctx.get_top());
         s_last_click.time = now;
         s_last_click.context = &ctx;
         s_last_click.button = base_button;
         s_last_click.x = x;
         s_last_click.y = y;
+        s_last_click.left = ctx.get_left();
+        s_last_click.top = ctx.get_top();
     }
 
     switch (base_button)
@@ -664,7 +679,8 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
                 ctx.clear_named_value(c_cursor_column_operation_var_name);
                 return -1;
             }
-            if (double_click)
+            const bool word_click = double_click && !double_click_scrolled;
+            if (word_click)
             {
                 ctx.select_word();
                 ctx.set_named_value(c_cursor_column_operation_var_name, "double_click");
@@ -677,7 +693,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
             s_drag.context = &ctx;
             s_drag.begin = selection.get_sel_begin();
             s_drag.end = selection.get_sel_end();
-            s_drag.word = double_click;
+            s_drag.word = word_click;
             return 0;
         }
         break;
