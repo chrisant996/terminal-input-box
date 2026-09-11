@@ -1878,7 +1878,7 @@ again:
             {
                 assert(!multiline);
                 assert(int32_t(line->width()) < max_size.x);
-                while (int32_t(line->width() + 1) < max_size.x)
+                while (int32_t(line->width() + c_horz_scroll_indicator_chars) < max_size.x)
                     line->append(" ", 1, 1, FACE_DEFAULT);
                 for (uint16_t num = c_horz_scroll_indicator_chars; num--;)
                     line->append(">", 1, 1, FACE_SCROLLER);
