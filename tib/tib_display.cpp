@@ -1806,12 +1806,8 @@ bool display_manager::build(display_lines& out)
             face += iter.character_length();
 
             // Append the scroller.
-            line->append("<", 1, 1, FACE_SCROLLER);
-            if (c_horz_scroll_indicator_chars > 0)
-            {
-                for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                    line->append("<", 1, 1, FACE_SCROLLER);
-            }
+            for (uint16_t num = c_horz_scroll_indicator_chars; num--;)
+                line->append("<", 1, 1, FACE_SCROLLER);
         }
 
         bool short_circuited = false;
@@ -1884,12 +1880,8 @@ again:
                 assert(int32_t(line->width()) < max_size.x);
                 while (int32_t(line->width() + 1) < max_size.x)
                     line->append(" ", 1, 1, FACE_DEFAULT);
-                line->append(">", 1, 1, FACE_SCROLLER);
-                if (c_horz_scroll_indicator_chars > 0)
-                {
-                    for (uint16_t num = c_horz_scroll_indicator_chars - 1; num--;)
-                        line->append(">", 1, 1, FACE_SCROLLER);
-                }
+                for (uint16_t num = c_horz_scroll_indicator_chars; num--;)
+                    line->append(">", 1, 1, FACE_SCROLLER);
             }
         }
         return line;
