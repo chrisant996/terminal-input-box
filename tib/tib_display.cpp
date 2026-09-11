@@ -850,6 +850,9 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
 
 void display_manager::ensure_left()
 {
+    // REVIEW: this smells overly complicated; I suspect that Codex may have
+    // made a mess of this method and it might be worth manually rewriting it.
+
     const coord max_size = get_effective_max_size(true/*omit_scroll_markers*/);
     if (max_size.y != 1)
     {
@@ -857,10 +860,6 @@ void display_manager::ensure_left()
         return;
     }
 
-    const coord full_max_size = get_effective_max_size();
-    const uint16_t left_text_width =
-        (m_left_text.length() && m_left_text.width() < full_max_size.x) ? m_left_text.width() : 0;
-    const cstring& text = m_buffer->get_text();
     const selection_state& selection = m_buffer->get_selection_state();
     if (m_hwheel_exclusion)
     {
@@ -875,15 +874,35 @@ void display_manager::ensure_left()
 
     m_left = min(m_left, selection.get_caret());
 
+    const coord full_max_size = get_effective_max_size();
+    const uint16_t left_text_width = (m_left_text.length() && m_left_text.width() < full_max_size.x) ? m_left_text.width() : 0;
+    const cstring& text = m_buffer->get_text();
+
+    // Auto-scroll horizontally backward.
+    const textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
+    if (m_left > backup_left)
+        m_left = backup_left;
+
     // Auto-scroll horizontally forward.
-    parse_graphemes(text.c_str() + m_left, selection.get_caret() - m_left, 0, m_tmp_graphemes);
+    const uint32_t caret_offset = uint32_t(selection.get_caret() - m_left);
+    parse_graphemes(text.c_str() + m_left, text.length() - m_left, caret_offset, m_tmp_graphemes);
+
     int16_t width = 0;
+    uint32_t line_width = left_text_width;
     for (const auto& g : m_tmp_graphemes)
-        width += g.width;
+    {
+        line_width += g.width;
+        if (g.index + g.length <= caret_offset)
+            width += g.width;
+    }
+    const bool unscrolled_right_marker = line_width > uint32_t(full_max_size.x);
+
     for (auto g = m_tmp_graphemes.cbegin(); true; ++g)
     {
         const uint16_t current_left_text_width = m_left ? 0 : left_text_width;
-        const int16_t caret_max_width = current_left_text_width ? full_max_size.x : max_size.x;
+        // Reserve the right marker when the unscrolled line needs one;
+        // otherwise reserve only the terminal cell needed by the caret.
+        const int16_t caret_max_width = (m_left || unscrolled_right_marker) ? max_size.x : full_max_size.x - 1;
         int16_t display_width = width;
         if (m_left && m_style->horiz_scroll_markers && g != m_tmp_graphemes.cend())
             display_width = get_horiz_scrolled_width(width, g->width);
@@ -894,16 +913,7 @@ void display_manager::ensure_left()
         width -= g->width;
         m_left += g->length;
     }
-
-    // Auto-scroll horizontally backward.
     assert(selection.get_caret() >= m_left);
-    {
-        textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
-        // Returning to column zero would restore the left text and could
-        // make the caret overflow again.
-        if (m_left > backup_left && (backup_left || !left_text_width))
-            m_left = backup_left;
-    }
 }
 
 bool display_manager::display()
