@@ -11,12 +11,14 @@ namespace tib {
 
 struct selection_state
 {
-                    selection_state() : m_anchor(0), m_caret(0), m_dirty(false) { reset_word_anchor(); }
-                    selection_state(textpos_t caret) : m_anchor(caret), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
-                    selection_state(textpos_t anchor, textpos_t caret) : m_anchor(anchor), m_caret(caret), m_dirty(false) { reset_word_anchor(); }
+                    selection_state() : m_anchor(0), m_caret(0) { reset_word_anchor(); }
+                    selection_state(textpos_t caret) : m_anchor(caret), m_caret(caret) { reset_word_anchor(); }
+                    selection_state(textpos_t anchor, textpos_t caret) : m_anchor(anchor), m_caret(caret) { reset_word_anchor(); }
     selection_state& operator=(const selection_state& other);
 
     bool            set_caret(textpos_t caret) { return set_selection(caret, caret); }
+    bool            set_mark(textpos_t mark);
+    bool            set_mark_active(bool active=true);
     bool            set_selection(textpos_t anchor, textpos_t caret);
     bool            clear_selection();
 #if 0
@@ -28,12 +30,14 @@ struct selection_state
 
     textpos_t       get_anchor() const { return m_anchor; }
     textpos_t       get_caret() const { return m_caret; }
+    textpos_t       get_mark() const { return m_mark; }
     textpos_t       get_sel_begin() const { return min(m_anchor, m_caret); }
     textpos_t       get_sel_end() const { return max(m_anchor, m_caret); }
 #if 0
     int             get_word_anchor_begin() const { return m_word_anchor_begin; }
     int             get_word_anchor_end() const { return m_word_anchor_end; }
 #endif
+    bool            is_mark_active() const { return m_mark_active; }
     bool            has_selection() const { return m_anchor != m_caret; }
 
     bool            is_dirty() const { return m_dirty; }
@@ -47,11 +51,13 @@ private:
 private:
     textpos_t       m_anchor;
     textpos_t       m_caret;
+    textpos_t       m_mark;
 #if 0
     short           m_word_anchor_begin;
     short           m_word_anchor_end;
 #endif
-    bool            m_dirty;
+    bool            m_mark_active = false;
+    bool            m_dirty = false;
     uint32_t        m_navigation_counter = 0;
 };
 

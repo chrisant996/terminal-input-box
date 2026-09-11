@@ -113,6 +113,7 @@ public:
     // TODO-FUTURE: Need some way to troubleshoot messed up bindings.
     bool                add(key_binding&& binding);
     bool                add(const char* sequence, const binding_target& target, bool pattern=false);
+    bool                add(const char* sequence, size_t len, const binding_target& target, bool pattern=false);
     bool                remove(const cstring& sequence, bool pattern=false);
     void                clear();
 

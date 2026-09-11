@@ -1545,6 +1545,7 @@ default_colors:
         switch (face)
         {
         case FACE_SELECTION:    return m_colors->get_color(tib::color_element::input_selection);
+        case FACE_MARK:         return m_colors->get_color(tib::color_element::input_mark);
         case FACE_SCROLLER:     return m_colors->get_color(tib::color_element::input_scroller);
         }
         return m_colors->get_color(tib::color_element::base);
@@ -1597,6 +1598,15 @@ bool display_manager::build(display_lines& out)
         assert(text.length() == faces.length());
         if (faces.length() < text.length())
             faces.append_spaces(text.length() - faces.length());
+    }
+
+    // Overlay active mark color into faces.
+    if (sel_state.is_mark_active())
+    {
+        const textpos_t mark = sel_state.get_mark();
+        const textpos_t marked_begin = min(mark, pos);
+        const textpos_t marked_end = max(mark, pos);
+        memset(faces.reserve(0) + marked_begin, FACE_MARK, marked_end - marked_begin);
     }
 
     // Overlay selection color into faces.

@@ -30,6 +30,22 @@ void selection_state::inc_navigation_counter()
         ++m_navigation_counter;
 }
 
+bool selection_state::set_mark(textpos_t mark)
+{
+    if (m_mark == mark)
+        return false;
+    m_mark = mark;
+    return true;
+}
+
+bool selection_state::set_mark_active(bool active)
+{
+    if (m_mark_active == active)
+        return false;
+    m_mark_active = active;
+    return true;
+}
+
 bool selection_state::set_selection(textpos_t anchor, textpos_t caret)
 {
     assert(anchor != static_cast<textpos_t>(-1));

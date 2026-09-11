@@ -140,6 +140,7 @@ std::shared_ptr<tib::key_table_list> make_key_tables()
     t->add("\021", tib::binding_target_func("quoted-insert"));      // Ctrl-Q
     t->add("\022", tib::binding_target_func("lorem-ipsum"));        // Ctrl-R
     t->add("\025", tib::binding_target_func("universal-argument")); // Ctrl-U
+    t->add("\030\030", tib::binding_target_func("exchange-caret-and-mark")); // Ctrl-X,Ctrl-X
     t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
     t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
 
@@ -278,6 +279,7 @@ int main(int argc, const char** argv)
     colors->set_color(tib::color_element::message, "0;48;2;0;80;0;38;2;204;204;204");
     colors->set_color(tib::color_element::input, c_norm_base);
     colors->set_color(tib::color_element::input_selection, "0;30;48;2;232;204;0");
+    colors->set_color(tib::color_element::input_mark, "0;7");
     colors->set_color(tib::color_element::input_scroller, "0;7;36");
 
     tib::face_definitions face_defs;

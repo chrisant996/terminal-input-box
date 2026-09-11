@@ -76,7 +76,8 @@ extern const border_definition c_light_border;
 
 constexpr char FACE_DEFAULT     = 0x20;
 constexpr char FACE_SELECTION   = 0x1f;
-constexpr char FACE_SCROLLER    = 0x1e;
+constexpr char FACE_MARK        = 0x1e;
+constexpr char FACE_SCROLLER    = 0x1d;
 constexpr char FACE_EMPTY       = 0;
 struct editor_callbacks;
 typedef std::map<char, cstring> face_definitions;
@@ -154,6 +155,7 @@ struct display_lines
     int32_t             m_top = 0;
     textpos_t           m_pos = 0;
     textpos_t           m_anchor = 0;
+    textpos_t           m_mark = -1;
     textpos_t           m_left = 0;
     uint32_t            m_change_counter = 0;
 

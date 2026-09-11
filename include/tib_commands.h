@@ -48,6 +48,9 @@ int32_t cua_forward_word(tib::editor_context& ctx, int32_t key, const char* name
 int32_t cua_screen_line_down(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t cua_screen_line_up(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 
+int32_t set_mark(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+int32_t exchange_caret_and_mark(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
+
 int32_t cut(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t copy(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;
 int32_t paste(tib::editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept;

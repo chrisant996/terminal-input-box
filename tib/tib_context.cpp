@@ -257,6 +257,9 @@ void editor_context::initialize(const char* text, size_t len)
     clear_undo_internal();
     m_can_drag = false;
     m_selection.set_caret(0);
+    m_selection.set_mark(0);
+    m_selection.set_mark_active(false);
+    m_auto_deactivate_mark = true;
     insert_text(text, len);
     m_selection.clear_dirty();
     m_display.clear_scroll_offsets();
@@ -623,6 +626,47 @@ bool editor_context::select_word(bool bigword)
     }
 
     return m_selection.set_selection(begin, end);
+}
+
+bool editor_context::set_mark(textpos_t mark)
+{
+    if (mark < 0 || mark > get_text().length())
+        return false;
+    if (!m_selection.set_mark(mark))
+        return false;
+    if (m_selection.is_mark_active())
+        m_display.invalidate();
+    return true;
+}
+
+bool editor_context::set_mark_active(bool active)
+{
+    if (!m_selection.set_mark_active(active))
+        return false;
+    m_display.invalidate();
+    return true;
+}
+
+void editor_context::clear_auto_deactivate_mark()
+{
+    m_auto_deactivate_mark = false;
+}
+
+bool editor_context::exchange_caret_and_mark()
+{
+    const textpos_t mark = get_mark();
+    if (mark < 0 || mark > get_text().length())
+    {
+        set_mark(0);
+        return false;
+    }
+
+    set_mark(get_caret());
+    set_caret(mark);
+
+    set_mark_active();
+    clear_auto_deactivate_mark();
+    return true;
 }
 
 bool editor_context::transpose(uint8_t word)
@@ -1515,6 +1559,12 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 
     if (m_numflags & NUMFLAG_AUTO_CLEAR)
         clear_numeric_argument();
+
+    if (m_auto_deactivate_mark)
+        set_mark_active(false);
+    else
+        m_auto_deactivate_mark = true;
+
     return ret;
 }
 

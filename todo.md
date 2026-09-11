@@ -20,7 +20,6 @@
 
 ## Sufficiency
 
-- [ ] This needs the concept of a "mark" like Readline has.  Fortunately it looks like most of the things that make use of or manipulate the mark are specialized Readline commands that tib doesn't need to provide, but Clink will need to provide them while using tib, so tib must at least provide the low level primitives.
 - [ ] Clink needs to be able to integrate its auto-suggestions and suggestion list with `editor_context`.
     - [ ] Hooks so Clink can exert appropriate influence.
     - [ ] Expose enough internal states for a caller to manipulate its other features based on `editor_context` state; e.g. to suppress an external suggestion list while certain `editor_context` modal states are active, such as incremental history search or execute-command or etc.

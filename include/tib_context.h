@@ -123,6 +123,13 @@ public:
     bool                set_selection(textpos_t anchor, textpos_t caret);
     bool                select_word(bool bigword=false);
 
+    textpos_t           get_mark() const { return m_selection.get_mark(); }
+    bool                set_mark(textpos_t mark);
+    bool                is_mark_active() const { return m_selection.is_mark_active(); }
+    bool                set_mark_active(bool active=true);
+    void                clear_auto_deactivate_mark();
+    bool                exchange_caret_and_mark();
+
 #if _WIN32
     bool                copy_to_clipboard();
     bool                cut_to_clipboard();
@@ -228,6 +235,7 @@ private:
 #endif
     bool                m_done = false;
     bool                m_can_drag = false;
+    bool                m_auto_deactivate_mark = true;
     bool                m_allow_optimized_self_insert = true;
     bool                m_overwrite_mode = false;
     bool                m_replaying_overwrite_input = false;

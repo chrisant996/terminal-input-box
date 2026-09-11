@@ -336,6 +336,15 @@ bool key_table::add(const char* sequence, const binding_target& target, bool pat
     return add(std::move(binding));
 }
 
+bool key_table::add(const char* sequence, size_t len, const binding_target& target, bool pattern)
+{
+    key_binding binding;
+    binding.sequence.set(sequence, len);
+    binding.target = target;
+    binding.pattern = pattern;
+    return add(std::move(binding));
+}
+
 bool key_table::remove(const cstring& sequence, bool pattern)
 {
     assert(sequence.length() > 0);

@@ -103,6 +103,11 @@ int32_t abort(editor_context& ctx, int32_t key, const char* name, const binding_
 int32_t accept_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     ctx.set_done();
+    if (ctx.is_mark_active())
+    {
+        ctx.set_mark_active(false);
+        ctx.display();
+    }
     return 0;
 }
 
@@ -329,6 +334,23 @@ int32_t cua_screen_line_up(editor_context& ctx, int32_t key, const char* name, c
     return do_with_numeric_argument(ctx, key, name, params, cua_screen_line_down, [&]() {
         return ctx.move_caret_vertically(-1, cursor_column_continuation(ctx, "screen-line-up", nullptr, c_screen_line_commands), true/*select*/);
     });
+}
+
+//------------------------------------------------------------------------------
+
+int32_t set_mark(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    const textpos_t mark = ctx.has_numeric_argument() ? ctx.get_numeric_argument() : ctx.get_caret();
+    if (!ctx.set_mark(mark))
+        ding();
+    return 0;
+}
+
+int32_t exchange_caret_and_mark(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    if (!ctx.exchange_caret_and_mark())
+        ding();
+    return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -800,6 +822,7 @@ std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
 {
     auto t = std::make_shared<key_table>(true/*can_self_insert*/);
 
+    t->add("\000", 1, binding_target_func("set-mark"));     // Ctrl-@ (Ctrl-2)
     t->add("\001", binding_target_func("select-all"));      // Ctrl-A
     t->add("\003", binding_target_func("copy"));            // Ctrl-C
     t->add("\007", binding_target_func("abort"));           // Ctrl-G
@@ -890,6 +913,7 @@ static const editor_command c_commands[] =
     { "del-word-right", del_word_right },
     { "digit-argument", digit_argument },
     { "end-of-line", end_of_line },
+    { "exchange-caret-and-mark", exchange_caret_and_mark },
     { "forward-bigword", forward_bigword },
     { "forward-char", forward_char },
     { "forward-word", forward_word },
@@ -905,6 +929,7 @@ static const editor_command c_commands[] =
     { "select-all", select_all },
     { "select-bigword", select_bigword },
     { "select-word", select_word },
+    { "set-mark", set_mark },
     { "toggle-case", toggle_case },
     { "toggle-overwrite-mode", toggle_overwrite_mode },
     { "transpose-bigwords", transpose_bigwords },
