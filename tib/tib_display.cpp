@@ -158,12 +158,6 @@ static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, siz
     return pos;
 }
 
-#ifdef WIDE_HORZ_SCROLL_MARKERS
-const uint16_t c_horz_scroll_indicator_chars = 2;
-#else
-const uint16_t c_horz_scroll_indicator_chars = 1;
-#endif
-
 static int16_t get_horiz_scrolled_width(uint16_t width, uint16_t replaced_width)
 {
     if (width < replaced_width)

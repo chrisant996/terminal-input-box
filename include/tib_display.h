@@ -82,6 +82,11 @@ constexpr char FACE_EMPTY       = 0;
 struct editor_callbacks;
 typedef std::map<char, cstring> face_definitions;
 
+// REVIEW: allow runtime configuration of the horz scroll indicator width?
+constexpr uint16_t c_horz_scroll_indicator_chars = 1;
+static_assert(c_horz_scroll_indicator_chars >= 1);
+static_assert(c_horz_scroll_indicator_chars <= 3);
+
 struct layout_info
 {
     uint16_t            max_width = INT16_MAX;
