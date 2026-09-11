@@ -327,14 +327,12 @@ void display_lines::apply_scroll_markers(int16_t x_extent, int32_t y_extent, int
     {
         display_line& d = *m_lines[0].get();
 
-        // NOTE: build() should always pad to max width, except on last line.
-        assert(d.m_text.length());
-        // if (!d.m_text.length())
-        // {
-        //     for (uint32_t num = c_horz_scroll_indicator_chars; num--;)
-        //         d.append("<", 1, 1, FACE_SCROLLER);
-        // }
-        // else
+        if (!d.m_text.length())
+        {
+            for (uint32_t num = c_horz_scroll_indicator_chars; num--;)
+                d.append("<", 1, 1, FACE_SCROLLER);
+        }
+        else
         {
             const uint32_t num = c_horz_scroll_indicator_chars;
             uint32_t width_displaced = 0;
@@ -1894,9 +1892,6 @@ again:
                 }
             }
         }
-        if (index == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
-            tmp.m_right_text = m_right_text;
-
         return line;
     };
 
@@ -1943,6 +1938,10 @@ again:
 
     // Apply scroll markers.
     tmp.apply_scroll_markers(max_size.x, y_extent, total_rows);
+
+    if (!tmp.m_lines.empty() && m_right_text.width() &&
+        tmp.m_lines.front()->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
+        tmp.m_right_text = m_right_text;
 
     // Handle fixed height mode.
     while (tmp.m_lines.size() < y_extent)

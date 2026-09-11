@@ -1,9 +1,6 @@
 # Issues
 
-- [ ] Right text is no longer showing up on a line that ends early in a newline character.
-- [ ] Newline as first character in a line asserts.
-
-# TODO
+# TO DO
 
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 - Commands:

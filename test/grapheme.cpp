@@ -296,6 +296,17 @@ TEST_CASE("Display differential updates")
         REQUIRE(strstr(s_display_output.c_str(), "xyz") == nullptr);
     }
 
+    SECTION("Displays right text when a scrolled line becomes short enough")
+    {
+        display_test_fixture fixture(10, false, 2);
+        fixture.m_display.set_right_text("xyz", 3);
+        REQUIRE(fixture.display_initial("first\n1234567890\nlast", 21) == true);
+
+        fixture.m_buffer.set_text("first\n123\nlast", 14);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "xyz") != nullptr);
+    }
+
     SECTION("Caret-only updates skip rebuilding display rows")
     {
         display_test_fixture fixture(5, false, 3);
@@ -603,6 +614,15 @@ TEST_CASE("Display multiline scroll markers")
 
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "abc      \x1b[1m>") != nullptr);
+    }
+
+    SECTION("Applies a marker to a blank newline-delimited row")
+    {
+        display_test_fixture fixture(10, false, 2);
+        fixture.m_buffer.set_text("x\n\nz", 4);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[1m<") != nullptr);
     }
 
     SECTION("Pads rows when the next grapheme does not fit")
