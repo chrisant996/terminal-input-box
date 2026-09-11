@@ -20,7 +20,7 @@ bool g_coalesce_output = true;
 bool g_show_hide_cursor = true;
 
 constexpr uint16_t c_right_text_padding = 2;
-constexpr textpos_t c_padding_row_offset = INT32_MAX;
+constexpr textpos_t c_padding_row_offset = int32_max;
 
 const border_definition c_light_border =
 {
@@ -1142,8 +1142,8 @@ bool display_manager::display_internal(display_lines& lines)
         bool reuse_displayed_line = false;
         bool reuse_left_text = false;
         bool reuse_right_text = false;
-        int16_t right_gap_dirty_width = INT16_MAX;
-        int16_t rest_dirty_width = INT16_MAX;
+        int16_t right_gap_dirty_width = int16_max;
+        int16_t rest_dirty_width = int16_max;
         if (!m_force_redisplay && can_optimize && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];

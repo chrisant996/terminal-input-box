@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <vector>
 #include <assert.h>
+#include <limits>
 
 namespace tib {
 
@@ -24,6 +25,11 @@ template <class A> A max(A a, A b) { return (a > b) ? a : b; }
 
 #undef clamp
 template <class A> A clamp(A v, A m, A M) { return min(max(v, m), M); }
+
+constexpr int16_t int16_min = std::numeric_limits<int16_t>::min();
+constexpr int16_t int16_max = std::numeric_limits<int16_t>::max();
+constexpr int32_t int32_min = std::numeric_limits<int32_t>::min();
+constexpr int32_t int32_max = std::numeric_limits<int32_t>::max();
 
 size_t resolve_auto_length(size_t len, const char* s) noexcept;
 #ifdef _WIN32

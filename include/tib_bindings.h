@@ -145,7 +145,7 @@ enum class dispatch_outcome
     expired,            // The dispatcher_target weak reference was expired.
 };
 
-constexpr int32_t c_dispatch_request_quoted_insert = INT32_MAX;
+constexpr int32_t c_dispatch_request_quoted_insert = int32_max;
 
 struct binding_resolver_state;
 

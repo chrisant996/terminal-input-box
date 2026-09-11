@@ -251,7 +251,7 @@ void editor_context::initialize(const char* text, size_t len)
     }
     else
     {
-        len = min<size_t>(INT16_MAX, resolve_auto_length(len, text));
+        len = min<size_t>(int16_max, resolve_auto_length(len, text));
     }
 
     clear_undo_internal();
@@ -1170,7 +1170,7 @@ void editor_context::insert_text(const char* s, size_t available, bool overwrite
     if (!m_replaying_overwrite_input)
         clear_overwrite_input();
 
-    available = min<size_t>(INT16_MAX, resolve_auto_length(available, s));
+    available = min<size_t>(int16_max, resolve_auto_length(available, s));
 
     begin_undo_group();
 

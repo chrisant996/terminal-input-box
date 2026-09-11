@@ -317,7 +317,7 @@ int main(int argc, const char** argv)
         }
         else if (_stricmp(argv[i], "--full-width") == 0)
         {
-            tib->set_max_width(INT16_MAX);
+            tib->set_max_width(tib::int16_max);
         }
         else if (_stricmp(argv[i], "--no-border") == 0)
         {

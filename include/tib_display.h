@@ -89,7 +89,7 @@ static_assert(c_horz_scroll_indicator_chars <= 3);
 
 struct layout_info
 {
-    uint16_t            max_width = INT16_MAX;
+    uint16_t            max_width = int16_max;
     uint16_t            max_height = 1;
     bool                variable_height = false;
 };

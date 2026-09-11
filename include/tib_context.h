@@ -70,9 +70,9 @@ public:
     bool                done() const noexcept { return m_done; }
     void                set_done() noexcept { m_done = true; }
 
-    void                set_max_length(uint32_t m) { m_max_length = static_cast<textpos_t>(min<uint32_t>(m, INT16_MAX)); }
-    void                set_max_width(uint16_t m) { m_layout.max_width = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
-    void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, INT16_MAX)); }
+    void                set_max_length(uint32_t m) { m_max_length = static_cast<textpos_t>(min<uint32_t>(m, int16_max)); }
+    void                set_max_width(uint16_t m) { m_layout.max_width = static_cast<textpos_t>(min<uint16_t>(m, int16_max)); }
+    void                set_max_height(uint16_t m) { m_layout.max_height = static_cast<textpos_t>(min<uint16_t>(m, int16_max)); }
     void                set_variable_height(bool v) { m_layout.variable_height = v; }
     const border_definition* get_border() const { return m_style.border; }
     void                set_border(const border_definition* border);
@@ -228,7 +228,7 @@ private:
     layout_info         m_layout;   // REVIEW: does tib_context actually need access to this?
     style_info          m_style;    // REVIEW: does tib_context actually need access to this?
     editor_quirks       m_quirks;
-    uint32_t            m_max_length = INT16_MAX;
+    uint32_t            m_max_length = int16_max;
 
     // State.
     uint16_t            m_terminal_row = 0;
