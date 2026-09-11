@@ -602,7 +602,7 @@ TEST_CASE("Display multiline scroll markers")
         fixture.m_buffer.set_text("x\nabc \ndef", 2);
 
         REQUIRE(fixture.m_display.display() == true);
-        REQUIRE(strstr(s_display_output.c_str(), "abc      \x1b[m>") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "abc      \x1b[1m>") != nullptr);
     }
 
     SECTION("Pads rows when the next grapheme does not fit")
@@ -611,7 +611,7 @@ TEST_CASE("Display multiline scroll markers")
         fixture.m_buffer.set_text("x\n123456789\xe4\xb8\xadz", 2);
 
         REQUIRE(fixture.m_display.display() == true);
-        REQUIRE(strstr(s_display_output.c_str(), "123456789\x1b[m>") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "123456789\x1b[1m>") != nullptr);
     }
 }
 

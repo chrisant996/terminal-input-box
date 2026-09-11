@@ -276,11 +276,11 @@ int main(int argc, const char** argv)
     colors->set_color(tib::color_element::base, c_norm_base);
     colors->set_color(tib::color_element::border, "0;38;2;33;33;33");
     colors->set_color(tib::color_element::message, "0;48;2;0;80;0;38;2;204;204;204");
+    colors->set_color(tib::color_element::input, c_norm_base);
+    colors->set_color(tib::color_element::input_selection, "0;30;48;2;232;204;0");
+    colors->set_color(tib::color_element::input_scroller, "0;7;36");
 
     tib::face_definitions face_defs;
-    face_defs.emplace(tib::FACE_SELECTION, "0;7");
-    face_defs.emplace(tib::FACE_SCROLLER, "0;7;36");
-    face_defs.emplace(tib::FACE_EMPTY, c_norm_base);
     face_defs.emplace(FACE_CTRL, "0;36;44");
 
     const tib::border_definition* border = nullptr;
@@ -493,20 +493,21 @@ no_border:
         // tib::term_out("\x1b[?1006l");
     }
 
-    face_defs.emplace(tib::FACE_DEFAULT, colors->get_color(tib::color_element::base));
-
     tib::cstring border_face_scroller;
     if (border)
     {
         border_face_scroller.set(colors->get_color(tib::color_element::base));
-        border_face_scroller.append_color("36");
+        border_face_scroller.append_color(colors->get_color(tib::color_element::input_scroller));
         face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
 
         if (left_text.length())
         {
             tib::cstring tmp;
             tmp.append_color(colors->get_color(tib::color_element::base));
-            tmp.append_color("96");
+            const char* bar_text_color = c_bar_text_color;
+            if (_strnicmp(bar_text_color, "0;", 2) == 0)
+                bar_text_color += 2;
+            tmp.append_color(bar_text_color);
             tmp.append(left_text.c_str());
             left_text = std::move(tmp);
         }

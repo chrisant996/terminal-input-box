@@ -18,7 +18,7 @@ enum class color_element
     message,
     input,
     input_selection,
-    input_horiz_scroll,
+    input_scroller,
     MAX
 };
 

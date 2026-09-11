@@ -79,7 +79,7 @@ constexpr char FACE_SELECTION   = 0x1f;
 constexpr char FACE_SCROLLER    = 0x1e;
 constexpr char FACE_EMPTY       = 0;
 struct editor_callbacks;
-typedef std::map<char, const char*> face_definitions;
+typedef std::map<char, cstring> face_definitions;
 
 struct layout_info
 {

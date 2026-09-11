@@ -1540,17 +1540,21 @@ void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_o
 const char* display_manager::get_face_def(char face) const
 {
     if (!m_face_defs)
-        return (face == FACE_SELECTION) ? "0;7" : "";
+    {
+default_colors:
+        switch (face)
+        {
+        case FACE_SELECTION:    return m_colors->get_color(tib::color_element::input_selection);
+        case FACE_SCROLLER:     return m_colors->get_color(tib::color_element::input_scroller);
+        }
+        return m_colors->get_color(tib::color_element::base);
+    }
 
     const auto def = m_face_defs->find(face);
     if (def == m_face_defs->end())
-    {
-        if (face == FACE_EMPTY)
-            return get_face_def(FACE_DEFAULT);
-        return "";
-    }
+        goto default_colors;
 
-    return def->second;
+    return def->second.c_str();
 }
 
 bool display_manager::build(display_lines& out)
