@@ -605,6 +605,8 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
         const void* context = nullptr;
         textpos_t begin = 0;
         textpos_t end = 0;
+        uint32_t x = 0;
+        uint32_t y = 0;
         bool word = false;
     };
     // TODO: no no no, I didn't notice the static variable and using a context
@@ -693,13 +695,15 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
             s_drag.context = &ctx;
             s_drag.begin = selection.get_sel_begin();
             s_drag.end = selection.get_sel_end();
+            s_drag.x = x;
+            s_drag.y = y;
             s_drag.word = word_click;
             return 0;
         }
         break;
 
     case 32:
-        if (key == 'M' && s_drag.context == &ctx)
+        if (key == 'M' && s_drag.context == &ctx && (s_drag.x != x || s_drag.y != y))
         {
             if (!ctx.set_caret_from_screen(x, y, get_scroll_chars(ctx), s_drag.word))
                 return -1;
