@@ -60,6 +60,7 @@ public:
     bool                set(const cstring_t<T>& s);
     bool                set_at(size_t index, char c) noexcept;
     bool                append(const T* s, size_t len=c_auto_length);
+    bool                append_char(char c, size_t n=1);
     bool                append_spaces(size_t n);
     bool                append_color(const T* sgr_params);
     bool                delete_range(size_t index, size_t len) noexcept;
@@ -171,6 +172,18 @@ bool cstring_t<T>::append(const T* s, size_t len)
     memcpy(m_text + m_len, s, len);
     m_len += len;
     m_text[m_len] = 0;
+    return true;
+}
+
+template<class T>
+bool cstring_t<T>::append_char(char c, size_t n)
+{
+    while (n > 0)
+    {
+        if (!append(&c, 1))
+            return false;
+        --n;
+    }
     return true;
 }
 
