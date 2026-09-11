@@ -588,27 +588,54 @@ bool editor_context::set_caret(textpos_t caret)
 
 bool editor_context::set_selection(textpos_t anchor, textpos_t caret)
 {
-    return m_selection.set_selection(anchor, caret);
+    if (!m_selection.set_selection(anchor, caret))
+        return false;
+    m_selection.reset_word_anchor();
+    return true;
 }
 
-bool editor_context::select_word(bool bigword)
+bool editor_context::extend_selection(textpos_t pos, uint8_t word)
 {
-    const textpos_t orig_pos = m_selection.get_caret();
-    const uint8_t word = bigword ? 2 : 1;
+    textpos_t begin;
+    textpos_t end;
+    get_range_at_click(pos, word, begin, end);
 
-    // Look forward for a word.
-    move_right(word);
-    textpos_t end = m_selection.get_caret();
-    move_left(word);
-    const textpos_t high_mid = m_selection.get_caret();
+    textpos_t apply_begin;
+    textpos_t apply_end;
+    if (begin < m_selection.get_word_anchor_begin())
+    {
+        apply_begin = m_selection.get_word_anchor_end();
+        apply_end = begin;
+    }
+    else if (end > m_selection.get_word_anchor_end())
+    {
+        apply_begin = m_selection.get_word_anchor_begin();
+        apply_end = end;
+    }
+    else
+    {
+        apply_begin = m_selection.get_word_anchor_begin();
+        apply_end = m_selection.get_word_anchor_end();
+    }
 
-    m_selection.set_caret(orig_pos);
+    return m_selection.set_selection(apply_begin, apply_end);
+}
 
-    // Look backward for a word.
-    move_left(word);
-    textpos_t begin = m_selection.get_caret();
-    move_right(word);
-    const textpos_t low_mid = m_selection.get_caret();
+void editor_context::get_range_at_click(textpos_t pos, uint8_t word, textpos_t& begin, textpos_t& end)
+{
+    const textpos_t orig_pos = pos;
+
+    // Look forward (for a word).
+    pos_mover(m_text.c_str(), m_text.length(), pos, true/*forward*/, word);
+    end = pos;
+    pos_mover(m_text.c_str(), m_text.length(), pos, false/*forward*/, word);
+    const textpos_t high_mid = pos;
+
+    // Look backward (for a word).
+    pos_mover(m_text.c_str(), m_text.length(), pos, false/*forward*/, word);
+    begin = pos;
+    pos_mover(m_text.c_str(), m_text.length(), pos, true/*forward*/, word);
+    const textpos_t low_mid = pos;
 
     if (high_mid <= orig_pos)
     {
@@ -620,12 +647,21 @@ bool editor_context::select_word(bool bigword)
     }
     else
     {
-        // The position is between two words; select the text between.
+        // The position is in between (two words); select the text between.
         begin = low_mid;
         end = high_mid;
     }
+}
 
-    return m_selection.set_selection(begin, end);
+bool editor_context::select_word(bool bigword)
+{
+    textpos_t begin;
+    textpos_t end;
+
+    const uint8_t word = bigword ? 2 : 1;
+    get_range_at_click(m_selection.get_caret(), word, begin, end);
+
+    return set_selection(begin, end);
 }
 
 bool editor_context::set_mark(textpos_t mark)
@@ -809,11 +845,11 @@ const char* editor_context::get_named_value(const char* name) const
     return (found == m_named_values.end()) ? nullptr : found->second.c_str();
 }
 
-int32_t editor_context::get_named_value_int(const char* name) const
+int32_t editor_context::get_named_value_int(const char* name, int32_t def) const
 {
     const char* value = get_named_value(name);
     if (!value)
-        return 0;
+        return def;
     return atoi(value);
 }
 
@@ -1021,6 +1057,11 @@ bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
 bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column, bool select)
 {
     return m_display.move_caret_vertically(rows, cursor_column, m_selection, select);
+}
+
+bool editor_context::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos)
+{
+    return m_display.get_pos_from_screen(x, y, pos);
 }
 
 bool editor_context::set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars, bool word_drag)

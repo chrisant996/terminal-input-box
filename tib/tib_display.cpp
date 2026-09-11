@@ -541,6 +541,8 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
     if (!columns || get_effective_max_size().y != 1)
         return false;
 
+    // TODO: this is currently unused, with the get_pos_from_screen rewrite.
+
     cursor_column -= m_displayed.m_inner_offset.x;
 
     const cstring& text = m_buffer->get_text();
@@ -632,6 +634,8 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     const coord max_size = get_effective_max_size();
     if (!rows || max_size.y <= 1 || !m_displayed.m_change_counter)
         return false;
+
+    // REVIEW: this seems more complicated and convoluted than necessary.
 
     const int32_t current_row = m_displayed.m_top + m_displayed.m_cursor.y;
     const int32_t wanted_row = max(current_row + rows, 0);
@@ -731,7 +735,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     return changed;
 }
 
-bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars, bool word_drag)
+bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos)
 {
     if (!m_displayed.m_change_counter)
         return false;
@@ -757,83 +761,52 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
     const int32_t height = m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) -
                            m_displayed.m_inner_offset.y - !!border->has_bottom();
     const bool multiline = get_effective_max_size().y > 1;
-    const bool drag = drag_scroll_chars != 0;
     const int32_t column = int32_t(x) - left;
-    const int32_t row = (!multiline && drag) ? 0 : int32_t(y) - top;
-    if (drag)
-    {
-        if (multiline && (row < 0 || row >= height))
-        {
-            const int32_t cursor_column = clamp(column, 0, width - 1) + m_displayed.m_inner_offset.x;
-            const int32_t current_row = m_displayed.m_top + m_displayed.m_cursor.y;
-            const int32_t target_row = row < 0 ? m_displayed.m_top - 1 : m_displayed.m_top + height;
-            return move_caret_vertically(target_row - current_row, cursor_column, selection);
-        }
-        if (!multiline)
-        {
-            const bool over_left_indicator = m_left && m_style && m_style->horiz_scroll_markers &&
-                                             column < c_horz_scroll_indicator_chars;
-            if (column < 0 || over_left_indicator)
-            {
-                scroll_horizontally(-int32_t(drag_scroll_chars), m_displayed.m_inner_offset.x,
-                                    selection, !word_drag);
-                if (word_drag)
-                    selection.set_caret(m_left);
-                return true;
-            }
-            const display_line* const line = m_displayed.m_lines.empty() ? nullptr : m_displayed.m_lines[0].get();
-            const bool has_right_indicator = line && line->m_faces.length() &&
-                                             line->m_faces.c_str()[line->m_faces.length() - 1] == FACE_SCROLLER;
-            const bool over_right_indicator = has_right_indicator &&
-                                              column >= width - c_horz_scroll_indicator_chars;
-            if (column >= width || over_right_indicator)
-            {
-                scroll_horizontally(int32_t(drag_scroll_chars),
-                                    m_displayed.m_inner_offset.x + width - 1, selection, !word_drag);
-                return true;
-            }
-        }
-    }
+    const int32_t row = int32_t(y) - top;
+
+    // TODO: have an out param that indicates scrolling semantics.  Vertical
+    // scrolling up/down in multiline mode, and horizontal scrolling
+    // left/right in single line mode.
+
     if (column < 0 || column >= width || row < 0 || row >= height || size_t(row) >= m_displayed.m_rows.size())
         return false;
 
     const cstring& text = m_buffer->get_text();
-    const auto set_screen_caret = [&](textpos_t caret)
-    {
-        selection.set_caret(caret);
-        return true;
-    };
     const display_row_start& start = m_displayed.m_rows[row];
     if (start.offset == c_padding_row_offset)
-        return set_screen_caret(textpos_t(text.length()));
-    textpos_t caret = start.offset;
+    {
+        pos = textpos_t(text.length());
+        return true;
+    }
+
+    pos = start.offset;
     uint32_t screen_column = 0;
 
     if (row == 0 && m_displayed.m_left_text.width())
     {
         screen_column = m_displayed.m_left_text.width();
         if (uint32_t(column) < screen_column)
-            return set_screen_caret(caret);
+            return true;
     }
 
     if (start.pending)
     {
         if (!column)
-            return set_screen_caret(caret);
-        caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
+            return true;
+        pos = forward_one_grapheme(text.c_str(), text.length(), pos);
         screen_column = 1;
     }
     else if (m_left && m_style && m_style->horiz_scroll_markers)
     {
         if (column < c_horz_scroll_indicator_chars)
-            return set_screen_caret(caret);
-        caret = forward_one_grapheme(text.c_str(), text.length(), caret, nullptr);
+            return true;
+        pos = forward_one_grapheme(text.c_str(), text.length(), pos);
         screen_column = c_horz_scroll_indicator_chars;
     }
 
-    while (caret < text.length() && screen_column <= uint32_t(column))
+    while (pos < text.length() && screen_column <= uint32_t(column))
     {
-        wcwidth_iter iter(text.c_str() + caret, text.length() - caret);
+        wcwidth_iter iter(text.c_str() + pos, text.length() - pos);
         const char32_t c = iter.next();
         if (c == '\n' && multiline)
             break;
@@ -841,11 +814,21 @@ bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_st
         const uint32_t char_width = iter.character_wcwidth_twoctrl();
         if (screen_column + char_width > uint32_t(column) || screen_column + char_width > uint32_t(width))
             break;
-        caret += iter.character_length();
+
+        pos += iter.character_length();
         screen_column += char_width;
     }
 
-    return set_screen_caret(caret);
+    return true;
+}
+
+bool display_manager::set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars, bool word_drag)
+{
+    textpos_t pos;
+    if (!get_pos_from_screen(x, y, pos))
+        return false;
+    selection.set_caret(pos);
+    return true;
 }
 
 void display_manager::ensure_left()
@@ -1755,6 +1738,8 @@ bool display_manager::build(display_lines& out)
     }
     if (tmp.m_cursor.x >= max_size.x)
     {
+        // TODO: this assert fires in single line mode when drag-scrolling to
+        // the right; this is missing horizontal scrolling support.
         assert(multiline);
         tmp.m_cursor.x = 0;
         ++tmp.m_cursor.y;

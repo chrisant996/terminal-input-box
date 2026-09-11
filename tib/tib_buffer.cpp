@@ -17,6 +17,10 @@ selection_state& selection_state::operator=(const selection_state& other)
     {
         m_anchor = other.m_anchor;
         m_caret = other.m_caret;
+        m_mark = other.m_mark;
+        m_word_anchor_begin = other.m_word_anchor_begin;
+        m_word_anchor_end = other.m_word_anchor_end;
+        m_mark_active = other.m_mark_active;
         m_dirty = other.m_dirty;
         inc_navigation_counter();
     }

@@ -216,6 +216,7 @@ public:
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection, bool exclude_auto_scroll=true);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection, bool select=false);
+    bool                get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos);
     bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll(const selection_state& selection);
 

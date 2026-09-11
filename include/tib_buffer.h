@@ -21,22 +21,16 @@ struct selection_state
     bool            set_mark_active(bool active=true);
     bool            set_selection(textpos_t anchor, textpos_t caret);
     bool            clear_selection();
-#if 0
     void            reset_word_anchor() { m_word_anchor_begin = m_anchor; m_word_anchor_end = m_caret; }
     void            reset_word_anchor(textpos_t caret) { m_word_anchor_begin = m_anchor; m_word_anchor_end = caret; }
-#else
-    void            reset_word_anchor() {}
-#endif
 
     textpos_t       get_anchor() const { return m_anchor; }
     textpos_t       get_caret() const { return m_caret; }
     textpos_t       get_mark() const { return m_mark; }
     textpos_t       get_sel_begin() const { return min(m_anchor, m_caret); }
     textpos_t       get_sel_end() const { return max(m_anchor, m_caret); }
-#if 0
-    int             get_word_anchor_begin() const { return m_word_anchor_begin; }
-    int             get_word_anchor_end() const { return m_word_anchor_end; }
-#endif
+    textpos_t       get_word_anchor_begin() const { return m_word_anchor_begin; }
+    textpos_t       get_word_anchor_end() const { return m_word_anchor_end; }
     bool            is_mark_active() const { return m_mark_active; }
     bool            has_selection() const { return m_anchor != m_caret; }
 
@@ -52,10 +46,8 @@ private:
     textpos_t       m_anchor;
     textpos_t       m_caret;
     textpos_t       m_mark;
-#if 0
-    short           m_word_anchor_begin;
-    short           m_word_anchor_end;
-#endif
+    textpos_t       m_word_anchor_begin;
+    textpos_t       m_word_anchor_end;
     bool            m_mark_active = false;
     bool            m_dirty = false;
     uint32_t        m_navigation_counter = 0;

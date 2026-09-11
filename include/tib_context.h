@@ -123,7 +123,10 @@ public:
     void                clear_selection();
     bool                set_caret(textpos_t caret);
     bool                set_selection(textpos_t anchor, textpos_t caret);
+    bool                extend_selection(textpos_t pos, uint8_t word=0);
+    void                get_range_at_click(textpos_t pos, uint8_t word, textpos_t& begin, textpos_t& end);
     bool                select_word(bool bigword=false);
+    void                reset_word_anchor() { m_selection.reset_word_anchor(); }
 
     textpos_t           get_mark() const { return m_selection.get_mark(); }
     bool                set_mark(textpos_t mark);
@@ -144,7 +147,7 @@ public:
     const char*         get_last_command() const noexcept { return m_last_command.c_str(); }
     void                set_last_command(const char* name);
     const char*         get_named_value(const char* name) const;
-    int32_t             get_named_value_int(const char* name) const;
+    int32_t             get_named_value_int(const char* name, int32_t def=0) const;
     void                set_named_value(const char* name, const char* value);
     void                set_named_value_int(const char* name, int32_t value);
     void                clear_named_value(const char* name);
@@ -162,6 +165,7 @@ public:
 
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
+    bool                get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos);
     bool                set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll();
 
