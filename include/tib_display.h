@@ -247,6 +247,7 @@ public:
 private:
     void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
     void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
+    void                print_text_with_faces(coord& cursor, const char* text, const char* faces, size_t len);
     const char*         get_face_def(char face) const;
     bool                try_update_caret_only();
     bool                display_internal(display_lines& lines);
@@ -261,8 +262,12 @@ private:
     void                maybe_flush();
     void                do_flush();
 
+    bool                is_initialized() const;
+
 #ifdef _WIN32
     void                init_horizpos_workaround();
+    void                detect_pending_wrap(coord& cursor);
+    void                finish_pending_wrap(coord& cursor);
 #endif
     void                clr_to_eol(int32_t spaces);
 
@@ -296,6 +301,9 @@ private:
 
 #ifdef _WIN32
     HANDLE              m_horizpos_workaround = 0;
+    const bool          m_autowrap_bug;
+    bool                m_pending_wrap = false;
+    const display_lines* m_pending_wrap_display = nullptr;
 #endif
 
     std::vector<grapheme_info> m_tmp_graphemes;

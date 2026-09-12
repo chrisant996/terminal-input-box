@@ -142,6 +142,17 @@ preserve_window_horiz_scroll_position::~preserve_window_horiz_scroll_position()
         s_mgr = nullptr;
     }
 }
+
+static bool is_autowrap_bug_present()
+{
+#pragma warning(push)
+#pragma warning(disable:4996)
+    OSVERSIONINFO ver = {sizeof(ver)};
+    if (GetVersionEx(&ver))
+        return ver.dwMajorVersion < 10;
+    return false;
+#pragma warning(pop)
+}
 #endif // _WIN32
 
 static textpos_t back_up_by_amount(textpos_t pos, const char* s, size_t len, size_t backup)
@@ -369,6 +380,9 @@ void display_lines::apply_scroll_markers(int16_t x_extent, int32_t y_extent, int
 }
 
 display_manager::display_manager()
+#ifdef _WIN32
+: m_autowrap_bug(is_autowrap_bug_present())
+#endif
 {
     m_term_size = get_terminal_size();
 }
@@ -946,9 +960,8 @@ void display_manager::ensure_left()
 
 bool display_manager::display()
 {
-    assert(m_layout);
-    assert(m_buffer);
-    if (!m_layout || !m_buffer || !m_buffer->get_change_counter())
+    assert(is_initialized());
+    if (!is_initialized() || !m_buffer->get_change_counter())
         return false;   // Nothing to display.
 
     // If origin not set yet, then pin it "here".
@@ -980,6 +993,37 @@ bool display_manager::display()
         return false;   // Nothing changed since last display (or OOM error).
 
     return display_internal(tmp);
+}
+
+void display_manager::print_text_with_faces(coord& cursor, const char* t, const char* f, size_t len)
+{
+    char face = 0;
+    while (len > 0)
+    {
+        if (*f != face)
+        {
+            output_color(get_face_def(*f));
+            face = *f;
+        }
+
+        wcwidth_iter iter(t, len);
+        if (!iter.more())
+            break;
+
+        const char32_t c = iter.next();
+        const uint32_t clen = iter.character_length();
+        assert(clen <= len);
+
+        if (c == 0xfffd)
+            output(c_replacement_character);
+        else
+            output(iter.character_pointer(), clen);
+
+        t += clen;
+        f += clen;
+        len -= clen;
+        cursor.x += iter.character_wcwidth_twoctrl();
+    }
 }
 
 bool display_manager::try_update_caret_only()
@@ -1106,6 +1150,13 @@ bool display_manager::display_internal(display_lines& lines)
     m_accumulator.clear();
     m_coalesce_output = g_coalesce_output;
 
+#ifdef _WIN32
+    m_pending_wrap = false;
+    m_pending_wrap_display = &lines;
+    // FUTURE: force_wrap: if prompt text above the display_lines ends with a
+    // pending wrap, then m_pending_wrap needs to be forced true here.
+#endif
+
     coord cursor = m_relative_cursor;
     const coord term_size = m_term_size;
     const coord max_size = get_effective_max_size();
@@ -1153,6 +1204,7 @@ bool display_manager::display_internal(display_lines& lines)
     }
     m_border_dirty = false;
 
+    // Display the lines.
     for (uint16_t i = 0; i < lines.m_lines.size(); ++i)
     {
         auto const& line = lines.m_lines[i];
@@ -1292,35 +1344,7 @@ bool display_manager::display_internal(display_lines& lines)
         }
 
         // Display the text.
-        char face = 0;
-        const char* t = line->m_text.c_str() + begin;
-        const char* f = line->m_faces.c_str() + begin;
-        for (size_t len = end - begin; len > 0;)
-        {
-            if (*f != face)
-            {
-                output_color(get_face_def(*f));
-                face = *f;
-            }
-
-            wcwidth_iter iter(t, len);
-            if (!iter.more())
-                break;
-
-            const char32_t c = iter.next();
-            const uint32_t clen = iter.character_length();
-            assert(clen <= len);
-
-            if (c == 0xfffd)
-                output(c_replacement_character);
-            else
-                output(iter.character_pointer(), clen);
-
-            t += clen;
-            f += clen;
-            len -= clen;
-            cursor.x += iter.character_wcwidth_twoctrl();
-        }
+        print_text_with_faces(cursor, line->m_text.c_str() + begin, line->m_faces.c_str() + begin, end - begin);
 
         // Fill remaining width.
         if (line->width() < max_size.x)
@@ -1354,6 +1378,11 @@ bool display_manager::display_internal(display_lines& lines)
                 }
             }
         }
+
+#ifdef _WIN32
+        // Update cursor position and deal with autowrap.
+        detect_pending_wrap(cursor);
+#endif
     }
 
     // Display additional lines, comparing by terminal row rather than by
@@ -1420,6 +1449,11 @@ bool display_manager::display_internal(display_lines& lines)
         {
             clr_to_eol(term_size.x - line.width);
         }
+
+#ifdef _WIN32
+        // Update cursor position and deal with autowrap.
+        detect_pending_wrap(cursor);
+#endif
     }
 
     // Erase rows in m_displayed but not in lines.
@@ -1455,6 +1489,11 @@ bool display_manager::display_internal(display_lines& lines)
     output_color("");
     if (g_show_hide_cursor)
         output(c_show_cursor);
+
+#ifdef _WIN32
+    assert(!m_pending_wrap);
+    m_pending_wrap_display = nullptr;
+#endif
 
     if (m_coalesce_output)
     {
@@ -1499,6 +1538,11 @@ void display_manager::move_to_caret_position()
 
 void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset)
 {
+#ifdef _WIN32
+    if (m_pending_wrap)
+        finish_pending_wrap(cursor);
+#endif
+
     y += inner_offset;
 
     if (y == cursor.y)
@@ -1539,6 +1583,11 @@ void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offs
 
 void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset)
 {
+#ifdef _WIN32
+    if (m_pending_wrap)
+        finish_pending_wrap(cursor);
+#endif
+
     x += inner_offset;
     const uint16_t term_x = m_origin.x + x;
 
@@ -1589,9 +1638,8 @@ default_colors:
 
 bool display_manager::build(display_lines& out)
 {
-    assert(m_layout);
-    assert(m_buffer);
-    if (!m_layout || !m_buffer)
+    assert(is_initialized());
+    if (!is_initialized())
         return false;
 
     // NOTE:  Terminal size change is noted inside get_effective_max_size()
@@ -1991,9 +2039,10 @@ again:
 
 void display_manager::append_border(coord extent)
 {
-    assert(m_layout);
-    assert(m_buffer);
+    assert(is_initialized());
     assert(m_style);
+
+// TODO: pending wrap...
 
     const border_definition& b = *m_style->border;
 #if 0
@@ -2059,12 +2108,22 @@ void display_manager::append_border(coord extent)
 
 void display_manager::output(const char* s, size_t len)
 {
+#ifdef _WIN32
+    assert(!m_pending_wrap);
+    m_pending_wrap = false;
+#endif
+
     m_accumulator.append(s, len);
     maybe_flush();
 }
 
 void display_manager::outputf(const char* format, ...)
 {
+#ifdef _WIN32
+    assert(!m_pending_wrap);
+    m_pending_wrap = false;
+#endif
+
     va_list args;
     va_start(args, format);
 
@@ -2076,12 +2135,22 @@ void display_manager::outputf(const char* format, ...)
 
 void display_manager::output_color(const char* sgr_params)
 {
+#ifdef _WIN32
+    assert(!m_pending_wrap);
+    m_pending_wrap = false;
+#endif
+
     m_accumulator.append_color(sgr_params);
     maybe_flush();
 }
 
 void display_manager::output_spaces(size_t n)
 {
+#ifdef _WIN32
+    assert(!m_pending_wrap);
+    m_pending_wrap = false;
+#endif
+
     m_accumulator.append_spaces(n);
     maybe_flush();
 }
@@ -2092,6 +2161,11 @@ void display_manager::maybe_flush()
         return;
 
     do_flush();
+}
+
+bool display_manager::is_initialized() const
+{
+    return m_layout && m_buffer;
 }
 
 void display_manager::do_flush()
@@ -2116,11 +2190,87 @@ static HANDLE is_horizpos_workaround_needed()
 
 void display_manager::init_horizpos_workaround()
 {
-    assert(m_layout);
-    assert(m_buffer);
-    assert(m_style);
+    assert(is_initialized());
 
     m_horizpos_workaround = is_horizpos_workaround_needed();
+}
+
+void display_manager::detect_pending_wrap(coord& cursor)
+{
+    assert(is_initialized());
+
+    // cursor.x identifies the next output column, so it advances one column
+    // past the terminal width after the rightmost cell has been printed.
+    if (m_origin.x + cursor.x > m_term_size.x)
+    {
+        cursor.x = 1 - m_origin.x;
+        ++cursor.y;
+        m_pending_wrap = true;
+    }
+    else
+    {
+        m_pending_wrap = false;
+    }
+}
+
+void display_manager::finish_pending_wrap(coord& cursor)
+{
+    assert(is_initialized());
+
+    // This finishes a pending wrap using a technique that works equally well
+    // on both Win 8.1 and Win 10.
+    assert(m_pending_wrap);
+    assert(m_pending_wrap_display);
+    assert(cursor.x == 1 - m_origin.x);
+
+    if (!m_pending_wrap)
+        return;
+
+    // Code below uses output() which participates in the pending wrap logic,
+    // so m_pending_wrap must be cleared before proceeding.
+    m_pending_wrap = false;
+
+    uint32_t bytes = 0;
+
+    // If there's a display_line, then re-print its first character to force
+    // wrapping.  Otherwise, print a placeholder.
+    const size_t index = cursor.y - m_pending_wrap_display->m_inner_offset.y;
+    assert(index >= 0);
+    if (index < m_pending_wrap_display->m_lines.size())
+    {
+        const display_line& d = *m_pending_wrap_display->m_lines[index];
+
+        if (d.m_x1 == 1)
+        {
+            wcwidth_iter iter(d.m_text.c_str(), d.m_text.length());
+            uint32_t cols = 0;
+            while (iter.next())
+            {
+                const int32_t wc = iter.character_wcwidth_onectrl();
+                cols += wc;
+                if (wc)
+                    break;
+            }
+
+            bytes = uint32_t(iter.get_pointer() - d.m_text.c_str());
+            if (bytes)
+            {
+                coord dummy;
+                print_text_with_faces(dummy, d.m_text.c_str(), d.m_faces.c_str(), bytes);
+                output("\r", 1);
+            }
+        }
+    }
+
+    if (!bytes)
+    {
+        // If there's no display_line or it's empty, print a space to
+        // force wrapping and a backspace to move the cursor to the
+        // beginning of the line with the fewest possible side effects
+        // (which potentially matters during terminal resize, which is
+        // asynchronous with respect to the console application).
+        output("\x1b[m \x08", 5);
+    }
 }
 #endif // _WIN32
 

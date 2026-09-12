@@ -677,6 +677,36 @@ TEST_CASE("Display multiline wrapping")
     REQUIRE(fixture.m_display.get_relative_cursor().y == 1);
 }
 
+TEST_CASE("Display full-width pending wrap")
+{
+    SECTION("Finishes pending wrap after a final text cell")
+    {
+        display_test_fixture fixture(tib::int16_max, false, 3, true);
+        tib::cstring text;
+        text.append_char('x', tib::get_terminal_size().x);
+        fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[m \x08") != nullptr);
+        const tib::coord expected = { 0, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+
+    SECTION("Finishes pending wrap after a final space cell")
+    {
+        display_test_fixture fixture(tib::int16_max, false, 3, true);
+        tib::cstring text;
+        text.append_char('x', tib::get_terminal_size().x - 1);
+        text.append(" ");
+        fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[m \x08") != nullptr);
+        const tib::coord expected = { 0, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected);
+    }
+}
+
 TEST_CASE("Display multiline scroll markers")
 {
     SECTION("Preserves line width when replacing trailing text")
