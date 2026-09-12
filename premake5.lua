@@ -111,3 +111,7 @@ project("example")
     files("example/*.cpp")
     files("example/example.rc")
 
+    postbuildcommands {
+        "{COPYFILE} %[example/example.clinkcomplete] %[%{!cfg.targetdir}]"
+    }
+

@@ -26,6 +26,8 @@ static const char c_long_usage[] =
 "  --origin X        Set origin X coordinate (1-based).\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
+"  --mouse MODE      Mouse VT input mode (MODE == none, vt200, drag, any).\n"
+"  --enc MODE        Mouse VT encoding mode (MODE == default, sgr).\n"
 ;
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
