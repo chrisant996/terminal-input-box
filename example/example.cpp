@@ -130,27 +130,81 @@ static const bar_padding_border_definition c_bar_padding_border;
 static const bar_padding_border_definition c_first_line_border("> ", " HH:MM");
 #pragma endregion // Example customizations.
 
+std::shared_ptr<tib::key_table_list> s_normal_bindings;
+std::shared_ptr<tib::key_table_list> s_movement_bindings;
+
 int32_t insert_newline(tib::editor_context& ctx, int32_t key, const char* name, const tib::binding_params* params) noexcept
 {
     ctx.insert_char('\n');
     return 0;
 }
 
-std::shared_ptr<tib::key_table_list> make_key_tables()
+int32_t normal_mode(tib::editor_context& ctx, int32_t key, const char* name, const tib::binding_params* params) noexcept
 {
-    auto t = std::make_shared<tib::key_table>();
-    t->add("\021", tib::binding_target_func("quoted-insert"));      // Ctrl-Q
-    t->add("\022", tib::binding_target_func("lorem-ipsum"));        // Ctrl-R
-    t->add("\025", tib::binding_target_func("universal-argument")); // Ctrl-U
-    t->add("\030\030", tib::binding_target_func("exchange-caret-and-mark")); // Ctrl-X,Ctrl-X
-    t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
-    t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
+    ctx.set_bindings(s_normal_bindings);
+    return 0;
+}
 
+int32_t movement_mode(tib::editor_context& ctx, int32_t key, const char* name, const tib::binding_params* params) noexcept
+{
+    ctx.set_bindings(s_movement_bindings);
+    return 0;
+}
+
+void make_key_tables()
+{
     tib::editor_context::register_command("insert-newline", insert_newline);
+    tib::editor_context::register_command("normal-mode", normal_mode);
+    tib::editor_context::register_command("movement-mode", movement_mode);
 
-    auto tables = tib::make_default_key_table(true/*numeric_argument*/);
-    tables->emplace_back(t);
-    return tables;
+    s_normal_bindings = tib::make_default_key_table(true/*numeric_argument*/);
+    {
+        auto t = std::make_shared<tib::key_table>();
+        t->add("\021", tib::binding_target_func("quoted-insert"));      // Ctrl-Q
+        t->add("\022", tib::binding_target_func("lorem-ipsum"));        // Ctrl-R
+        t->add("\025", tib::binding_target_func("universal-argument")); // Ctrl-U
+        t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
+        t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
+
+#ifdef _WIN32
+        // HACK: Quick temporary hack for Win8.1, which doesn't have VT input.
+        if (tib::is_autowrap_bug_present())
+            t->add("\010", tib::binding_target_func("del-char-left"));  // Ctrl-H
+#endif
+
+        t->add("\030\001", tib::binding_target_func("movement-mode"));              // Ctrl-X,Ctrl-A
+        t->add("\030\030", tib::binding_target_func("exchange-caret-and-mark"));    // Ctrl-X,Ctrl-X
+
+        s_normal_bindings->emplace_back(t);
+    }
+
+    s_movement_bindings = std::make_shared<tib::key_table_list>();
+    {
+        auto t = std::make_shared<tib::key_table>();
+        t->add("\001", tib::binding_target_func("begin-of-line"));      // Ctrl-A
+        t->add("\002", tib::binding_target_func("backward-char"));      // Ctrl-B
+        t->add("\004", tib::binding_target_func("del-char-right"));     // Ctrl-D
+        t->add("\005", tib::binding_target_func("end-of-line"));        // Ctrl-E
+        t->add("\006", tib::binding_target_func("forward-char"));       // Ctrl-F
+        t->add("\010", tib::binding_target_func("del-char-left"));      // Ctrl-H
+        t->add("\021", tib::binding_target_func("screen-line-up"));     // Ctrl-Q
+        t->add("\032", tib::binding_target_func("screen-line-down"));   // Ctrl-Z
+
+        t->add("b", tib::binding_target_func("backward-char"));
+        t->add("B", tib::binding_target_func("backward-word"));
+        t->add("d", tib::binding_target_func("del-char-right"));
+        t->add("D", tib::binding_target_func("del-word-right"));
+        t->add("f", tib::binding_target_func("forward-char"));
+        t->add("F", tib::binding_target_func("forward-word"));
+        t->add("h", tib::binding_target_func("del-char-left"));
+        t->add("H", tib::binding_target_func("del-word-left"));
+        t->add("q", tib::binding_target_func("screen-line-up"));
+        t->add("z", tib::binding_target_func("screen-line-down"));
+
+        t->add("\030\001", tib::binding_target_func("normal-mode"));    // Ctrl-X,Ctrl-A
+
+        s_movement_bindings->emplace_back(t);
+    }
 }
 
 class custom_input_box : public tib::input_box, protected tib::editor_callbacks
@@ -219,34 +273,51 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
 }
 #pragma endregion // Example customizations.
 
-#pragma region Show input sequence.
-static void display_key_sequence(tib::editor_context& ctx, const tib::cstring& show_sequence, const tib::coord* old_extent=nullptr)
+#pragma region Show custom feedback.
+static void add_feedback_line(const char* color, const char* text, std::vector<tib::additional_display_line>& addl)
 {
     tib::additional_display_line line;
 
-    if (show_sequence.length())
-    {
-        line.text.append_color("36");
-        const size_t begin_len = line.text.length();
+    line.text.clear();
+    line.text.append_color("96;44");
+    const size_t begin_len = line.text.length();
 
-        line.text.append("  keys:  ");
-        line.text.append(show_sequence.c_str(), show_sequence.length());
+    line.text.append(text);
 
-        const size_t end_len = line.text.length();
-        line.text.append_color("");
-        line.width = uint16_t(line.text.length() - (end_len - begin_len));
-        line.bounded = true;
+    const size_t end_len = line.text.length();
+    // line.text.append_color("");
 
-        std::vector<tib::additional_display_line> additional;
-        additional.emplace_back(std::move(line));
-        ctx.set_additional_lines(additional);
-    }
-    else
-    {
-        ctx.clear_additional_lines();
-    }
+    line.width = uint16_t(end_len - begin_len);
+    // line.bounded = true;
+
+    addl.emplace_back(std::move(line));
 }
-#pragma endregion // Show input sequence.
+
+static void display_feedback(tib::editor_context& ctx, const tib::cstring& show_sequence)
+{
+    tib::cstring tmp;
+    std::vector<tib::additional_display_line> additional;
+
+    if (ctx.get_bindings() == s_movement_bindings)
+    {
+        add_feedback_line("96;44", "^A-begline  ^B-left  ^D-del  ^E-endline  ^F-right  ^Q-up  ^Z-down", additional);
+        add_feedback_line("96;44", "b/B-leftchar/word  f/F-rightchar/word  q/z-lineup/down", additional);
+        add_feedback_line("96;44", "d/D-delrightchar/word  h/H-delleftchar/word", additional);
+    }
+
+    if (s_show_keys && show_sequence.length())
+    {
+        tmp.set("  keys:  ");
+        tmp.append(show_sequence.c_str(), show_sequence.length());
+        add_feedback_line("36", tmp.c_str(), additional);
+    }
+
+    if (additional.size())
+        ctx.set_additional_lines(additional);
+    else
+        ctx.clear_additional_lines();
+}
+#pragma endregion // Show custom feedback.
 
 int main(int argc, const char** argv)
 {
@@ -268,7 +339,8 @@ int main(int argc, const char** argv)
     tib::term_begin();
 
     std::shared_ptr<custom_input_box> tib = std::make_shared<custom_input_box>();
-    tib->set_bindings(make_key_tables());
+    make_key_tables();  // BUGBUG: should not require an editor_context to have been created.
+    tib->set_bindings(s_normal_bindings);
     tib->set_max_width(40);
 
 #pragma region Example customizations.
@@ -563,10 +635,9 @@ no_border:
     tib::coord old_extent = tib->get_extent();
     double last_clock = tib::clock();
 
-    auto add_sequence_to_display = [&]()
+    auto add_feedback_to_display = [&]()
     {
-        if (s_show_keys)
-            display_key_sequence(*tib, show_sequence, &old_extent);
+        display_feedback(*tib, show_sequence);
     };
 
     auto update_sequence_before_step = [&](int32_t c)
@@ -619,7 +690,7 @@ no_border:
 
     while (!tib->done())                                    // Required.
     {
-                /*Custom*/  add_sequence_to_display();
+                /*Custom*/  add_feedback_to_display();
 
         tib->display();                                     // Required.
 

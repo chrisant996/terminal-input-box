@@ -143,7 +143,7 @@ preserve_window_horiz_scroll_position::~preserve_window_horiz_scroll_position()
     }
 }
 
-static bool is_autowrap_bug_present()
+bool is_autowrap_bug_present()
 {
 #pragma warning(push)
 #pragma warning(disable:4996)

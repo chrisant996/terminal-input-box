@@ -309,4 +309,8 @@ private:
     std::vector<grapheme_info> m_tmp_graphemes;
 };
 
+#ifdef _WIN32
+bool is_autowrap_bug_present();
+#endif
+
 } // namespace tib
