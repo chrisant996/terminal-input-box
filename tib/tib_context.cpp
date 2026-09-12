@@ -518,7 +518,7 @@ bool editor_context::move_right(uint8_t word, bool select)
         m_selection.set_caret(m_selection.get_sel_end());
         moved = true;
     }
-    else if (m_selection.get_caret() < m_text.length())
+    else if (size_t(m_selection.get_caret()) < m_text.length())
     {
         textpos_t caret = m_selection.get_caret();
         textpos_t anchor = m_selection.get_anchor();
@@ -559,7 +559,7 @@ bool editor_context::backspace(uint8_t word)
 bool editor_context::del(uint8_t word)
 {
     m_selection.reset_word_anchor();
-    if (!m_selection.has_selection() && m_selection.get_caret() >= m_text.length())
+    if (!m_selection.has_selection() && m_selection.get_caret() >= textpos_t(m_text.length()))
         return false;
 
     begin_undo_group();
@@ -666,7 +666,7 @@ bool editor_context::select_word(bool bigword)
 
 bool editor_context::set_mark(textpos_t mark)
 {
-    if (mark < 0 || mark > get_text().length())
+    if (mark < 0 || size_t(mark) > get_text().length())
         return false;
     if (!m_selection.set_mark(mark))
         return false;
@@ -691,7 +691,7 @@ void editor_context::clear_auto_deactivate_mark()
 bool editor_context::exchange_caret_and_mark()
 {
     const textpos_t mark = get_mark();
-    if (mark < 0 || mark > get_text().length())
+    if (mark < 0 || size_t(mark) > get_text().length())
     {
         set_mark(0);
         return false;
@@ -1244,7 +1244,7 @@ void editor_context::insert_text(const char* s, size_t available, bool overwrite
         {
             size_t contributed = (context_graphemes > old_context_graphemes) ?
                                  context_graphemes - old_context_graphemes : 0;
-            while (contributed-- && candidate_end < base.length() && base.c_str()[candidate_end] != '\n')
+            while (contributed-- && size_t(candidate_end) < base.length() && base.c_str()[candidate_end] != '\n')
                 candidate_end = forward_one_grapheme(base.c_str(), base.length(), candidate_end);
         }
 

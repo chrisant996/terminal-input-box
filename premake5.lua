@@ -22,7 +22,7 @@ end
 --------------------------------------------------------------------------------
 workspace("tib")
     configurations({"debug", "release"})
-    platforms({"x64"})
+    platforms({"x64", "x86"})
     location(to)
 
     characterset("Unicode")

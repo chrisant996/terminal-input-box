@@ -712,7 +712,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
             screen_column = 1;
         }
     }
-    while (caret < text.length() && screen_column < uint32_t(cursor_column))
+    while (size_t(caret) < text.length() && screen_column < uint32_t(cursor_column))
     {
         wcwidth_iter iter(text.c_str() + caret, text.length() - caret);
         const char32_t c = iter.next();
@@ -842,7 +842,7 @@ bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos
         screen_column = c_horz_scroll_indicator_chars;
     }
 
-    while (pos < text.length() && screen_column <= uint32_t(column))
+    while (size_t(pos) < text.length() && screen_column <= uint32_t(column))
     {
         wcwidth_iter iter(text.c_str() + pos, text.length() - pos);
         const char32_t c = iter.next();
@@ -1001,7 +1001,7 @@ bool display_manager::try_update_caret_only()
         return false;
 
     const cstring& text = m_buffer->get_text();
-    if (caret > text.length())
+    if (size_t(caret) > text.length())
         return false;
 
     size_t row = 0;
@@ -1968,7 +1968,7 @@ again:
         tmp.m_right_text = m_right_text;
 
     // Handle fixed height mode.
-    while (tmp.m_lines.size() < y_extent)
+    while (int32_t(tmp.m_lines.size()) < y_extent)
     {
         tmp.m_lines.emplace_back(std::move(std::make_unique<display_line>(m_origin.x)));
         tmp.m_rows.push_back({ c_padding_row_offset, false });

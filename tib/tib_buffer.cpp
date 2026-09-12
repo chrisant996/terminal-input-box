@@ -39,6 +39,8 @@ bool selection_state::set_mark(textpos_t mark)
     if (m_mark == mark)
         return false;
     m_mark = mark;
+    if (m_mark < 0)
+        m_mark_active = false;
     return true;
 }
 
@@ -46,14 +48,19 @@ bool selection_state::set_mark_active(bool active)
 {
     if (m_mark_active == active)
         return false;
+    assert(implies(active, m_mark >= 0));
+    if (active && m_mark < 0)
+        return false;
     m_mark_active = active;
     return true;
 }
 
 bool selection_state::set_selection(textpos_t anchor, textpos_t caret)
 {
-    assert(anchor != static_cast<textpos_t>(-1));
-    assert(caret != static_cast<textpos_t>(-1));
+    assert(anchor >= 0);
+    assert(caret >= 0);
+    if (anchor < 0 || caret < 0)
+        return false;
     if (anchor == m_anchor && caret == m_caret)
         return false;
     m_dirty = true;
