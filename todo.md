@@ -1,5 +1,7 @@
 # Issues
 
+- The pending wrap stuff collides with the additional lines...  Overwrites the first character.
+
 # TO DO
 
 - Needs a custom input driver to work on Win8.1 (doesn't necessarily need a custom terminal emulator, because ANSICON can be used, although ANSICON has its own quirks that can require workarounds).
