@@ -844,15 +844,19 @@ void display_manager::ensure_left()
     }
 
     const selection_state& selection = m_buffer->get_selection_state();
+    bool suppress_auto_scroll = false;
     if (m_hwheel_exclusion)
     {
         if (m_left == m_hwheel_exclusion_left &&
             selection.get_caret() == m_hwheel_exclusion_caret &&
             m_buffer->get_change_counter() == m_hwheel_exclusion_change_counter)
         {
-            return;
+            suppress_auto_scroll = true;
         }
-        m_hwheel_exclusion = false;
+        else
+        {
+            m_hwheel_exclusion = false;
+        }
     }
 
     m_left = min(m_left, selection.get_caret());
@@ -862,9 +866,12 @@ void display_manager::ensure_left()
     const cstring& text = m_buffer->get_text();
 
     // Auto-scroll horizontally backward.
-    const textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
-    if (m_left > backup_left)
-        m_left = backup_left;
+    if (!suppress_auto_scroll)
+    {
+        const textpos_t backup_left = back_up_by_amount(selection.get_caret(), text.c_str(), selection.get_caret(), 4);
+        if (m_left > backup_left)
+            m_left = backup_left;
+    }
 
     // Auto-scroll horizontally forward.
     const uint32_t caret_offset = uint32_t(selection.get_caret() - m_left);
@@ -1738,8 +1745,6 @@ bool display_manager::build(display_lines& out)
     }
     if (tmp.m_cursor.x >= max_size.x)
     {
-        // TODO: this assert fires in single line mode when drag-scrolling to
-        // the right; this is missing horizontal scrolling support.
         assert(multiline);
         tmp.m_cursor.x = 0;
         ++tmp.m_cursor.y;
