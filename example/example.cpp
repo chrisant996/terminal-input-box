@@ -285,10 +285,10 @@ static void add_feedback_line(const char* color, const char* text, std::vector<t
     line.text.append(text);
 
     const size_t end_len = line.text.length();
-    // line.text.append_color("");
+    line.text.append_color("");
 
     line.width = uint16_t(end_len - begin_len);
-    // line.bounded = true;
+    line.bounded = true;
 
     addl.emplace_back(std::move(line));
 }
@@ -300,9 +300,9 @@ static void display_feedback(tib::editor_context& ctx, const tib::cstring& show_
 
     if (ctx.get_bindings() == s_movement_bindings)
     {
-        add_feedback_line("96;44", "^A-begline  ^B-left  ^D-del  ^E-endline  ^F-right  ^Q-up  ^Z-down", additional);
-        add_feedback_line("96;44", "b/B-leftchar/word  f/F-rightchar/word  q/z-lineup/down", additional);
-        add_feedback_line("96;44", "d/D-delrightchar/word  h/H-delleftchar/word", additional);
+        add_feedback_line("96;44", "^A=begline  ^B=left  ^E=endline  ^F=right  ^Q=up  ^Z=down", additional);
+        add_feedback_line("96;44", "b/B=left-char/word  f/F=right-char/word  q/z=line-up/down", additional);
+        add_feedback_line("96;44", "d/D=del-right-char/word  h/H=del-left-char/word          ", additional);
     }
 
     if (s_show_keys && show_sequence.length())
