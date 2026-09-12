@@ -1119,7 +1119,7 @@ bool display_manager::display_internal(display_lines& lines)
             return;
         if (m_origin.x + cursor.x + width - 1 >= term_size.x)
         {
-            clr_to_eol(term_size.x - (m_origin.x + cursor.x + width - 1));
+            clr_to_eol(term_size.x - (m_origin.x + cursor.x) + 1);
         }
         else
         {

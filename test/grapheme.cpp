@@ -211,6 +211,15 @@ TEST_CASE("Display differential updates")
         REQUIRE(strstr(s_display_output.c_str(), "abc") != nullptr);
     }
 
+    SECTION("Clears a variable-height line through the full terminal width")
+    {
+        display_test_fixture fixture(tib::int16_max, false, 3, true);
+        fixture.m_buffer.set_text("abc\ndef", 7);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[K") != nullptr);
+    }
+
     SECTION("Redraws changed left text")
     {
         display_test_fixture fixture;
