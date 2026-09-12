@@ -690,11 +690,33 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
             const char* operation = ctx.get_named_value(c_cursor_column_operation_var_name);
             const bool word = (operation && strcmp(operation, "double_click") == 0);
             textpos_t pos;
-            // TODO: drag-scrolling mostly does not work anymore because
-            // get_pos_from_screen removed the scrolling stuff that had been
-            // in set_caret_from_screen.
-            if (!ctx.get_pos_from_screen(x, y, pos))
+            screen_scroll_info scroll;
+            if (!ctx.get_pos_from_screen(x, y, pos, &scroll))
                 goto unhandled;
+
+            switch (scroll.direction)
+            {
+            case screen_scroll_direction::up:
+            case screen_scroll_direction::down:
+                ctx.move_caret_vertically(scroll.vertical_row_delta, scroll.cursor_column);
+                pos = ctx.get_caret();
+                break;
+
+            case screen_scroll_direction::left:
+            case screen_scroll_direction::right:
+                {
+                    const int32_t direction = scroll.direction == screen_scroll_direction::left ? -1 : 1;
+                    const uint32_t scroll_chars = get_scroll_chars(ctx);
+                    if (scroll_chars)
+                        ctx.scroll_horizontally(direction * int32_t(scroll_chars), scroll.cursor_column, !word);
+                    pos = (word && scroll.direction == screen_scroll_direction::left) ?
+                          ctx.get_left() : ctx.get_caret();
+                }
+                break;
+
+            case screen_scroll_direction::none:
+                break;
+            }
 
             ctx.extend_selection(pos, word);
             if (!word)

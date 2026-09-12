@@ -152,6 +152,22 @@ struct display_row_start
     bool                pending;
 };
 
+enum class screen_scroll_direction
+{
+    none,
+    up,
+    down,
+    left,
+    right,
+};
+
+struct screen_scroll_info
+{
+    screen_scroll_direction direction = screen_scroll_direction::none;
+    int32_t             cursor_column = 0;
+    int32_t             vertical_row_delta = 0;
+};
+
 struct display_lines
 {
     void                clear();
@@ -216,7 +232,7 @@ public:
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, selection_state& selection, bool exclude_auto_scroll=true);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, selection_state& selection, bool select=false);
-    bool                get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos);
+    bool                get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos, screen_scroll_info* scroll=nullptr);
     bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll(const selection_state& selection);
 

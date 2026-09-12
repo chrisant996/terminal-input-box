@@ -1049,9 +1049,9 @@ bool editor_context::universal_argument()
     return true;
 }
 
-bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column)
+bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column, bool exclude_auto_scroll)
 {
-    return m_display.scroll_horizontally(columns, cursor_column, m_selection);
+    return m_display.scroll_horizontally(columns, cursor_column, m_selection, exclude_auto_scroll);
 }
 
 bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column, bool select)
@@ -1059,9 +1059,9 @@ bool editor_context::move_caret_vertically(int32_t rows, int32_t cursor_column, 
     return m_display.move_caret_vertically(rows, cursor_column, m_selection, select);
 }
 
-bool editor_context::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos)
+bool editor_context::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos, screen_scroll_info* scroll)
 {
-    return m_display.get_pos_from_screen(x, y, pos);
+    return m_display.get_pos_from_screen(x, y, pos, scroll);
 }
 
 bool editor_context::set_caret_from_screen(uint32_t x, uint32_t y, uint32_t drag_scroll_chars, bool word_drag)

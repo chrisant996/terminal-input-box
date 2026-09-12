@@ -541,8 +541,6 @@ bool display_manager::scroll_horizontally(int32_t columns, int32_t cursor_column
     if (!columns || get_effective_max_size().y != 1)
         return false;
 
-    // TODO: this is currently unused, with the get_pos_from_screen rewrite.
-
     cursor_column -= m_displayed.m_inner_offset.x;
 
     const cstring& text = m_buffer->get_text();
@@ -735,7 +733,7 @@ bool display_manager::move_caret_vertically(int32_t rows, int32_t cursor_column,
     return changed;
 }
 
-bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos)
+bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos, screen_scroll_info* scroll)
 {
     if (!m_displayed.m_change_counter)
         return false;
@@ -761,12 +759,52 @@ bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos
     const int32_t height = m_displayed.m_extent.y - int32_t(m_displayed.m_additional_lines.size()) -
                            m_displayed.m_inner_offset.y - !!border->has_bottom();
     const bool multiline = get_effective_max_size().y > 1;
-    const int32_t column = int32_t(x) - left;
-    const int32_t row = int32_t(y) - top;
+    int32_t column = int32_t(x) - left;
+    int32_t row = int32_t(y) - top;
 
-    // TODO: have an out param that indicates scrolling semantics.  Vertical
-    // scrolling up/down in multiline mode, and horizontal scrolling
-    // left/right in single line mode.
+    if (scroll)
+    {
+        *scroll = {};
+        if (multiline && (row < 0 || row >= height))
+        {
+            scroll->direction = row < 0 ? screen_scroll_direction::up : screen_scroll_direction::down;
+            scroll->cursor_column = clamp(column, 0, width - 1) + m_displayed.m_inner_offset.x;
+            const int32_t current_row = m_displayed.m_top + m_displayed.m_cursor.y;
+            const int32_t target_row = row < 0 ? m_displayed.m_top - 1 : m_displayed.m_top + height;
+            scroll->vertical_row_delta = target_row - current_row;
+            return true;
+        }
+        if (!multiline)
+        {
+            row = 0;
+            const bool over_left_indicator = m_left && m_style && m_style->horiz_scroll_markers &&
+                                             column < c_horz_scroll_indicator_chars;
+            if (column < 0 || over_left_indicator)
+            {
+                scroll->direction = screen_scroll_direction::left;
+                scroll->cursor_column = m_displayed.m_inner_offset.x;
+                return true;
+            }
+
+            const display_line* const line = m_displayed.m_lines.empty() ? nullptr : m_displayed.m_lines[0].get();
+            const bool has_right_indicator = line && line->m_faces.length() &&
+                                             line->m_faces.c_str()[line->m_faces.length() - 1] == FACE_SCROLLER;
+            const bool over_right_indicator = has_right_indicator &&
+                                              column >= width - c_horz_scroll_indicator_chars;
+            if (column >= width || over_right_indicator)
+            {
+                scroll->direction = screen_scroll_direction::right;
+                scroll->cursor_column = m_displayed.m_inner_offset.x + width - 1;
+                return true;
+            }
+        }
+    }
+
+    if (scroll && multiline && row == 0 && m_displayed.m_top > 0 && column < 0)
+        column = 0;
+    else if (scroll && multiline && row == height - 1 && column >= width &&
+             !m_displayed.m_lines.empty() && m_displayed.m_lines.back()->m_trail_scroller_width_displaced)
+        column = width - 1;
 
     if (column < 0 || column >= width || row < 0 || row >= height || size_t(row) >= m_displayed.m_rows.size())
         return false;
