@@ -147,7 +147,9 @@ class display_test_fixture
 {
 public:
     display_test_fixture(uint16_t max_width=10, bool horiz_scroll_markers=false,
-                         uint16_t max_height=1, bool variable_height=false)
+                         uint16_t max_height=1, bool variable_height=false,
+                         const tib::border_definition* border=nullptr,
+                         int32_t origin_x=1)
     : m_output(s_display_output)
     {
         m_old_coalesce = tib::g_coalesce_output;
@@ -156,12 +158,12 @@ public:
         m_layout.max_width = max_width;
         m_layout.max_height = max_height;
         m_layout.variable_height = variable_height;
-        m_style.border = &m_border;
+        m_style.border = border ? border : &m_border;
         m_style.horiz_scroll_markers = horiz_scroll_markers;
         m_display.init_layout(&m_layout);
         m_display.init_buffer(&m_buffer);
         m_display.init_style(&m_style);
-        m_display.set_origin(1, 1);
+        m_display.set_origin(origin_x, 1);
     }
 
     ~display_test_fixture()
@@ -218,6 +220,36 @@ TEST_CASE("Display differential updates")
 
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[K") != nullptr);
+    }
+
+    SECTION("Clears a changed bounded line without entering pending wrap")
+    {
+        tib::border_definition border;
+        border.top = "-";
+        border.bottom = "-";
+        border.left = "||";
+        border.right = "||";
+        border.top_width = 1;
+        border.bottom_width = 1;
+        border.left_width = 2;
+        border.right_width = 2;
+        display_test_fixture fixture(tib::int16_max, false, 3, true, &border, 5);
+        REQUIRE(fixture.display_initial("abc", 3) == true);
+
+        tib::additional_display_line line;
+        line.text.set("keys: a");
+        line.width = 7;
+        line.bounded = true;
+        fixture.m_display.set_additional_lines({ line });
+        REQUIRE(fixture.m_display.display() == true);
+
+        line.text.set("keys: b");
+        fixture.m_display.set_additional_lines({ line });
+        s_display_output.clear();
+        REQUIRE(fixture.m_display.display() == true);
+        const char* const changed_line = strstr(s_display_output.c_str(), "keys: b");
+        REQUIRE(changed_line != nullptr);
+        REQUIRE(strstr(changed_line, "\x1b[K") != nullptr);
     }
 
     SECTION("Redraws changed left text")

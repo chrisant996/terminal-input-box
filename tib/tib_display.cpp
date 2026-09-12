@@ -1413,8 +1413,7 @@ bool display_manager::display_internal(display_lines& lines)
         {
             if (!line_overflow || !erased_unbounded_line)
             {
-                output_spaces(input_extent.x - width);
-                cursor.x += input_extent.x - width;
+                erase_row(input_extent.x - width);
             }
         }
         else if (line.width < term_size.x)
