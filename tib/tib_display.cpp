@@ -1407,7 +1407,9 @@ bool display_manager::display_internal(display_lines& lines)
         }
         any_updates = true;
 
-        // Move the cursor.
+        // Move the cursor.  Be sure to restore the default color first,
+        // otherwise if the terminal scrolls it will fill the new line with
+        // the wrong color.
         output_color("");
         move_to_row(cursor, uint16_t(row), 0);
         const bool erased_unbounded_line = line.bounded && displayed && !displayed->bounded;
