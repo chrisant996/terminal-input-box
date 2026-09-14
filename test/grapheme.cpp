@@ -679,6 +679,8 @@ TEST_CASE("Display multiline wrapping")
 
 TEST_CASE("Display full-width pending wrap")
 {
+    const char* const pending_wrap_suffix = tib::is_autowrap_bug_present() ? "\r" : "\x1b[m \x08";
+
     SECTION("Finishes pending wrap after a final text cell")
     {
         display_test_fixture fixture(tib::int16_max, false, 3, true);
@@ -687,7 +689,9 @@ TEST_CASE("Display full-width pending wrap")
         fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
 
         REQUIRE(fixture.m_display.display() == true);
-        REQUIRE(strstr(s_display_output.c_str(), "\x1b[m \x08") != nullptr);
+        tib::cstring expected_output(text);
+        expected_output.append(pending_wrap_suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected_output.c_str()) != nullptr);
         const tib::coord expected = { 0, 1 };
         REQUIRE(fixture.m_display.get_relative_cursor() == expected);
     }
@@ -701,7 +705,9 @@ TEST_CASE("Display full-width pending wrap")
         fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
 
         REQUIRE(fixture.m_display.display() == true);
-        REQUIRE(strstr(s_display_output.c_str(), "\x1b[m \x08") != nullptr);
+        tib::cstring expected_output(text);
+        expected_output.append(pending_wrap_suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected_output.c_str()) != nullptr);
         const tib::coord expected = { 0, 1 };
         REQUIRE(fixture.m_display.get_relative_cursor() == expected);
     }

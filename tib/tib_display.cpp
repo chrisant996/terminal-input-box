@@ -2137,11 +2137,7 @@ void display_manager::outputf(const char* format, ...)
 
 void display_manager::output_color(const char* sgr_params)
 {
-#ifdef _WIN32
-    assert(!m_pending_wrap);
-    m_pending_wrap = false;
-#endif
-
+    // Printing VT color codes does not affect wrapping.
     m_accumulator.append_color(sgr_params);
     maybe_flush();
 }
@@ -2266,12 +2262,19 @@ void display_manager::finish_pending_wrap(coord& cursor)
 
     if (!bytes)
     {
-        // If there's no display_line or it's empty, print a space to
-        // force wrapping and a backspace to move the cursor to the
-        // beginning of the line with the fewest possible side effects
-        // (which potentially matters during terminal resize, which is
-        // asynchronous with respect to the console application).
-        output("\x1b[m \x08", 5);
+        if (m_autowrap_bug)
+        {
+            output("\r");
+        }
+        else
+        {
+            // If there's no display_line or it's empty, print a space to
+            // force wrapping and a backspace to move the cursor to the
+            // beginning of the line with the fewest possible side effects
+            // (which potentially matters during terminal resize, which is
+            // asynchronous with respect to the console application).
+            output("\x1b[m \x08", 5);
+        }
     }
 }
 #endif // _WIN32

@@ -1,15 +1,11 @@
 # Issues
 
-- The pending wrap stuff collides with the additional lines...  Overwrites the first character.
-
 # TO DO
 
 - Needs a custom input driver to work on Win8.1 (doesn't necessarily need a custom terminal emulator, because ANSICON can be used, although ANSICON has its own quirks that can require workarounds).
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 - Commands:
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
-- `autowrap_bug` from Clink.
-- `pending_wrap` from Clink.
 - `end_prompt_lf` from Clink.
 - Envvar to report display_manager statistics.
 
