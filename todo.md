@@ -6,7 +6,6 @@
 - Commands:
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 - `end_prompt_lf` from Clink.
-- Envvar to report display_manager statistics.
 
 ## Open Questions
 

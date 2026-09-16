@@ -309,6 +309,8 @@ private:
     std::vector<grapheme_info> m_tmp_graphemes;
 };
 
+void show_display_manager_statistics(bool show);
+
 #ifdef _WIN32
 bool is_autowrap_bug_present();
 #endif

@@ -19,6 +19,8 @@ namespace tib {
 bool g_coalesce_output = true;
 bool g_show_hide_cursor = true;
 
+static bool s_show_statistics = false;
+
 constexpr uint16_t c_right_text_padding = 2;
 constexpr textpos_t c_padding_row_offset = int32_max;
 
@@ -52,6 +54,53 @@ int8_t border_definition::get_width(const char* s, int8_t width) const
 {
     return (!s || !*s) ? 0 : (width < 0) ? __wcswidth(s, -1) : width;
 }
+
+void show_display_manager_statistics(bool show)
+{
+    s_show_statistics = show;
+}
+
+struct stat_coll
+{
+    size_t total = 0;
+    size_t action = 0;
+    size_t nop = 0;
+    size_t row_total = 0;
+    size_t row_action = 0;
+    size_t row_nop = 0;
+    size_t addl_total = 0;
+    size_t addl_action = 0;
+    size_t addl_nop = 0;
+    size_t error = 0;
+};
+
+static stat_coll s_build;
+static stat_coll s_display;
+
+static void display_statistics()
+{
+    assert(s_show_statistics);
+    assert(s_build.total == s_build.action + s_build.nop + s_build.error);
+    assert(s_display.total == s_display.action + s_display.nop + s_display.error);
+    assert(s_display.row_total == s_display.row_action + s_display.row_nop);
+    assert(s_display.addl_total == s_display.addl_action + s_display.addl_nop);
+
+    cstring s;
+    s.append("\x1b[s\x1b[H\x1b[0;48;2;80;0;80;97m\x1b[K");
+    s.printf("build:    %u total, %u action, %u nop, %u row total, %u addl total, %u errors",
+             s_build.total, s_build.action, s_build.nop, s_build.row_total, s_build.addl_total, s_build.error);
+    s.append("\r\n\x1b[K");
+    s.printf("display:  %u total, %u action, %u nop, %u errors",
+             s_display.total, s_display.action, s_display.nop, s_display.error);
+    s.append("\r\n\x1b[K");
+    s.printf("   rows:  %u total, %u action, %u nop  /  addl:  %u total, %u action, %u nop",
+             s_display.row_total, s_display.row_action, s_display.row_nop,
+             s_display.addl_total, s_display.addl_action, s_display.addl_nop);
+    s.append("\x1b[m\x1b[u");
+    term_out(s.c_str(), s.length());
+}
+
+#define DISPLAY_STATISTICS() do { if (s_show_statistics) display_statistics(); } while (false)
 
 #ifdef _WIN32
 // When the Windows legacy console window's visible area is a subset of the
@@ -960,9 +1009,21 @@ void display_manager::ensure_left()
 
 bool display_manager::display()
 {
+    ++s_display.total;
+
     assert(is_initialized());
-    if (!is_initialized() || !m_buffer->get_change_counter())
-        return false;   // Nothing to display.
+    if (!is_initialized())
+    {
+        ++s_display.error;
+        return false;
+    }
+
+    // Is there nothing to display?
+    if (!m_buffer->get_change_counter())
+    {
+        ++s_display.nop;
+        return false;
+    }
 
     // If origin not set yet, then pin it "here".
     if (m_origin.x <= 0)
@@ -985,12 +1046,19 @@ bool display_manager::display()
 
     // If only the caret has changed, then the cursor can simply be updated.
     if (try_update_caret_only())
+    {
+        ++s_display.nop;
         return false;
+    }
 
     // Format content into display structures.
     display_lines tmp;
     if (!build(tmp))
+    {
+        ++s_display.nop;
+        DISPLAY_STATISTICS();
         return false;   // Nothing changed since last display (or OOM error).
+    }
 
     return display_internal(tmp);
 }
@@ -1209,6 +1277,8 @@ bool display_manager::display_internal(display_lines& lines)
     {
         auto const& line = lines.m_lines[i];
 
+        ++s_display.row_total;
+
 #ifdef _WIN32
         const bool can_optimize = !m_horizpos_workaround;
 #else
@@ -1219,7 +1289,6 @@ bool display_manager::display_internal(display_lines& lines)
         size_t begin = 0;
         size_t end = line->m_text.length();
         uint16_t begin_width = 0;
-        bool reuse_displayed_line = false;
         bool reuse_left_text = false;
         bool reuse_right_text = false;
         int16_t right_gap_dirty_width = int16_max;
@@ -1258,7 +1327,7 @@ bool display_manager::display_internal(display_lines& lines)
                     line->m_faces.equals(displayed->m_faces) &&
                     reuse_right_text)
                 {
-                    reuse_displayed_line = true;
+                    ++s_display.row_nop;
                     continue;
                 }
 
@@ -1319,9 +1388,6 @@ bool display_manager::display_internal(display_lines& lines)
             }
         }
 
-        if (reuse_displayed_line)
-            continue;
-
         any_updates = true;
 
         // Move the cursor to the start of the text to display.
@@ -1379,6 +1445,8 @@ bool display_manager::display_internal(display_lines& lines)
             }
         }
 
+        ++s_display.row_action;
+
 #ifdef _WIN32
         // Update cursor position and deal with autowrap.
         detect_pending_wrap(cursor);
@@ -1394,6 +1462,8 @@ bool display_manager::display_internal(display_lines& lines)
         const int32_t row = additional_begin + int32_t(i);
         const additional_display_line& line = lines.m_additional_lines[i];
 
+        ++s_display.addl_total;
+
         // If the displayed line ends up the same then skip displaying it.
         const additional_display_line* displayed = nullptr;
         if (row >= displayed_additional_begin && row < m_displayed.m_extent.y)
@@ -1403,7 +1473,10 @@ bool display_manager::display_internal(display_lines& lines)
             const bool reuse_displayed_line = displayed && line == *displayed &&
                 (!line.bounded || input_extent.x == displayed_input_extent.x);
             if (reuse_displayed_line)
+            {
+                ++s_display.addl_nop;
                 continue;
+            }
         }
         any_updates = true;
 
@@ -1451,6 +1524,8 @@ bool display_manager::display_internal(display_lines& lines)
         {
             clr_to_eol(term_size.x - line.width);
         }
+
+        ++s_display.addl_action;
 
 #ifdef _WIN32
         // Update cursor position and deal with autowrap.
@@ -1503,11 +1578,15 @@ bool display_manager::display_internal(display_lines& lines)
         maybe_flush();
     }
 
+    ++s_display.action;
+
     m_top = lines.m_top;
     m_displayed = std::move(lines);
     m_relative_cursor = cursor;
     m_invalidated = false;
     m_force_redisplay = false;
+
+    DISPLAY_STATISTICS();
     return any_updates;
 }
 
@@ -1517,6 +1596,8 @@ void display_manager::erase_display()
     {
         display_lines tmp;
         tmp.m_erase = true;
+
+        ++s_display.total;
         display_internal(tmp);
     }
 }
@@ -1640,9 +1721,14 @@ default_colors:
 
 bool display_manager::build(display_lines& out)
 {
+    ++s_build.total;
+
     assert(is_initialized());
     if (!is_initialized())
+    {
+        ++s_build.error;
         return false;
+    }
 
     // NOTE:  Terminal size change is noted inside get_effective_max_size()
     // inside editor_context::ensure_left() inside editor_context::display().
@@ -1664,7 +1750,10 @@ bool display_manager::build(display_lines& out)
         anchor == m_displayed.m_anchor &&
         left == m_displayed.m_left &&
         m_additional_lines == m_displayed.m_additional_lines)
+    {
+        ++s_build.nop;
         return false;
+    }
 
     const cstring& text = m_buffer->get_text();
 
@@ -1714,7 +1803,10 @@ bool display_manager::build(display_lines& out)
     const coord max_size = get_effective_max_size();
     const coord max_size_omit_scroll_markers = get_effective_max_size(true/*omit_scroll_markers*/);
     if (max_size.y < 1)
+    {
+        ++s_build.error;
         return false;
+    }
     const bool multiline = (max_size.y > 1);
     assert(implies(multiline, !left));
 
@@ -2034,6 +2126,9 @@ again:
 
     assert(tmp.m_cursor.y >= 0);
     assert(size_t(tmp.m_cursor.y) < tmp.m_lines.size());
+
+    ++s_build.action;
+    s_build.row_total += tmp.m_lines.size();
 
     out = std::move(tmp);
     return true;

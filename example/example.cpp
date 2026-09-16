@@ -29,6 +29,7 @@ static const char c_long_usage[] =
 "  --custom-vt       Use custom VT input driver (always on Win8.1 and lower).\n"
 "  --mouse MODE      Mouse VT input mode (MODE == none, vt200, drag, any).\n"
 "  --enc MODE        Mouse VT encoding mode (MODE == default, sgr).\n"
+"  --show-stats      Show statistics about display manager.\n"
 ;
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
@@ -325,6 +326,11 @@ int main(int argc, const char** argv)
             tib::g_coalesce_output = !(atoi(v.c_str()) > 0);
             tib::g_show_hide_cursor = !(atoi(v.c_str()) > 0);
         }
+        if (tib::getenv("TIB_SHOW_STATISTICS", v) && !v.empty())
+        {
+            if (atoi(v.c_str()) > 0)
+                tib::show_display_manager_statistics(true);
+        }
     }
 
 #ifdef _WIN32
@@ -546,6 +552,10 @@ no_border:
         else if (_stricmp(argv[i], "--custom-vt") == 0)
         {
             use_custom_vt_driver = true;
+        }
+        else if (_stricmp(argv[i], "--show-stats") == 0)
+        {
+            tib::show_display_manager_statistics(true);
         }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
