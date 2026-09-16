@@ -279,7 +279,7 @@ static void add_feedback_line(const char* color, const char* text, std::vector<t
     tib::additional_display_line line;
 
     line.text.clear();
-    line.text.append_color("96;44");
+    line.text.append_color(color);
     const size_t begin_len = line.text.length();
 
     line.text.append(text);
