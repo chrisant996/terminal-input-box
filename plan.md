@@ -59,13 +59,14 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 
 Readline likes to go into modal dispatch loops.  That design choice creates problems for some hosts.  When tib wants a modal dispatch loop, it needs to find a stateful way to achieve the desired functional behaviors without actually using a modal dispatch loop.
 
+`digit_argument` and `editor_context::apply_override_bindings` show how to accomplish the effect of a modal dispatch loop without actually using a modal dispatch loop.
+
 ## Internal encoding
 
 - Use UTF8 internally.
 - Clink and List-Redux ultimately want a limit expressed in WCHAR, but that conflicts with using UTF8 internally.
-- `wchar_t` in gcc/Linux is UTF32, but `wchar_t` in MSVC is UTF16.
-
-- [ ] OPEN ISSUE:  Templated so the host can choose `char` (UTF8) or Windows `wchar_t` (UTF16), or just always use UTF8 and leave any UTF16 support to be post-processing by the caller?
+  - `wchar_t` in gcc/Linux is UTF32, but `wchar_t` in MSVC is UTF16.
+  - Is it worth being templated so the host can choose `char` (UTF8) or Windows `wchar_t` (UTF16), or just always use UTF8 and leave any UTF16 support to be post-processing by the caller?  _[NO:  I don't want to maintain multiple access models or underlying algorithms; UTF8 is more compact and there is little enough encoding translation required that if a host really needs UTF16 then they can perform additional translations.]_
 
 ## Data Structures
 
@@ -78,4 +79,4 @@ Readline likes to go into modal dispatch loops.  That design choice creates prob
 
 - The flat list of key bindings is already a problem.  I overlooked the fact that it doesn't always have the full sequence to match at first.  So, that forces the design back to a trie.  But I still want a flat list as the central source of truth -- the trie can be re-generated on demand after changes to the key table.  _[NO:  overlay tables complicate the tries anyway, and empirical testing on an Alienware m16 R2 Intel Core Ultra 9 185H 2.30 GHz resolves 26,000 key sequences in ~165ms **without** a trie, so a trie is overkill.]_
 
-- I'm considering starting from the List-Redux el cheapo input routine as a starting point, and refactor that into a class with an input driver and so on.
+- I'm considering starting from the List-Redux el cheapo input routine as a starting point, and refactor that into a class with an input driver and so on.  _[That's what I did.]_
