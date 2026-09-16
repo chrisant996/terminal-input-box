@@ -334,7 +334,6 @@ int main(int argc, const char** argv)
 
     tib_host::set_crt_locale_utf8();
     tib_host::set_console_vt_input();
-    reset_wcwidths();
 
     tib::term_begin();
 

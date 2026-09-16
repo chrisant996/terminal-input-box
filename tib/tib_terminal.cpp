@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_terminal.h"
+#include "wcwidth.h"
 #include <assert.h>
 
 namespace tib {
@@ -225,6 +226,13 @@ void term_begin()
 
     if (!s_term_began)
     {
+        static bool s_init_wcwidths = true;
+        if (s_init_wcwidths)
+        {
+            s_init_wcwidths = false;
+            reset_wcwidths();
+        }
+
         assert(!s_terminal_in);
         assert(!s_terminal_out);
         s_terminal_in = hook_new_terminal_in ? hook_new_terminal_in(s_pushed) : new_basic_terminal_in(s_pushed);
