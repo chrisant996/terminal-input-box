@@ -73,6 +73,7 @@ public:
     pushed_input&       operator=(const pushed_input&) = delete;
     bool                empty() const noexcept { return !m_count; }
     bool                push(uint8_t c) noexcept;
+    bool                push(const char* text, size_t len=c_auto_length) noexcept;
     bool                push_front(const char* text, size_t len) noexcept;
 #ifdef _WIN32
     int32_t             push_utf16(WCHAR c) noexcept;

@@ -23,6 +23,7 @@ clink.argmatcher(args[1])
     { "--origin"..origin, " X",         "Set origin X coordinate (1-based)" },
     { "--rainbow",                      "Apply rainbow colors to words" },
     { "--show-keys",                    "Show input key sequences" },
+    { "--custom-vt",                    "Use custom VT input driver (always on Win8.1 and lower)" },
     { "--mouse"..mousemode, " MODE",    "Mouse VT input mode" },
     { "--enc"..encmode, " MODE",        "Mouse VT encoding mode" },
 })

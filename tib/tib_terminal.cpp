@@ -56,18 +56,25 @@ bool pushed_input::push(uint8_t c) noexcept
     return true;
 }
 
+bool pushed_input::push(const char* text, size_t len) noexcept
+{
+    len = resolve_auto_length(len, text);
+    if (!len)
+        return true;
+    if (!ensure_capacity(len))
+        return false;
+
+    const size_t offset = (m_head + m_count) % m_size;
+    const size_t first = min(len, m_size - offset);
+    memcpy(m_data + offset, text, first);
+    if (len > first)
+        memcpy(m_data, text + first, len - first);
+    m_count += len;
+    return true;
+}
+
 bool pushed_input::push_front(const char* text, size_t len) noexcept
 {
-#ifdef _WIN32
-    // BUGBUG: m_high_surrogate is about push() at the tail, and
-    // push_invalid() pushes at the tail -- neither of those seems relevant
-    // when pushing at the front.  I think pushing at the front can simply
-    // push raw bytes and let downstream consumers deal with any invalid UTF8
-    // encoding issues.
-    if (m_high_surrogate && !push_invalid())
-        return false;
-#endif
-
     if (!len)
         return true;
     if (!ensure_capacity(len))

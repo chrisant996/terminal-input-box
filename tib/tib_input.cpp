@@ -14,12 +14,15 @@
 
 namespace tib {
 
+extern void custom_vt_driver(const KEY_EVENT_RECORD& record, pushed_input& pushed);
+
 static mouse_input_mode s_mouse_input_mode = mouse_input_mode::none;
 static bool s_mouse_sgr_encoding = true;
 static DWORD s_prev_input_mode = 0;
 static DWORD s_prev_output_mode = 0;
 static DWORD s_prev_mouse_button_state = 0;
 static coord s_last_term_size { -1, -1 };
+static cstring s_tmp_utf8;
 
 class basic_terminal_in : public terminal_in
 {
@@ -43,6 +46,7 @@ protected:
     HANDLE              m_hin = 0;
     HANDLE              m_hout = 0;
     bool                m_is_console = false;
+    bool                m_use_custom_vt_driver = false;
 #endif
 };
 
@@ -52,6 +56,17 @@ terminal_in* new_basic_terminal_in(pushed_input& pushed)
 }
 
 #ifdef _WIN32
+static bool need_custom_vt_driver()
+{
+#pragma warning(push)
+#pragma warning(disable:4996)
+    OSVERSIONINFO ver = {sizeof(ver)};
+    if (GetVersionEx(&ver))
+        return ver.dwMajorVersion < 10;
+    return false;
+#pragma warning(pop)
+}
+
 static bool is_invalid_keyevent(KEY_EVENT_RECORD& record)
 {
     // Only respond to key down events.
@@ -225,6 +240,7 @@ basic_terminal_in::basic_terminal_in(pushed_input& pushed)
             s_prev_mouse_button_state |= FROM_LEFT_2ND_BUTTON_PRESSED;
         if (GetKeyState(VK_RBUTTON) < 0)
             s_prev_mouse_button_state |= RIGHTMOST_BUTTON_PRESSED;
+        m_use_custom_vt_driver = (need_custom_vt_driver() || !(s_prev_input_mode & ENABLE_VIRTUAL_TERMINAL_INPUT));
     }
 
     HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -266,14 +282,13 @@ int32_t basic_terminal_in::read() noexcept
     }
 
 #ifdef _WIN32
-    static cstring s_tmp_utf8;
-
 again:
     DWORD num_read;
 #define USE_READCONSOLEINPUT
 #ifdef USE_READCONSOLEINPUT
     // FUTURE: add a mode that conditionally applies/removes
     // ENABLE_MOUSE_INPUT like Clink does?
+    cstring seq;
     INPUT_RECORD record;
     if (!ReadConsoleInputW(m_hin, &record, 1, &num_read) || 1 != num_read)
         return -1;
@@ -282,16 +297,22 @@ again:
     case KEY_EVENT:
         if (is_invalid_keyevent(record.Event.KeyEvent))
             goto again;
+        if (m_use_custom_vt_driver)
+        {
+            custom_vt_driver(record.Event.KeyEvent, m_pushed);
+            if (m_pushed.empty())
+                goto again;
+            return m_pushed.read();
+        }
         break;
     case MOUSE_EVENT:
+        if (generate_mouse_sequences(record.Event.MouseEvent, seq))
         {
-            cstring seq;
-            if (generate_mouse_sequences(record.Event.MouseEvent, seq))
-            {
-                for (size_t i = 0; i < seq.length(); ++i)
-                    m_pushed.push(seq.c_str()[i]);
-                return m_pushed.read();
-            }
+            for (size_t i = 0; i < seq.length(); ++i)
+                m_pushed.push(seq.c_str()[i]);
+            if (m_pushed.empty())
+                goto again;
+            return m_pushed.read();
         }
         goto again;
     case WINDOW_BUFFER_SIZE_EVENT:
@@ -399,6 +420,7 @@ bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
             break;
 
         DWORD count;
+        cstring seq;
         INPUT_RECORD record;
         if (!ReadConsoleInputW(m_hin, &record, 1, &count) || 1 != count)
         {
@@ -410,9 +432,14 @@ bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
         switch (record.EventType)
         {
         case KEY_EVENT:
-            // Because of ENABLE_VIRTUAL_TERMINAL_PROCESSING there is very
-            // little to do here.
-            if (!is_invalid_keyevent(record.Event.KeyEvent))
+            if (is_invalid_keyevent(record.Event.KeyEvent))
+                break;
+            if (m_use_custom_vt_driver)
+            {
+                custom_vt_driver(record.Event.KeyEvent, m_pushed);
+                ret = !m_pushed.empty();
+            }
+            else
             {
                 const int32_t pushed = m_pushed.push_key_event(record.Event.KeyEvent);
                 if (pushed < 0)
@@ -422,14 +449,11 @@ bool basic_terminal_in::avail(const uint32_t _timeout) noexcept
             break;
 
         case MOUSE_EVENT:
+            if (generate_mouse_sequences(record.Event.MouseEvent, seq))
             {
-                cstring seq;
-                if (generate_mouse_sequences(record.Event.MouseEvent, seq))
-                {
-                    for (size_t i = 0; i < seq.length(); ++i)
-                        m_pushed.push(seq.c_str()[i]);
-                    ret = true;
-                }
+                for (size_t i = 0; i < seq.length(); ++i)
+                    m_pushed.push(seq.c_str()[i]);
+                ret = !m_pushed.empty();
             }
             break;
 

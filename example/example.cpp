@@ -26,6 +26,7 @@ static const char c_long_usage[] =
 "  --origin X        Set origin X coordinate (1-based).\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
+"  --custom-vt       Use custom VT input driver (always on Win8.1 and lower).\n"
 "  --mouse MODE      Mouse VT input mode (MODE == none, vt200, drag, any).\n"
 "  --enc MODE        Mouse VT encoding mode (MODE == default, sgr).\n"
 ;
@@ -165,12 +166,6 @@ void make_key_tables()
         t->add("\025", tib::binding_target_func("universal-argument")); // Ctrl-U
         t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
         t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
-
-#ifdef _WIN32
-        // HACK: Quick temporary hack for Win8.1, which doesn't have VT input.
-        if (tib::is_autowrap_bug_present())
-            t->add("\010", tib::binding_target_func("del-char-left"));  // Ctrl-H
-#endif
 
         t->add("\030\001", tib::binding_target_func("movement-mode"));              // Ctrl-X,Ctrl-A
         t->add("\030\030", tib::binding_target_func("exchange-caret-and-mark"));    // Ctrl-X,Ctrl-X
@@ -332,8 +327,9 @@ int main(int argc, const char** argv)
         }
     }
 
+#ifdef _WIN32
     tib_host::set_crt_locale_utf8();
-    tib_host::set_console_vt_input();
+#endif
 
     tib::term_begin();
 
@@ -365,6 +361,7 @@ int main(int argc, const char** argv)
     uint16_t right_width = 0;
     tib::mouse_input_mode mode = tib::mouse_input_mode::none;
     bool sgr_encoding = true;
+    bool use_custom_vt_driver = false;
     bool set_mouse_input_mode = false;
     int32_t origin_x = -1;
 
@@ -546,6 +543,10 @@ no_border:
                 return 1;
             }
         }
+        else if (_stricmp(argv[i], "--custom-vt") == 0)
+        {
+            use_custom_vt_driver = true;
+        }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
         {
@@ -558,6 +559,11 @@ no_border:
             return 1;
         }
     }
+
+#ifdef _WIN32
+    if (!use_custom_vt_driver)
+        tib_host::set_console_vt_input();
+#endif
 
     if (set_mouse_input_mode)
     {
