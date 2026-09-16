@@ -2044,8 +2044,6 @@ void display_manager::append_border(coord extent)
     assert(is_initialized());
     assert(m_style);
 
-// TODO: pending wrap...
-
     const border_definition& b = *m_style->border;
 #if 0
     assert(implies(m_style->border, b.is_valid()));
@@ -2061,6 +2059,23 @@ void display_manager::append_border(coord extent)
     assert(extent.x == max_size.x + extra_border_width);
     assert(max_size.y >= extent.y - extra_border_height);
 
+    auto finish_border_wrap = [&](int32_t row)
+    {
+#ifdef _WIN32
+        if (b_right_width && m_origin.x + extent.x - 1 == m_term_size.x)
+        {
+            coord cursor = { extent.x, row };
+            detect_pending_wrap(cursor);
+            finish_pending_wrap(cursor);
+            output_color(m_colors->get_color(color_element::border));
+            return true;
+        }
+#endif
+        return false;
+    };
+
+    bool wrapped = false;
+    int32_t row = 0;
     output_color(m_colors->get_color(color_element::border));
 
     if (b.has_top())
@@ -2073,12 +2088,16 @@ void display_manager::append_border(coord extent)
             output(b.top);
         if (b.top_right)
             output(b.top_right);
+        wrapped = finish_border_wrap(row);
     }
 
     bool first = true;
     for (uint32_t i = extent.y - extra_border_height; i--; first = false)
     {
-        output("\r\n");
+        // Finishing a pending wrap already advances to the next row.
+        if (!wrapped)
+            output("\r\n");
+        ++row;
         if (b_left_width)
         {
             output(term_col(m_origin.x));
@@ -2089,11 +2108,14 @@ void display_manager::append_border(coord extent)
             output(term_col(m_origin.x + extent.x - b_right_width));
             output((!b.right_2 || first) ? b.right : b.right_2);
         }
+        wrapped = finish_border_wrap(row);
     }
 
     if (b.has_bottom())
     {
-        output("\r\n");
+        if (!wrapped)
+            output("\r\n");
+        ++row;
         output(term_col(m_origin.x));
         if (b.bottom_left)
             output(b.bottom_left);
@@ -2102,10 +2124,11 @@ void display_manager::append_border(coord extent)
             output(b.bottom);
         if (b.bottom_right)
             output(b.bottom_right);
+        wrapped = finish_border_wrap(row);
     }
 
-    if (extent.y > 1)
-        output(term_move_up(extent.y - 1));
+    if (extent.y - 1 + wrapped > 0)
+        output(term_move_up(extent.y - 1 + wrapped));
 }
 
 void display_manager::output(const char* s, size_t len)

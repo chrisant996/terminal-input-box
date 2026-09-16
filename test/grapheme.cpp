@@ -713,6 +713,55 @@ TEST_CASE("Display full-width pending wrap")
     }
 }
 
+TEST_CASE("Display border pending wrap")
+{
+    tib::border_definition border;
+    border.top = "-";
+    border.bottom = "=";
+    border.left = "||";
+    border.right = "||";
+    border.right_2 = "!!";
+    border.top_width = 1;
+    border.bottom_width = 1;
+    border.left_width = 2;
+    border.right_width = 2;
+    const char* const suffix = tib::is_autowrap_bug_present() ? "\r" : "\x1b[m \x08";
+
+    SECTION("Finishes wraps at the terminal edge with an offset origin")
+    {
+        display_test_fixture fixture(tib::int16_max, false, 2, false, &border, 5);
+        fixture.m_buffer.set_text("abc", 3);
+        REQUIRE(fixture.m_display.display() == true);
+        tib::cstring expected("||");
+        expected.append(suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected.c_str()) != nullptr);
+        expected.set("!!");
+        expected.append(suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected.c_str()) != nullptr);
+        expected.set("-");
+        expected.append(suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected.c_str()) != nullptr);
+        expected.set("=");
+        expected.append(suffix);
+        REQUIRE(strstr(s_display_output.c_str(), expected.c_str()) != nullptr);
+        const char* const border_end = strstr(s_display_output.c_str(), "\x1b[4A");
+        REQUIRE(border_end != nullptr);
+        const char* const newline = strstr(s_display_output.c_str(), "\r\n");
+        REQUIRE((!newline || newline > border_end));
+    }
+
+    SECTION("Leaves borders short of the terminal edge unchanged")
+    {
+        display_test_fixture fixture(10, false, 2, false, &border, 5);
+        fixture.m_buffer.set_text("abc", 3);
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "||\r\n") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "!!\r\n") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[m \x08") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[3A") != nullptr);
+    }
+}
+
 TEST_CASE("Display multiline scroll markers")
 {
     SECTION("Preserves line width when replacing trailing text")
