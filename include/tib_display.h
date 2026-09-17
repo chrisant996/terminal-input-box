@@ -190,6 +190,7 @@ struct display_lines
     coord               m_inner_offset = { 0, 0 };
     coord               m_extent = { 0, 0 };
 
+    bool                m_phantom_last_row = false;
     bool                m_erase = false;
 };
 
@@ -236,13 +237,15 @@ public:
     bool                set_caret_from_screen(uint32_t x, uint32_t y, selection_state& selection, uint32_t drag_scroll_chars=0, bool word_drag=false);
     void                suppress_auto_horizontal_scroll(const selection_state& selection);
 
+    void                begin_display();
     void                invalidate() { m_invalidated = true; }
     void                invalidate_border() { m_border_dirty = true; }
-    void                force_redisplay() { m_invalidated = true; m_force_redisplay = true; }
     bool                display();
-    void                erase_display();
+    void                force_redisplay();
     void                move_to_end_of_display();
     void                move_to_caret_position();
+    void                erase_display();
+    void                end_display_lf();
 
 private:
     void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
@@ -287,6 +290,7 @@ private:
     std::vector<additional_display_line> m_additional_lines;
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.
+    bool                m_display_ended = false;
     bool                m_border_dirty = false;
     bool                m_invalidated = false;
     bool                m_force_redisplay = false;

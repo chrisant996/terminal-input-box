@@ -732,8 +732,8 @@ no_border:
         tib->clear_additional_lines();
 #pragma endregion // Show input sequence.
 
-    tib->erase_display();
-    tib::term_out("\r\n", 2);
+    tib->clear_additional_lines();
+    tib->end_display_lf();
 
     return 0;
 }

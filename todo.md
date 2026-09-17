@@ -5,7 +5,6 @@
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 - Commands:
     - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
-- `end_prompt_lf` from Clink.
 
 ## Open Questions
 

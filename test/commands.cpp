@@ -50,8 +50,7 @@ TEST_CASE("Abort command resets editor state")
 TEST_CASE("Abort command interrupts pending overwrite input")
 {
     tib::editor_context context;
-    context.initialize("ab");
-    context.set_caret(0);
+    initialize_context(context, "ab", 0);
     context.set_overwrite_mode(true);
     context.insert_char(char(0xc2), true);
 
@@ -324,9 +323,7 @@ TEST_CASE("Screen line cursor column continuation")
     context->set_max_width(10);
     context->set_max_height(3);
     context->set_variable_height(true);
-    context->set_origin(1, 1);
-    context->initialize("abcdefgh\nxy\nabcdefgh");
-    context->set_caret(7);
+    initialize_context(*context, "abcdefgh\nxy\nabcdefgh", 7);
     context->set_bindings(tib::make_default_key_table());
 
     tib::binding_resolver resolver;

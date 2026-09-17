@@ -333,6 +333,7 @@ void display_lines::clear()
 
     m_inner_offset = { 0, 0 };
     m_extent = { 0, 0 };
+    m_phantom_last_row = false;
 }
 
 void display_lines::apply_scroll_markers(int16_t x_extent, int32_t y_extent, int32_t total_rows)
@@ -1007,6 +1008,15 @@ void display_manager::ensure_left()
     assert(selection.get_caret() >= m_left);
 }
 
+void display_manager::begin_display()
+{
+    m_displayed.clear();
+    m_relative_cursor = { -1, 0 };
+    m_display_ended = false;
+    force_redisplay();
+    invalidate_border();
+}
+
 bool display_manager::display()
 {
     ++s_display.total;
@@ -1019,7 +1029,7 @@ bool display_manager::display()
     }
 
     // Is there nothing to display?
-    if (!m_buffer->get_change_counter())
+    if (m_display_ended || !m_buffer->get_change_counter())
     {
         ++s_display.nop;
         return false;
@@ -1061,6 +1071,12 @@ bool display_manager::display()
     }
 
     return display_internal(tmp);
+}
+
+void display_manager::force_redisplay()
+{
+    invalidate();
+    m_force_redisplay = true;
 }
 
 void display_manager::print_text_with_faces(coord& cursor, const char* t, const char* f, size_t len)
@@ -1602,6 +1618,35 @@ void display_manager::erase_display()
     }
 }
 
+void display_manager::end_display_lf()
+{
+    if (m_display_ended)
+        return;
+
+    display();
+
+    // A final row used only for the caret already supplies the line break.
+    if (m_displayed.m_phantom_last_row)
+        --m_displayed.m_extent.y;
+
+    // TODO: coalesce...  (maybe even nested coalesce around display()).
+    move_to_end_of_display();
+    move_to_column(m_relative_cursor, 0, 0);
+    // do_flush();
+
+    m_displayed.clear();
+    m_relative_cursor = { -1, 0 };
+    m_origin = { -1, -1 };
+    m_hwheel_exclusion = false;
+#ifdef _WIN32
+    m_pending_wrap = false;
+    m_pending_wrap_display = nullptr;
+#endif
+
+    // Completed output belongs to the terminal until begin_display().
+    m_display_ended = true;
+}
+
 void display_manager::move_to_end_of_display()
 {
     if (m_displayed.m_extent.y > 0)
@@ -1934,7 +1979,11 @@ bool display_manager::build(display_lines& out)
     // In multiline mode, if the last line takes up the full width, then
     // there's a phantom blank line at the end.
     if (multiline && row_width == uint32_t(max_size.x))
+    {
         rows.push_back({ textpos_t(text.length()), false });
+        if (m_layout->variable_height && !m_style->border && m_additional_lines.empty())
+            tmp.m_phantom_last_row = true;
+    }
     assert(implies(!multiline, rows.size() == 1));
 
     // Determine the height.
@@ -2093,6 +2142,8 @@ again:
 
     // Build only the rows that will be visible.
     const int32_t end = min<int32_t>(tmp.m_top + y_extent, total_rows);
+    if (end < total_rows)
+        tmp.m_phantom_last_row = false;
     for (int32_t i = tmp.m_top; i < end; ++i)
     {
         tmp.m_lines.emplace_back(build_row(i));

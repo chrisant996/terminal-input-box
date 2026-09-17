@@ -242,7 +242,8 @@ void editor_context::initialize(const char* text, size_t len)
 {
     m_done = false;
     m_overwrite_mode = false;
-    clear_overwrite_input();
+
+    reset_state();
 
     if (!text)
     {
@@ -255,7 +256,6 @@ void editor_context::initialize(const char* text, size_t len)
     }
 
     clear_undo_internal();
-    m_can_drag = false;
     m_selection.set_caret(0);
     m_selection.set_mark(0);
     m_selection.set_mark_active(false);
@@ -263,12 +263,9 @@ void editor_context::initialize(const char* text, size_t len)
     insert_text(text, len);
     m_selection.clear_dirty();
     m_display.clear_scroll_offsets();
-    m_named_values.clear();
     init_undo();
 
-    clear_numeric_argument();
     m_quoted_insert_count = 0;
-    m_last_command.clear();
 
     assert(!m_selection.is_dirty());
     assert(m_selection.get_caret() == len);
@@ -427,14 +424,14 @@ int32_t editor_context::go(void* cookie)
 }
 #endif
 
+void editor_context::begin_display()
+{
+    m_display.begin_display();
+}
+
 void editor_context::invalidate()
 {
     m_display.invalidate();
-}
-
-void editor_context::force_redisplay()
-{
-    m_display.force_redisplay();
 }
 
 void editor_context::invalidate_border()
@@ -447,9 +444,9 @@ void editor_context::display()
     m_display.display();
 }
 
-void editor_context::erase_display()
+void editor_context::force_redisplay()
 {
-    m_display.erase_display();
+    m_display.force_redisplay();
 }
 
 void editor_context::move_to_end_of_display()
@@ -460,6 +457,16 @@ void editor_context::move_to_end_of_display()
 void editor_context::move_to_caret_position()
 {
     m_display.move_to_caret_position();
+}
+
+void editor_context::erase_display()
+{
+    m_display.erase_display();
+}
+
+void editor_context::end_display_lf()
+{
+    m_display.end_display_lf();
 }
 
 void editor_context::begin_of_input(bool select)

@@ -101,16 +101,15 @@ public:
     void                set_additional_lines(const std::vector<additional_display_line>& lines);
     void                clear_additional_lines();
 
-#if 0
-    int32_t             go(void* cookie=nullptr);
-#endif
+    void                begin_display();
     void                invalidate();
     void                invalidate_border();
-    void                force_redisplay();
     void                display();
-    void                erase_display();
-    void                move_to_end_of_display();
+    void                force_redisplay();
     void                move_to_caret_position();
+    void                move_to_end_of_display();
+    void                erase_display();
+    void                end_display_lf();
 
     void                begin_of_input(bool select=false);
     void                end_of_input(bool select=false);
