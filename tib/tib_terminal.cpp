@@ -7,6 +7,7 @@
 #include "maybe_windows.h"
 #include "tib_base.h"
 #include "tib_terminal.h"
+#include "tib_termcap.h"
 #include "wcwidth.h"
 #include <assert.h>
 
@@ -263,6 +264,12 @@ void term_end()
 
     if (s_term_began == 1)
     {
+        term_out(c_show_cursor);
+        // FUTURE: cursor shape.
+        term_out("\x1b[m");
+
+        enable_mouse_input(mouse_input_mode::none, false);
+
         delete s_terminal_in;
         s_terminal_in = nullptr;
         delete s_terminal_out;

@@ -207,13 +207,6 @@ static bool generate_mouse_sequences(const MOUSE_EVENT_RECORD& record, cstring& 
 
 basic_terminal_in::~basic_terminal_in()
 {
-    term_out(c_show_cursor);
-    // FUTURE: cursor shape.
-    term_out("\x1b[m");
-
-    if (s_mouse_input_mode != mouse_input_mode::none)
-        enable_mouse_input(mouse_input_mode::none, false);
-
 #ifdef _WIN32
     if (m_hin && m_is_console)
         SetConsoleMode(m_hin, s_prev_input_mode);

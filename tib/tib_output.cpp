@@ -24,6 +24,9 @@ private:
 #ifdef _WIN32
     HANDLE              m_hout = 0;
     bool                m_is_console = false;
+    // Conversion buffer.  Must be a member (not global) otherwise atexit
+    // cleanup functions may destroy the buffer out of dependency order.
+    cstring_t<WCHAR>    m_tmp;
 #endif
 };
 
@@ -45,10 +48,9 @@ void basic_terminal_out::write(const char* s, size_t len) noexcept
     DWORD written;
     if (m_is_console)
     {
-        static cstring_t<WCHAR> s_buffer;
-        if (!to_utf16(s, len, s_buffer))
+        if (!to_utf16(s, len, m_tmp))
             return;
-        WriteConsoleW(m_hout, s_buffer.c_str(), DWORD(s_buffer.length()), &written, nullptr);
+        WriteConsoleW(m_hout, m_tmp.c_str(), DWORD(m_tmp.length()), &written, nullptr);
     }
     else
     {
