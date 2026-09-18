@@ -3,8 +3,6 @@
 # TO DO
 
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
-- Commands:
-    - Reset the input to empty (as an undo-able operation, unlike the command to undo all changes).  What side effects should occur...?  How should it integrate with a history provider?
 
 ## Open Questions
 
@@ -13,9 +11,14 @@
 
 ## Sufficiency
 
+- [ ] Does tib need built-in support for Clink's `override_match_line_state` facility?
 - [ ] Clink needs to be able to integrate its auto-suggestions and suggestion list with `editor_context`.
+    - [ ] Needs built-in support for the `Right` / `F2` hint, and other similar inline hints.
+    - [ ] How to render auto-suggestion?  Clink replaces the `rl_line_buffer` global, but tib doesn't allow that.
     - [ ] Hooks so Clink can exert appropriate influence.
     - [ ] Expose enough internal states for a caller to manipulate its other features based on `editor_context` state; e.g. to suppress an external suggestion list while certain `editor_context` modal states are active, such as incremental history search or execute-command or etc.
+    - [ ] `del-line` and/or `clink-reset-line` needs to be able to clear suggestions.
+- [ ] `del-line` and/or `clink-reset-line` needs to integrate with history provider support.
 - [x] Readline supports "shadowing", where `a` can be bound to one thing, `abc` can be bound to another thing, and typing `abx` dispatches the `a` binding with `bx` still in the input queue.
 - [ ] Does tib need to include a VI mode?
 - [x] Make sure a host (e.g. example.exe) can provide a command/mode to read a command name and invoke it. _[The host can erase the current tib and do whatever they want (including start a new tib) to select a command, and then show the original tib again and run the command (or even run the command and then show the tib).]_

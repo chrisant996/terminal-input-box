@@ -583,6 +583,16 @@ bool editor_context::del(uint8_t word)
     return true;
 }
 
+void editor_context::del_line()
+{
+    remove_text(0, -1);
+
+    assert(!get_caret());
+    assert(!get_mark());
+    assert(!get_text().length());
+    assert(!get_selection_state().get_anchor());
+}
+
 void editor_context::clear_selection()
 {
     m_selection.clear_selection();
@@ -1287,7 +1297,7 @@ void editor_context::remove_text(textpos_t begin, textpos_t end)
 
     inc_change_counter();
 
-    if (end == m_text.length())
+    if (end < 0 || end >= m_text.length())
     {
         m_text.set_length(begin);
     }

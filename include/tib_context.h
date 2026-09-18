@@ -117,6 +117,7 @@ public:
     bool                move_right(uint8_t word=0, bool select=false);
     bool                backspace(uint8_t word=0);
     bool                del(uint8_t word=0);
+    void                del_line();
     bool                transpose(uint8_t word=0);
 
     void                clear_selection();

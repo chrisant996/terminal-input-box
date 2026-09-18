@@ -214,6 +214,12 @@ int32_t del_char_right(editor_context& ctx, int32_t key, const char* name, const
     }, UNDO_GROUP);
 }
 
+int32_t del_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    ctx.del_line();
+    return 0;
+}
+
 int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_word_right, [&]() {
@@ -927,6 +933,7 @@ static const editor_command c_commands[] =
     { "del-bigword-right", del_bigword_right },
     { "del-char-left", del_char_left },
     { "del-char-right", del_char_right },
+    { "del-line", del_line },
     { "del-word-left", del_word_left },
     { "del-word-right", del_word_right },
     { "digit-argument", digit_argument },
