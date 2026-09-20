@@ -328,6 +328,7 @@ void display_lines::clear()
     m_rows.clear();
     m_left_text.clear();
     m_right_text.clear();
+    m_right_text_row = -1;
     m_additional_lines.clear();
     m_cursor = { -1, -1 };
 
@@ -507,6 +508,18 @@ void display_manager::set_left_text(const char* left, uint16_t width)
 void display_manager::set_right_text(const char* right, uint16_t width)
 {
     if (m_right_text.set(right, width))
+        invalidate();
+}
+
+void display_manager::set_suggestion_text(const char* suggestion, size_t len)
+{
+    if (m_suggestion_text.set(suggestion, len))
+        invalidate();
+}
+
+void display_manager::set_usage_text(const char* usage, uint16_t width)
+{
+    if (m_usage_text.set(usage, width))
         invalidate();
 }
 
@@ -875,7 +888,9 @@ bool display_manager::get_pos_from_screen(uint32_t x, uint32_t y, textpos_t& pos
 
     const cstring& text = m_buffer->get_text();
     const display_row_start& start = m_displayed.m_rows[row];
-    if (start.offset == c_padding_row_offset)
+
+    // If the row contains no input text, return the end of the input text.
+    if (start.offset == c_padding_row_offset || start.virtual_text || size_t(start.offset) >= text.length())
     {
         pos = textpos_t(text.length());
         return true;
@@ -1132,8 +1147,11 @@ bool display_manager::try_update_caret_only()
     if (size_t(caret) > text.length())
         return false;
 
+    // Calculate the row containing the caret.
     size_t row = 0;
-    while (row + 1 < m_displayed.m_rows.size() && m_displayed.m_rows[row + 1].offset <= caret)
+    while (row + 1 < m_displayed.m_rows.size() &&
+           !m_displayed.m_rows[row + 1].virtual_text &&
+           m_displayed.m_rows[row + 1].offset <= caret)
         ++row;
 
     const display_row_start* start = &m_displayed.m_rows[row];
@@ -1312,24 +1330,28 @@ bool display_manager::display_internal(display_lines& lines)
         if (!m_force_redisplay && can_optimize && i < m_displayed.m_lines.size())
         {
             const auto& displayed = m_displayed.m_lines[i];
+            const bool has_right_text = int32_t(i) == lines.m_right_text_row && lines.m_right_text.length();
+            const bool had_right_text = int32_t(i) == m_displayed.m_right_text_row && m_displayed.m_right_text.length();
             reuse_left_text = !(i == 0 && !(lines.m_left_text == m_displayed.m_left_text));
-            reuse_right_text = !(i == 0 && !(lines.m_right_text == m_displayed.m_right_text));
+            reuse_right_text = (!has_right_text && !had_right_text) ||
+                               (has_right_text && had_right_text && lines.m_right_text == m_displayed.m_right_text);
             if (input_extent.x == displayed_input_extent.x)
             {
                 rest_dirty_width = (displayed->width() > line->width() ?
                                     displayed->width() - line->width() : 0);
-                if (i == 0)
+
+                // If this row owns the effective right-aligned text, prepare to
+                // clear any stale portion of the gap and text.
+                if (had_right_text)
                 {
                     if (m_displayed.m_right_text.width() <= lines.m_right_text.width())
                         right_gap_dirty_width = rest_dirty_width;
-                    if (m_displayed.m_right_text.width())
-                    {
-                        const auto consumed_width = (displayed->width() +
-                                                     c_right_text_padding +
-                                                     m_displayed.m_right_text.width());
-                        if (consumed_width <= displayed_input_extent.x)
-                            rest_dirty_width = max_size.x - line->width();
-                    }
+
+                    const auto consumed_width = (displayed->width() +
+                                                 c_right_text_padding +
+                                                 m_displayed.m_right_text.width());
+                    if (consumed_width <= displayed_input_extent.x)
+                        rest_dirty_width = max_size.x - line->width();
                 }
             }
             if (displayed->m_x1 == line->m_x1)
@@ -1431,9 +1453,15 @@ bool display_manager::display_internal(display_lines& lines)
         // Fill remaining width.
         if (line->width() < max_size.x)
         {
-            if (i == 0 && m_right_text.width() && line->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
+            const bool has_right_text =
+                int32_t(i) == lines.m_right_text_row &&
+                lines.m_right_text.width() &&
+                line->width() + c_right_text_padding + lines.m_right_text.width() <= max_size.x;
+
+            if (has_right_text)
             {
-                const int16_t gap_width = max_size.x - (line->width() + m_right_text.width());
+                // Clear gap without disturbing reusable right-aligned text.
+                const int16_t gap_width = max_size.x - (line->width() + lines.m_right_text.width());
                 const int16_t erase_width = min(gap_width, right_gap_dirty_width);
                 if (erase_width > 0 || !reuse_right_text)
                     output_color(get_face_def(m_style ? m_style->empty_face : FACE_EMPTY));
@@ -1444,12 +1472,13 @@ bool display_manager::display_internal(display_lines& lines)
                 }
                 if (!reuse_right_text)
                 {
-                    move_to_column(cursor, max_size.x - m_right_text.width(), lines.m_inner_offset.x);
-                    output(m_right_text.c_str(), m_right_text.length());
+                    move_to_column(cursor, max_size.x - lines.m_right_text.width(), lines.m_inner_offset.x);
+                    output(lines.m_right_text.c_str(), lines.m_right_text.length());
                 }
             }
             else
             {
+                // Clear stale text through the rest of the row.
                 const int16_t rest_width = max_size.x - line->width();
                 const int16_t erase_width = min(rest_width, rest_dirty_width);
                 if (erase_width > 0)
@@ -1801,6 +1830,7 @@ bool display_manager::build(display_lines& out)
     }
 
     const cstring& text = m_buffer->get_text();
+    const size_t real_text_len = text.length();
 
     cstring faces;
     faces.append_spaces(text.length());     // FACE_DEFAULT == space.
@@ -1811,6 +1841,15 @@ bool display_manager::build(display_lines& out)
         assert(text.length() == faces.length());
         if (faces.length() < text.length())
             faces.append_spaces(text.length() - faces.length());
+    }
+
+    // If a suggestion string has been provided, temporarily append it now.
+    const auto tmp_suggest = m_buffer->scoped_raw_append(m_suggestion_text.c_str());
+    if (text.length() > real_text_len)
+    {
+        const size_t old_length = faces.length();
+        memset(faces.reserve(text.length()) + old_length, FACE_SUGGESTION, text.length() - old_length);
+        faces.set_length(text.length());
     }
 
     // Overlay active mark color into faces.
@@ -1909,7 +1948,7 @@ bool display_manager::build(display_lines& out)
             // Newlines in multiline mode are literal line breaks.
             if (*p == '\n' && multiline)
             {
-                rows.push_back({ textpos_t(offset + clen), false });
+                rows.push_back({ textpos_t(offset + clen), false, size_t(offset) >= real_text_len });
                 row_width = 0;
                 continue;
             }
@@ -1920,7 +1959,7 @@ bool display_manager::build(display_lines& out)
             {
                 if (!multiline)
                     break;
-                rows.push_back({ offset, false });
+                rows.push_back({ offset, false, size_t(offset) >= real_text_len });
                 row_width = 0;
             }
             ++row_width;
@@ -1928,7 +1967,7 @@ bool display_manager::build(display_lines& out)
             {
                 if (!multiline)
                     break;
-                rows.push_back({ offset, true });
+                rows.push_back({ offset, true, size_t(offset) >= real_text_len });
                 row_width = 0;
             }
             ++row_width;
@@ -1940,7 +1979,7 @@ bool display_manager::build(display_lines& out)
             {
                 if (!multiline)
                     break;
-                rows.push_back({ offset, false });
+                rows.push_back({ offset, false, size_t(offset) >= real_text_len });
                 row_width = 0;
             }
             if (cursor_in_character)
@@ -1980,11 +2019,34 @@ bool display_manager::build(display_lines& out)
     // there's a phantom blank line at the end.
     if (multiline && row_width == uint32_t(max_size.x))
     {
-        rows.push_back({ textpos_t(text.length()), false });
+        rows.push_back({ textpos_t(text.length()), false, text.length() > real_text_len });
+        row_width = 0;
         if (m_layout->variable_height && !m_style->border && m_additional_lines.empty())
             tmp.m_phantom_last_row = true;
     }
     assert(implies(!multiline, rows.size() == 1));
+
+    // Usage text replaces ordinary right text and belongs to the final
+    // logical input row.  If it cannot fit there, use one more input row
+    // when the configured maximum height permits it.
+    int32_t usage_text_row = -1;
+    if (m_usage_text.length())
+    {
+        if (row_width + c_right_text_padding + m_usage_text.width() <= max_size.x)
+        {
+            usage_text_row = int32_t(rows.size() - 1);
+            tmp.m_phantom_last_row = false;
+        }
+        else if (multiline &&
+                 c_right_text_padding + m_usage_text.width() <= max_size.x &&
+                 int32_t(rows.size()) < max_size.y)
+        {
+            rows.push_back({ textpos_t(text.length()), false, true });
+            row_width = 0;
+            usage_text_row = int32_t(rows.size() - 1);
+            tmp.m_phantom_last_row = false;
+        }
+    }
 
     // Determine the height.
     const int32_t total_rows = int32_t(rows.size());
@@ -2155,9 +2217,24 @@ again:
     // Apply scroll markers.
     tmp.apply_scroll_markers(max_size.x, y_extent, total_rows);
 
-    if (!tmp.m_lines.empty() && m_right_text.width() &&
-        tmp.m_lines.front()->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
+    // Record the effective right-aligned text in the built display snapshot.
+    // Usage text supersedes ordinary right text and is attached only when its
+    // target logical row is visible.  Without usage text, place right text on
+    // the first displayed row when it fits.
+    if (m_usage_text.length())
+    {
+        if (usage_text_row >= tmp.m_top && usage_text_row < end)
+        {
+            tmp.m_right_text = m_usage_text;
+            tmp.m_right_text_row = usage_text_row - tmp.m_top;
+        }
+    }
+    else if (!tmp.m_lines.empty() && m_right_text.width() &&
+             tmp.m_lines.front()->width() + c_right_text_padding + m_right_text.width() <= max_size.x)
+    {
         tmp.m_right_text = m_right_text;
+        tmp.m_right_text_row = 0;
+    }
 
     // Handle fixed height mode.
     while (int32_t(tmp.m_lines.size()) < y_extent)

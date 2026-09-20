@@ -78,6 +78,7 @@ constexpr char FACE_DEFAULT     = 0x20;
 constexpr char FACE_SELECTION   = 0x1f;
 constexpr char FACE_MARK        = 0x1e;
 constexpr char FACE_SCROLLER    = 0x1d;
+constexpr char FACE_SUGGESTION  = 0x1c;
 constexpr char FACE_EMPTY       = 0;
 struct editor_callbacks;
 typedef std::map<char, cstring> face_definitions;
@@ -150,6 +151,7 @@ struct display_row_start
 {
     textpos_t           offset;
     bool                pending;
+    bool                virtual_text = false;
 };
 
 enum class screen_scroll_direction
@@ -184,6 +186,7 @@ struct display_lines
     std::vector<display_row_start> m_rows;
     text_and_width      m_left_text;
     text_and_width      m_right_text;
+    int32_t             m_right_text_row = -1;
     std::vector<additional_display_line> m_additional_lines;
     coord               m_cursor = { -1, -1 };  // Offset from m_inner_offset.
 
@@ -219,6 +222,8 @@ public:
     void                set_left_text(const char* left, uint16_t width);
     void                set_right_text(const char* right, uint16_t width);
     void                set_message_text(const char* message, uint16_t width);
+    void                set_suggestion_text(const char* suggestion, size_t len);
+    void                set_usage_text(const char* usage, uint16_t width);
     void                set_additional_lines(const std::vector<additional_display_line>& lines);
     void                clear_additional_lines();
 
@@ -287,6 +292,8 @@ private:
     text_and_width      m_left_text;
     text_and_width      m_right_text;
     text_and_width      m_message_text;
+    cstring             m_suggestion_text;
+    text_and_width      m_usage_text;
     std::vector<additional_display_line> m_additional_lines;
     uint32_t            m_top = 0;                  // Vertical scroll top.
     textpos_t           m_left = 0;                 // Horizontal scroll left.

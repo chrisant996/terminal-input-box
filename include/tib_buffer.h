@@ -55,6 +55,30 @@ private:
 
 class input_buffer
 {
+    friend class input_buffer_mutate_scope;
+
+    class input_buffer_mutate_scope
+    {
+    public:
+        input_buffer_mutate_scope(input_buffer& buffer, const char* text)
+            : m_buffer(buffer)
+            , m_orig_len(buffer.m_text.length())
+            , m_mutated(text && *text)
+        {
+            if (m_mutated)
+                buffer.m_text.append(text);
+        }
+        ~input_buffer_mutate_scope()
+        {
+            if (m_mutated)
+                m_buffer.m_text.set_length(m_orig_len);
+        }
+    private:
+        input_buffer& m_buffer;
+        const size_t m_orig_len;
+        const bool m_mutated;
+    };
+
 public:
                         ~input_buffer() = default;
                         input_buffer() = default;
@@ -64,6 +88,9 @@ public:
 
     const cstring&      get_text() const { return m_text; }
     uint32_t            get_change_counter() const { return m_change_counter; }
+
+    // This is advertised as const, but really mutates m_text temporarily.
+    input_buffer_mutate_scope scoped_raw_append(const char* text) const { return input_buffer_mutate_scope(*const_cast<input_buffer*>(this), text); }
 
 protected:
     cstring             m_text;

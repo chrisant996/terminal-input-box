@@ -98,6 +98,8 @@ public:
 
     void                set_left_text(const char* left, uint16_t width);
     void                set_right_text(const char* right, uint16_t width);
+    void                set_suggestion_text(const char* suggestion, size_t len=c_auto_length);
+    void                set_usage_text(const char* usage, uint16_t width);
     void                set_additional_lines(const std::vector<additional_display_line>& lines);
     void                clear_additional_lines();
 

@@ -31,6 +31,7 @@ static const char c_long_usage[] =
 "  --mouse MODE      Mouse VT input mode (MODE == none, vt200, drag, any).\n"
 "  --enc MODE        Mouse VT encoding mode (MODE == default, sgr).\n"
 "  --show-stats      Show statistics about display manager.\n"
+"  --suggest         Show suggestions based on words present.\n"
 ;
 
 static tib_host::auto_terminal_init s_auto_terminal_init;
@@ -408,6 +409,7 @@ int main(int argc, const char** argv)
     colors->set_color(tib::color_element::input_selection, "0;30;48;2;232;204;0");
     colors->set_color(tib::color_element::input_mark, "0;7");
     colors->set_color(tib::color_element::input_scroller, "0;7;36");
+    colors->set_color(tib::color_element::suggestion, "0;90");
 
     tib::face_definitions face_defs;
     face_defs.emplace(FACE_CTRL, "0;36;44");
@@ -421,6 +423,7 @@ int main(int argc, const char** argv)
     bool sgr_encoding = true;
     bool use_custom_vt_driver = false;
     bool set_mouse_input_mode = false;
+    bool show_suggestions = false;
     int32_t origin_x = -1;
 
     for (int i = 0; i < argc; ++i)
@@ -628,6 +631,10 @@ no_border:
         {
             tib::show_display_manager_statistics(true);
         }
+        else if (_stricmp(argv[i], "--suggest") == 0)
+        {
+            show_suggestions = true;
+        }
         else if (_stricmp(argv[i], "-?") == 0 ||
                  _stricmp(argv[i], "--help") == 0)
         {
@@ -656,10 +663,14 @@ no_border:
     }
 
     tib::cstring border_face_scroller;
+    tib::cstring face_suggestion;
     if (border)
     {
         join_colors(border_face_scroller, colors, tib::color_element::base, tib::color_element::input_scroller);
         face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
+
+        join_colors(face_suggestion, colors, tib::color_element::base, tib::color_element::suggestion);
+        face_defs[tib::FACE_SUGGESTION] = face_suggestion.c_str();
 
         if (left_text.length())
         {
@@ -710,7 +721,7 @@ no_border:
     tib->initialize("hello world");
     tib->set_selection(0, uint16_t(tib->get_text().length()));
 
-#pragma region Show input sequence.
+#pragma region Show custom feedback.
     tib::cstring tmp;
     tib::cstring sequence;
     tib::cstring show_sequence;
@@ -719,6 +730,61 @@ no_border:
 
     auto add_feedback_to_display = [&]()
     {
+        if (show_suggestions)
+        {
+            tib::cstring word;
+            tib::cstring suggestion;
+            const char* const text = tib->get_text().c_str();
+
+            // If caret at end, get last word.
+            tib::textpos_t begin_word = tib->get_caret();
+            if (!tib->get_selection_state().has_selection() &&
+                tib->get_caret() == tib->get_text().length())
+            {
+                while (begin_word > 0 && isalnum(uint8_t(text[begin_word - 1])))
+                    --begin_word;
+                word.set(text + begin_word);
+            }
+
+            // If last word, find first matching word.
+            if (!word.empty())
+            {
+                size_t match = 0;
+                while (match < begin_word)
+                {
+                    size_t len = 0;
+                    while (match + len < begin_word && isalnum(uint8_t(text[match + len])))
+                        ++len;
+                    if (len && len > word.length())
+                    {
+                        if (_strnicmp(text + match, word.c_str(), word.length()) == 0)
+                        {
+                            suggestion.set(text + match + word.length(), len - word.length());
+                            break;
+                        }
+                    }
+                    match += len + 1;
+                }
+            }
+
+            if (suggestion.empty())
+            {
+                tib->set_usage_text(nullptr, 0);
+                tib->set_suggestion_text(nullptr);
+            }
+            else
+            {
+                tib::cstring usage;
+                const bool pad = !border;
+                join_colors(usage, colors, tib::color_element::base, tib::color_element::suggestion);
+                usage.append("\x1b[7mN/A\x1b[27m=Insert");
+                if (pad)
+                    usage.append_spaces(1);
+                tib->set_usage_text(usage.c_str(), pad ? 11 : 10);
+                tib->set_suggestion_text(suggestion.c_str(), suggestion.length());
+            }
+        }
+
         display_feedback(*tib, show_sequence);
     };
 
@@ -765,7 +831,7 @@ no_border:
 
         old_extent = tib->get_extent();
     };
-#pragma endregion // Show input sequence.
+#pragma endregion // Show custom feedback.
 
     tib::binding_resolver resolver;                         // Required.
     resolver.add_target(tib);                               // Required.
@@ -794,10 +860,10 @@ no_border:
                 /*Custom*/  update_sequence_after_step(resolved.outcome);
     }
 
-#pragma region Show input sequence.
+#pragma region Show custom feedback.
     if (s_show_keys)
         tib->clear_additional_lines();
-#pragma endregion // Show input sequence.
+#pragma endregion // Show custom feedback.
 
     tib->clear_additional_lines();
     tib->end_display_lf();

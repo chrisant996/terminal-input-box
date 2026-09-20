@@ -556,6 +556,104 @@ TEST_CASE("Display left text")
     }
 }
 
+TEST_CASE("Display suggestion text")
+{
+    SECTION("Is rendered after input with the suggestion face")
+    {
+        display_test_fixture fixture(10, false, 3, true);
+        tib::face_definitions faces;
+        faces[tib::FACE_SUGGESTION] = "35";
+        fixture.m_display.init_faces(&faces);
+        fixture.m_display.set_suggestion_text("def", 3);
+        fixture.m_buffer.set_text("abc", 3);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "\x1b[35mdef") != nullptr);
+        const tib::coord expected_cursor = { 3, 0 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected_cursor);
+        REQUIRE(fixture.m_buffer.get_text() == "abc");
+    }
+
+    SECTION("Wraps without moving the real caret onto the suggestion row")
+    {
+        display_test_fixture fixture(5, false, 3, true);
+        fixture.m_display.set_suggestion_text("\xe4\xb8\xad", 3);
+        fixture.m_buffer.set_text("abcd", 4);
+
+        REQUIRE(fixture.m_display.display() == true);
+        const tib::coord expected_cursor = { 0, 1 };
+        REQUIRE(fixture.m_display.get_relative_cursor() == expected_cursor);
+        const tib::coord expected_extent = { 5, 2 };
+        REQUIRE(fixture.m_display.get_inner_extent() == expected_extent);
+        REQUIRE(strstr(s_display_output.c_str(), "\xe4\xb8\xad") != nullptr);
+    }
+
+    SECTION("Clearing removes suggestion-only height")
+    {
+        display_test_fixture fixture(5, false, 3, true);
+        fixture.m_display.set_suggestion_text("def", 3);
+        REQUIRE(fixture.display_initial("abc", 3) == true);
+        const tib::coord initial_extent = { 5, 2 };
+        REQUIRE(fixture.m_display.get_inner_extent() == initial_extent);
+
+        fixture.m_display.set_suggestion_text(nullptr, 0);
+        REQUIRE(fixture.m_display.display() == true);
+        const tib::coord final_extent = { 5, 1 };
+        REQUIRE(fixture.m_display.get_inner_extent() == final_extent);
+    }
+}
+
+TEST_CASE("Display usage text")
+{
+    SECTION("Supersedes right text and uses the final input row")
+    {
+        display_test_fixture fixture(10, false, 3, true);
+        fixture.m_display.set_right_text("right", 5);
+        fixture.m_display.set_usage_text("use", 3);
+        fixture.m_buffer.set_text("1234567890\nabc", 14);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "right") == nullptr);
+    }
+
+    SECTION("Adds a row when the final input row is too full")
+    {
+        display_test_fixture fixture(10, false, 3, true);
+        fixture.m_display.set_usage_text("use", 3);
+        fixture.m_buffer.set_text("12345678", 8);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
+        const tib::coord expected_extent = { 10, 2 };
+        REQUIRE(fixture.m_display.get_inner_extent() == expected_extent);
+    }
+
+    SECTION("Uses a fixed-height padding row")
+    {
+        display_test_fixture fixture(10, false, 3, false);
+        fixture.m_display.set_usage_text("use", 3);
+        fixture.m_buffer.set_text("12345678", 8);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
+        const tib::coord expected_extent = { 10, 3 };
+        REQUIRE(fixture.m_display.get_inner_extent() == expected_extent);
+    }
+
+    SECTION("Is omitted at maximum height while still superseding right text")
+    {
+        display_test_fixture fixture(10);
+        fixture.m_display.set_right_text("right", 5);
+        fixture.m_display.set_usage_text("use", 3);
+        fixture.m_buffer.set_text("12345678", 8);
+
+        REQUIRE(fixture.m_display.display() == true);
+        REQUIRE(strstr(s_display_output.c_str(), "use") == nullptr);
+        REQUIRE(strstr(s_display_output.c_str(), "right") == nullptr);
+    }
+}
+
 TEST_CASE("Display vertical caret movement")
 {
     display_test_fixture fixture(5, false, 3, true);

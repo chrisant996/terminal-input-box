@@ -29,4 +29,5 @@ clink.argmatcher(args[1])
     { "--mouse"..mousemode, " MODE",    "Mouse VT input mode" },
     { "--enc"..encmode, " MODE",        "Mouse VT encoding mode" },
     { "--show-stats",                   "Show statistics about display manager" },
+    { "--suggest",                      "Show suggestions based on words present" },
 })

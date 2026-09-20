@@ -324,6 +324,17 @@ void editor_context::set_right_text(const char* right, uint16_t width)
     m_display.set_right_text(right, width);
 }
 
+void editor_context::set_suggestion_text(const char* suggestion, size_t len)
+{
+    len = resolve_auto_length(len, suggestion);
+    m_display.set_suggestion_text(suggestion, len);
+}
+
+void editor_context::set_usage_text(const char* usage, uint16_t width)
+{
+    m_display.set_usage_text(usage, width);
+}
+
 void editor_context::set_additional_lines(const std::vector<additional_display_line>& lines)
 {
     m_display.set_additional_lines(lines);

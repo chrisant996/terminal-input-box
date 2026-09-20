@@ -25,6 +25,7 @@ const char* color_table::get_color(color_element color) const
             "96;7",
             "7",
             "1",
+            "90",
         };
         static_assert(std::size(c_default_colors) == size_t(color_element::MAX));
         return c_default_colors[size_t(color)];

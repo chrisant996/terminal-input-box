@@ -7,14 +7,15 @@
 ## Open Questions
 
 - Should tib display the message on the first _displayed_ row?  But that's going to have weird side effects, and probably should go on a FUTURE list.  Or it could optionally go in an `additional_display_line`, but currently that interface doesn't have a way to merge an internal list with an external list.
+- Should a suggestion cause a single line input box to scroll horizontally to ensure the suggestion is visible?  How far should it scroll?
 - CLINK: the numeric argument message in Clink is only drawn on the first row, so if the display is scrolled then the message is not visible.  And if the whole line is reverted, then the place where the message would have been displayed does not get redrawn properly.
 
 ## Sufficiency
 
-- [ ] Does tib need built-in support for Clink's `override_match_line_state` facility?
+- [x] Does tib need built-in support for Clink's `override_match_line_state` facility?  _[No, that's solely part of the completion system, which is entirely external from tib.]_
 - [ ] Clink needs to be able to integrate its auto-suggestions and suggestion list with `editor_context`.
-    - [ ] Needs built-in support for the `Right` / `F2` hint, and other similar inline hints.
-    - [ ] How to render auto-suggestion?  Clink replaces the `rl_line_buffer` global, but tib doesn't allow that.
+    - [x] Needs built-in support for the `Right` / `F2` hint, and other similar inline hints.
+    - [x] How to render auto-suggestion?  Clink replaces the `rl_line_buffer` global, but tib doesn't allow that.
     - [ ] Hooks so Clink can exert appropriate influence.
     - [ ] Expose enough internal states for a caller to manipulate its other features based on `editor_context` state; e.g. to suppress an external suggestion list while certain `editor_context` modal states are active, such as incremental history search or execute-command or etc.
     - [ ] `del-line` and/or `clink-reset-line` needs to be able to clear suggestions.

@@ -20,6 +20,7 @@ enum class color_element
     input_selection,
     input_mark,
     input_scroller,
+    suggestion,
     MAX
 };
 
