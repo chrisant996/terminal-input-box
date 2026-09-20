@@ -14,7 +14,7 @@
 static const char c_long_usage[] =
 "Flags:\n"
 "  --single          Single line input mode (default).\n"
-"  --multiline       Multiple line input mode (max height 3 lines).\n"
+"  --multiline       Multiple line input mode (max height 3 rows).\n"
 "  --fixed           Fixed height input mode (default).\n"
 "  --variable        Variable height input mode (implies --multiline).\n"
 "  --full-width      Use the full terminal width (default is 40).\n"
@@ -24,6 +24,7 @@ static const char c_long_usage[] =
 "  --left TEXT       Display TEXT at the left of the first line.\n"
 "  --right TEXT      Display TEXT at the right of the first line.\n"
 "  --origin X        Set origin X coordinate (1-based).\n"
+"  --height ROWS     Set max height to ROWS (default is 3).\n"
 "  --rainbow         Apply rainbow colors to words.\n"
 "  --show-keys       Show input key sequences.\n"
 "  --custom-vt       Use custom VT input driver (always on Win8.1 and lower).\n"
@@ -508,6 +509,25 @@ no_border:
             else
             {
                 fputs("Missing origin coordinate.\n", stderr);
+                return 1;
+            }
+        }
+        else if (_stricmp(argv[i], "--height") == 0)
+        {
+            ++i;
+            if (i < argc)
+            {
+                const int height = atoi(argv[i]);
+                if (height <= 0)
+                {
+                    fputs("Invalid height.\n", stderr);
+                    return 1;
+                }
+                tib->set_max_height(tib::min<uint16_t>(height, 1024));
+            }
+            else
+            {
+                fputs("Missing height.\n", stderr);
                 return 1;
             }
         }
