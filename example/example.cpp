@@ -267,6 +267,20 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
         }
     }
 }
+
+void join_colors(tib::cstring& s, std::shared_ptr<tib::color_table>& colors, tib::color_element a, const char* b)
+{
+    s.append_color(colors->get_color(a));
+    if (_strnicmp(b, "0;", 2) == 0)
+        b += 2;
+    s.append_color(b);
+}
+
+void join_colors(tib::cstring& s, std::shared_ptr<tib::color_table>& colors, tib::color_element a, tib::color_element b)
+{
+    const char* c = colors->get_color(b);
+    join_colors(s, colors, a, c);
+}
 #pragma endregion // Example customizations.
 
 #pragma region Show custom feedback.
@@ -587,26 +601,20 @@ no_border:
     tib::cstring border_face_scroller;
     if (border)
     {
-        border_face_scroller.set(colors->get_color(tib::color_element::base));
-        border_face_scroller.append_color(colors->get_color(tib::color_element::input_scroller));
+        join_colors(border_face_scroller, colors, tib::color_element::base, tib::color_element::input_scroller);
         face_defs[tib::FACE_SCROLLER] = border_face_scroller.c_str();
 
         if (left_text.length())
         {
             tib::cstring tmp;
-            tmp.append_color(colors->get_color(tib::color_element::base));
-            const char* bar_text_color = c_bar_text_color;
-            if (_strnicmp(bar_text_color, "0;", 2) == 0)
-                bar_text_color += 2;
-            tmp.append_color(bar_text_color);
+            join_colors(tmp, colors, tib::color_element::base, c_bar_text_color);
             tmp.append(left_text.c_str());
             left_text = std::move(tmp);
         }
         if (right_text.length())
         {
             tib::cstring tmp;
-            tmp.append_color(colors->get_color(tib::color_element::base));
-            tmp.append_color("93");
+            join_colors(tmp, colors, tib::color_element::base, "93");
             tmp.append(right_text.c_str());
             right_text = std::move(tmp);
         }
@@ -619,7 +627,9 @@ no_border:
         {
             tib::cstring tmp;
             tmp.set(colors->get_color(tib::color_element::base));
-            tmp.printf("\x1b[38;2;%u;%u;%um", c_colors[i].r, c_colors[i].g, c_colors[i].b);
+            if (!tmp.empty())
+                tmp.append(";", 1);
+            tmp.printf("38;2;%u;%u;%u", c_colors[i].r, c_colors[i].g, c_colors[i].b);
             static_assert(std::is_nothrow_move_constructible_v<tib::cstring>);
             static_assert(std::is_nothrow_move_assignable_v<tib::cstring>);
             rainbow_colors.emplace_back(std::move(tmp));

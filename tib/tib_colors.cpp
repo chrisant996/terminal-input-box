@@ -34,8 +34,7 @@ const char* color_table::get_color(color_element color) const
 
 void color_table::set_color(color_element color, const char* sgr_params)
 {
-    m_colors[size_t(color)].clear();
-    m_colors[size_t(color)].append_color(sgr_params);
+    m_colors[size_t(color)].set(sgr_params);
 }
 
 bool color_table::append_color(cstring& out, color_element color, color_element overlay) const
