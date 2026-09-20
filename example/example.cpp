@@ -163,11 +163,14 @@ void make_key_tables()
     s_normal_bindings = tib::make_default_key_table(true/*numeric_argument*/);
     {
         auto t = std::make_shared<tib::key_table>();
+        t->add("\033", tib::binding_target_func("del-line"));           // ESC by itself
+
         t->add("\021", tib::binding_target_func("quoted-insert"));      // Ctrl-Q
         t->add("\022", tib::binding_target_func("lorem-ipsum"));        // Ctrl-R
         t->add("\025", tib::binding_target_func("universal-argument")); // Ctrl-U
         t->add("\033m", tib::binding_target_func("insert-newline"));    // Alt-M
         t->add("\033T", tib::binding_target_macro("Macro Text"));       // Alt-Shift-T
+        t->add("\033\022", tib::binding_target_func("lorem-ipsum"));    // Alt-Ctrl-R
 
         t->add("\030\001", tib::binding_target_func("movement-mode"));              // Ctrl-X,Ctrl-A
         t->add("\030\030", tib::binding_target_func("exchange-caret-and-mark"));    // Ctrl-X,Ctrl-X
@@ -178,12 +181,15 @@ void make_key_tables()
     s_movement_bindings = std::make_shared<tib::key_table_list>();
     {
         auto t = std::make_shared<tib::key_table>();
+        t->add("\033", tib::binding_target_func("normal-mode"));        // ESC by itself
+
         t->add("\001", tib::binding_target_func("begin-of-line"));      // Ctrl-A
         t->add("\002", tib::binding_target_func("backward-char"));      // Ctrl-B
         t->add("\004", tib::binding_target_func("del-char-right"));     // Ctrl-D
         t->add("\005", tib::binding_target_func("end-of-line"));        // Ctrl-E
         t->add("\006", tib::binding_target_func("forward-char"));       // Ctrl-F
         t->add("\010", tib::binding_target_func("del-char-left"));      // Ctrl-H
+        t->add("\r", tib::binding_target_func("accept-line"));          // Ctrl-M / Enter
         t->add("\021", tib::binding_target_func("screen-line-up"));     // Ctrl-Q
         t->add("\032", tib::binding_target_func("screen-line-down"));   // Ctrl-Z
 
@@ -197,6 +203,37 @@ void make_key_tables()
         t->add("H", tib::binding_target_func("del-word-left"));
         t->add("q", tib::binding_target_func("screen-line-up"));
         t->add("z", tib::binding_target_func("screen-line-down"));
+
+        t->add("\000", 1, tib::binding_target_func("set-mark"));        // Ctrl-@ (Ctrl-2)
+        t->add("\001", tib::binding_target_func("select-all"));         // Ctrl-A
+        t->add("\003", tib::binding_target_func("copy"));               // Ctrl-C
+        t->add("\007", tib::binding_target_func("abort"));              // Ctrl-G
+        t->add("\027", tib::binding_target_func("select-word"));        // Ctrl-W
+
+        t->add("\033[H", tib::binding_target_func("begin-of-line"));    // Home
+        t->add("\033[F", tib::binding_target_func("end-of-line"));      // End
+        t->add("\033[D", tib::binding_target_func("backward-char"));    // Left
+        t->add("\033[C", tib::binding_target_func("forward-char"));     // Right
+        t->add("\033[1;5D", tib::binding_target_func("backward-word")); // Ctrl-Left
+        t->add("\033[1;5C", tib::binding_target_func("forward-word"));  // Ctrl-Right
+        t->add("\033[B", tib::binding_target_func("screen-line-down")); // Down
+        t->add("\033[A", tib::binding_target_func("screen-line-up"));   // Up
+
+        t->add("\033[1;2H", tib::binding_target_func("cua-begin-of-line"));     // Shift-Home
+        t->add("\033[1;2F", tib::binding_target_func("cua-end-of-line"));       // Shift-End
+        t->add("\033[1;2D", tib::binding_target_func("cua-backward-char"));     // Shift-Left
+        t->add("\033[1;2C", tib::binding_target_func("cua-forward-char"));      // Shift-Right
+        t->add("\033[1;6D", tib::binding_target_func("cua-backward-word"));     // Shift-Ctrl-Left
+        t->add("\033[1;6C", tib::binding_target_func("cua-forward-word"));      // Shift-Ctrl-Right
+        t->add("\033[1;2B", tib::binding_target_func("cua-screen-line-down"));  // Shift-Down
+        t->add("\033[1;2A", tib::binding_target_func("cua-screen-line-up"));    // Shift-Up
+
+        t->add("\033[<%#;%#;%#M", tib::binding_target_func("mouse-input"), true); // Mouse press
+        t->add("\033[<%#;%#;%#m", tib::binding_target_func("mouse-input"), true); // Mouse release
+
+        for (char seq[3] = { '\033', '0', 0 }; seq[1] <= '9'; ++seq[1])
+            t->add(seq, tib::binding_target_func("digit-argument"));
+        t->add("-", tib::binding_target_func("digit-argument"));
 
         t->add("\030\001", tib::binding_target_func("normal-mode"));    // Ctrl-X,Ctrl-A
 
