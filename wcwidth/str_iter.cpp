@@ -7,10 +7,6 @@
 #include "str_iter.h"
 #include <vector> // For std::size.
 
-const char c_replacement_character[] = "\xef\xbf\xbd";
-const uint32_t c_replacement_character_length = 3;
-static_assert(c_replacement_character_length == std::size(c_replacement_character) - 1);
-
 template <>
 char32_t str_iter_impl<char>::next()
 {

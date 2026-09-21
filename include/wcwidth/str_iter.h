@@ -4,9 +4,6 @@
 
 #pragma once
 
-extern const char c_replacement_character[];
-extern const uint32_t c_replacement_character_length;
-
 template <typename T>
 class str_iter_impl
 {
