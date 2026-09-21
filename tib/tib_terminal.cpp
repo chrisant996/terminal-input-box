@@ -41,7 +41,7 @@ terminal_out* new_basic_terminal_out();
 
 pushed_input::~pushed_input() noexcept
 {
-    free(m_data);
+    tib_free(m_data);
 }
 
 bool pushed_input::push(uint8_t c) noexcept
@@ -199,7 +199,7 @@ bool pushed_input::ensure_capacity(size_t num) noexcept
     if (new_size < required)
         new_size = required;
 
-    uint8_t* const data = static_cast<uint8_t*>(malloc(new_size));
+    uint8_t* const data = static_cast<uint8_t*>(tib_malloc(new_size));
     if (!data)
         return false;
 
@@ -209,7 +209,7 @@ bool pushed_input::ensure_capacity(size_t num) noexcept
     if (m_count > first)
         memcpy(data + first, m_data, m_count - first);
 
-    free(m_data);
+    tib_free(m_data);
     m_data = data;
     m_size = new_size;
     m_head = 0;

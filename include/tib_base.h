@@ -13,6 +13,23 @@
 #include <assert.h>
 #include <limits>
 
+#ifdef TIB_INCLUDE_CONFIG_HEADER
+#include <tib_config.h>
+#endif
+
+#ifndef tib_malloc
+#define tib_malloc malloc
+#endif
+#ifndef tib_calloc
+#define tib_calloc calloc
+#endif
+#ifndef tib_realloc
+#define tib_realloc realloc
+#endif
+#ifndef tib_free
+#define tib_free free
+#endif
+
 namespace tib {
 
 constexpr size_t c_auto_length = size_t(-1);
@@ -51,7 +68,7 @@ template<class T>
 class cstring_t
 {
 public:
-                        ~cstring_t() noexcept { ::free(m_text); }
+                        ~cstring_t() noexcept { ::tib_free(m_text); }
                         cstring_t() noexcept = default;
                         cstring_t(const T* s, size_t len=c_auto_length) { raw_set(s, len); }
                         cstring_t(const cstring_t<T>& s) { raw_set(s.m_text, s.m_len); }
@@ -111,7 +128,7 @@ cstring_t<T>& cstring_t<T>::operator=(const cstring_t<T>& s)
 template<class T>
 cstring_t<T>& cstring_t<T>::operator=(cstring_t<T>&& s) noexcept
 {
-    ::free(m_text);
+    ::tib_free(m_text);
     m_capacity = s.m_capacity;
     m_len = s.m_len;
     m_text = s.m_text;
@@ -319,7 +336,7 @@ T* cstring_t<T>::reserve(size_t len)
     if (len >= m_capacity)
     {
         const auto old_len = length();
-        T* tmp = static_cast<T*>(realloc(m_text, len * sizeof(T)));
+        T* tmp = static_cast<T*>(tib_realloc(m_text, len * sizeof(T)));
         if (!tmp)
             return nullptr;
         m_text = tmp;
@@ -360,7 +377,7 @@ void cstring_t<T>::clear() noexcept
 template<class T>
 void cstring_t<T>::free() noexcept
 {
-    ::free(m_text);
+    ::tib_free(m_text);
     m_capacity = 0;
     m_len = 0;
     m_text = nullptr;
