@@ -30,7 +30,7 @@ static void check_back_one_grapheme(const grapheme_sample* samples, size_t count
     {
         --count;
         uint16_t width = 0;
-        caret = backward_one_grapheme(text.c_str(), text.length(), caret, &width);
+        caret = tib::backward_one_grapheme(text.c_str(), text.length(), caret, &width);
         REQUIRE(caret == positions[count]);
         REQUIRE(width == samples[count].width, [&](){
             tib::cstring_t<WCHAR> ws;
@@ -44,7 +44,7 @@ static void check_back_one_grapheme(const grapheme_sample* samples, size_t count
     }
 
     uint16_t width = 1;
-    REQUIRE(backward_one_grapheme(text.c_str(), text.length(), caret, &width) == 0);
+    REQUIRE(tib::backward_one_grapheme(text.c_str(), text.length(), caret, &width) == 0);
     REQUIRE(width == 0);
 }
 
@@ -997,8 +997,8 @@ PERF_CASE("PERF, compare matching display line by grapheme")
         size_t matching_pos = 0;
         while (pos < text.length() && matching_pos < matching_text.length())
         {
-            const size_t next = forward_one_grapheme(text.c_str(), text.length(), uint32_t(pos));
-            const size_t matching_next = forward_one_grapheme(matching_text.c_str(), matching_text.length(), uint32_t(matching_pos));
+            const size_t next = tib::forward_one_grapheme(text.c_str(), text.length(), uint32_t(pos));
+            const size_t matching_next = tib::forward_one_grapheme(matching_text.c_str(), matching_text.length(), uint32_t(matching_pos));
             const size_t length = next - pos;
             const size_t matching_length = matching_next - matching_pos;
             if (length != matching_length ||

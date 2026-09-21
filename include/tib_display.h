@@ -8,6 +8,7 @@
 #include "tib_base.h"
 #include "tib_buffer.h"
 #include "tib_colors.h"
+#include "tib_grapheme.h"
 #include "tib_terminal.h"
 #include "wcwidth.h"
 #include <memory>

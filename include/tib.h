@@ -11,8 +11,9 @@
 #include "tib_colors.h"
 #include "tib_commands.h"
 #include "tib_context.h"
-#include "tib_terminal.h"
+#include "tib_grapheme.h"
 #include "tib_termcap.h"
+#include "tib_terminal.h"
 
 namespace tib {
 
