@@ -624,7 +624,7 @@ int32_t mouse_input(editor_context& ctx, int32_t key, const char* name, const bi
                                  (ctx.get_named_value_int(c_mouse_top, int32_min) != ctx.get_top() ||
                                   ctx.get_named_value_int(c_mouse_left, int32_min) != ctx.get_left()));
         ctx.set_named_value_int(c_last_click_tick, tick);
-        ctx.set_named_value_int(c_mouse_button, base_button|0x100);
+        ctx.set_named_value_int(c_mouse_button, base_button);
         ctx.set_named_value_int(c_mouse_click_x, x);
         ctx.set_named_value_int(c_mouse_click_y, y);
         ctx.set_named_value_int(c_mouse_top, ctx.get_top());
