@@ -2,8 +2,12 @@
 // License: http://opensource.org/licenses/MIT
 
 #ifdef _MSC_VER
-#define _CRT_SECURE_NO_WARNINGS
-#define _CRT_NONSTDC_NO_WARNINGS
+#   ifndef _CRT_SECURE_NO_WARNINGS
+#       define _CRT_SECURE_NO_WARNINGS
+#   endif
+#   ifndef _CRT_NONSTDC_NO_WARNINGS
+#       define _CRT_NONSTDC_NO_WARNINGS
+#   endif
 #endif
 
 #include "maybe_windows.h"
