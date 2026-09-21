@@ -38,8 +38,8 @@ TEST_CASE("Position mover")
 {
     // Byte offsets and grapheme boundaries:
     //
-    //   0  1  2    4       7                        18 19 20 21
-    //   A  _  e-acute e+acute woman-technologist      _  \t Z
+    //   0  1  2        4        7                   18  19  20  21
+    //   A  _  e-acute  e+acute  woman-technologist  _   \t  Z
     //
     // The Unicode word from offsets 2 through 18 contains a two-byte
     // codepoint, a grapheme with a combining mark, and a ZWJ emoji sequence.
