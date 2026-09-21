@@ -125,7 +125,7 @@ TEST_CASE("Select word command")
 
     SECTION("Selects a Unicode word without splitting graphemes")
     {
-        static const char text[] = "x \xc2\xa2" "e\xcc\x81" "y z";
+        static const char text[] = "x \xc3\xa9" "e\xcc\x81" "y z";
         tib::editor_context context;
         initialize_context(context, text, 5);
         const auto command = tib::editor_context::lookup_command("select-word");
@@ -518,13 +518,13 @@ TEST_CASE("Transpose words command")
 
     SECTION("Treats Unicode graphemes as word characters")
     {
-        static const char text[] = "a" "e\xcc\x81" " \xc2\xa2" "b";
+        static const char text[] = "a" "e\xcc\x81" " \xc3\xa9" "b";
         tib::editor_context context;
         initialize_context(context, text, 6);
         const auto command = tib::editor_context::lookup_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
-        REQUIRE(context.get_text() == "\xc2\xa2" "b a" "e\xcc\x81");
+        REQUIRE(context.get_text() == "\xc3\xa9" "b a" "e\xcc\x81");
         REQUIRE(context.get_caret() == 8);
     }
 

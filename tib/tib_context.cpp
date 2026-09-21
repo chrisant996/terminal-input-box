@@ -146,14 +146,14 @@ textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool
                 while (pos < len)
                 {
                     const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
-                    if ( ! (test_pos - pos == 1 && !is_word_char(s, len, pos, word)))
+                    if (is_word_char(s, len, pos, word))
                         break;
                     pos = test_pos;
                 }
                 while (pos < len)
                 {
                     const textpos_t test_pos = forward_one_grapheme(s, _len, pos);
-                    if (   (test_pos - pos == 1 && !is_word_char(s, len, pos, word)))
+                    if (!is_word_char(s, len, pos, word))
                         break;
                     pos = test_pos;
                 }
@@ -176,14 +176,14 @@ textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool
                 while (pos > 0)
                 {
                     const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
-                    if ( ! (pos - test_pos == 1 && !is_word_char(s, len, test_pos, word)))
+                    if (is_word_char(s, len, test_pos, word))
                         break;
                     pos = test_pos;
                 }
                 while (pos > 0)
                 {
                     const textpos_t test_pos = backward_one_grapheme(s, _len, pos);
-                    if (   (pos - test_pos == 1 && !is_word_char(s, len, test_pos, word)))
+                    if (!is_word_char(s, len, test_pos, word))
                         break;
                     pos = test_pos;
                 }

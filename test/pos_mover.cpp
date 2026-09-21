@@ -13,37 +13,39 @@ struct grapheme_range
     tib::textpos_t      end;
 };
 
-static void check_move(const char* text, size_t len, tib::textpos_t initial,
-                       bool forward, bool word, tib::textpos_t expected_pos,
-                       tib::textpos_t expected_moved)
+static void __check_move(const char* text, size_t len, tib::textpos_t initial,
+                         bool forward, bool word, tib::textpos_t expected_pos,
+                         tib::textpos_t expected_moved, uint32_t lineno)
 {
     tib::textpos_t pos = initial;
     const tib::textpos_t moved = tib::pos_mover(text, len, pos, forward, word);
 
     REQUIRE(pos == expected_pos, [&]()
     {
-        printf(" initial=%d forward=%d word=%d expected_pos=%d actual_pos=%d\n",
-               initial, forward, word, expected_pos, pos);
+        printf(" initial=%d forward=%d word=%d expected_pos=%d actual_pos=%d (line %u)\n",
+               initial, forward, word, expected_pos, pos, lineno);
     });
     REQUIRE(moved == expected_moved, [&]()
     {
-        printf(" initial=%d forward=%d word=%d expected_moved=%d actual_moved=%d\n",
-               initial, forward, word, expected_moved, moved);
+        printf(" initial=%d forward=%d word=%d expected_moved=%d actual_moved=%d (line %u)\n",
+               initial, forward, word, expected_moved, moved, lineno);
     });
 }
+
+#define check_move(t, l, i, f, w, ep, em) __check_move(t, l, i, f, w, ep, em, __LINE__)
 
 TEST_CASE("Position mover")
 {
     // Byte offsets and grapheme boundaries:
     //
     //   0  1  2    4       7                        18 19 20 21
-    //   A  _  cent e+acute woman-technologist      _  \t Z
+    //   A  _  e-acute e+acute woman-technologist      _  \t Z
     //
     // The Unicode word from offsets 2 through 18 contains a two-byte
     // codepoint, a grapheme with a combining mark, and a ZWJ emoji sequence.
     static const char text[] =
         "A "
-        "\xc2\xa2"                      // U+00A2 CENT SIGN.
+        "\xc3\xa9"                      // U+00E9 LATIN SMALL LETTER E WITH ACUTE.
         "e\xcc\x81"                     // e + U+0301 COMBINING ACUTE ACCENT.
         "\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb"  // U+1F469 ZWJ U+1F4BB.
         " \tZ";
@@ -121,5 +123,19 @@ TEST_CASE("Position mover")
                 check_move(text, sizeof(text) - 1, initial, false, true, 2, grapheme.end - 2);
             }
         }
+    }
+
+    SECTION("Non-ASCII punctuation is a word boundary")
+    {
+        static const char punctuation[] =
+            "A"
+            "\xc2\xa2"                  // U+00A2 CENT SIGN.
+            "B";
+        static_assert(sizeof(punctuation) - 1 == 4);
+
+        check_move(punctuation, sizeof(punctuation) - 1, 0, true, true, 1, 1);
+        check_move(punctuation, sizeof(punctuation) - 1, 1, true, true, 4, 3);
+        check_move(punctuation, sizeof(punctuation) - 1, 4, false, true, 3, 1);
+        check_move(punctuation, sizeof(punctuation) - 1, 3, false, true, 0, 3);
     }
 }
