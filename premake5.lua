@@ -31,6 +31,9 @@ workspace("tib")
     symbols("on")
     exceptionhandling("off")
 
+    includedirs("include")
+    includedirs("include/wcwidth")
+
     init_configuration("release")
     init_configuration("debug")
 
@@ -58,7 +61,6 @@ project("tib")
     language("c++")
     kind("staticlib")
 
-    includedirs("include")
     files("tib/*.cpp")
 
 --------------------------------------------------------------------------------
@@ -67,7 +69,6 @@ project("tib_host")
     language("c++")
     kind("staticlib")
 
-    includedirs("include")
     files("host/*.cpp")
 
 --------------------------------------------------------------------------------
@@ -76,7 +77,6 @@ project("tib_wcwidth")
     language("c++")
     kind("staticlib")
 
-    includedirs("include")
     files("wcwidth/*.cpp")
 
 --------------------------------------------------------------------------------
@@ -92,7 +92,6 @@ project("test")
     links("tib_host")
     links("tib_wcwidth")
 
-    includedirs("include")
     files("test/*.cpp")
     files("test/test.rc")
 
