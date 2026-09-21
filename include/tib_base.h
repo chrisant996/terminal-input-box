@@ -13,7 +13,7 @@
 #include <assert.h>
 #include <limits>
 
-#ifdef TIB_INCLUDE_CONFIG_HEADER
+#ifdef TIB_CONFIG_H
 #include <tib_config.h>
 #endif
 
