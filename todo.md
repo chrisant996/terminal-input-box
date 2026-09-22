@@ -2,6 +2,7 @@
 
 # TO DO
 
+- Support DECSET 2026 Synchronize Output.
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 
 ## Open Questions
