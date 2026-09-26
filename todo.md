@@ -2,6 +2,7 @@
 
 # TO DO
 
+- [ ] The threading assertions need to relax when exiting in response to the CLOSE event during the CtrlHandler thread.
 - Support DECSET 2026 Synchronize Output.
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 
