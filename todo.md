@@ -3,6 +3,9 @@
 # TO DO
 
 - [ ] The threading assertions need to relax when exiting in response to the CLOSE event during the CtrlHandler thread.
+- [ ] Need a way to tell `display_manager` about faces that include hyperlinks:
+  - [ ] The display optimizations must not split a run of a face that includes a hyperlink.
+  - [ ] A hyperlink needs to be terminated when a run of the face ends.
 - Support DECSET 2026 Synchronize Output.
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 
