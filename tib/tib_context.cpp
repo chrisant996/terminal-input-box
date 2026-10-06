@@ -469,14 +469,19 @@ void editor_context::force_redisplay()
     m_display.force_redisplay();
 }
 
-void editor_context::move_to_end_of_display()
+void editor_context::move_to_origin(bool force_left_edge)
 {
-    m_display.move_to_end_of_display();
+    m_display.move_to_origin(force_left_edge);
 }
 
-void editor_context::move_to_caret_position()
+void editor_context::move_to_caret_position(bool force_column)
 {
-    m_display.move_to_caret_position();
+    m_display.move_to_caret_position(force_column);
+}
+
+void editor_context::move_to_end_of_display(bool cr)
+{
+    m_display.move_to_end_of_display(cr);
 }
 
 void editor_context::erase_display()

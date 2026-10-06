@@ -1560,16 +1560,11 @@ void display_manager::end_display_lf()
     if (m_display_ended)
         return;
 
-    display();
-
     // A final row used only for the caret already supplies the line break.
     if (m_displayed.m_phantom_last_row)
         --m_displayed.m_extent.y;
 
-    // TODO: coalesce...  (maybe even nested coalesce around display()).
-    move_to_end_of_display();
-    move_to_column(m_relative_cursor, 0, 0);
-    // do_flush();
+    move_to_end_of_display(true);
 
     m_displayed.clear();
     m_relative_cursor = { -1, 0 };
@@ -1582,26 +1577,34 @@ void display_manager::end_display_lf()
 
     // Completed output belongs to the terminal until begin_display().
     m_display_ended = true;
+    output("\n");
 }
 
-void display_manager::move_to_end_of_display()
+void display_manager::move_to_origin(bool force_left_edge)
+{
+    const uint16_t x = force_left_edge ? (0 - m_origin.x) : 0;
+    move_to_row(m_relative_cursor, 0, 0);
+    move_to_column(m_relative_cursor, x, 0);
+}
+
+void display_manager::move_to_end_of_display(bool cr)
 {
     if (m_displayed.m_extent.y > 0)
-    {
-        move_to_row(m_relative_cursor, m_displayed.m_extent.y, 0);
-    }
+        move_to_row(m_relative_cursor, m_displayed.m_extent.y - 1, 0);
+    if (cr)
+        move_to_column(m_relative_cursor, (0 - m_origin.x), 0);
 }
 
-void display_manager::move_to_caret_position()
+void display_manager::move_to_caret_position(bool force_column)
 {
     if (m_displayed.m_extent.y > 0)
     {
         move_to_row(m_relative_cursor, m_displayed.m_cursor.y, m_displayed.m_inner_offset.y);
-        move_to_column(m_relative_cursor, m_displayed.m_cursor.x, m_displayed.m_inner_offset.x);
+        move_to_column(m_relative_cursor, m_displayed.m_cursor.x, m_displayed.m_inner_offset.x, force_column);
     }
 }
 
-void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset)
+void display_manager::move_to_row(coord& cursor, int16_t y, uint16_t inner_offset)
 {
 #ifdef _WIN32
     if (m_pending_wrap)
@@ -1646,7 +1649,7 @@ void display_manager::move_to_row(coord& cursor, uint16_t y, uint16_t inner_offs
     cursor.y = y;
 }
 
-void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset)
+void display_manager::move_to_column(coord& cursor, int16_t x, uint16_t inner_offset, bool force)
 {
 #ifdef _WIN32
     if (m_pending_wrap)
@@ -1654,6 +1657,10 @@ void display_manager::move_to_column(coord& cursor, uint16_t x, uint16_t inner_o
 #endif
 
     x += inner_offset;
+
+    if (x == cursor.x && !force)
+        return;
+
     const uint16_t term_x = m_origin.x + x;
 
 #ifdef _WIN32

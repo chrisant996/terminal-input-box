@@ -113,8 +113,9 @@ public:
     bool                is_displayed() const;
     void                display();
     void                force_redisplay();
-    void                move_to_caret_position();
-    void                move_to_end_of_display();
+    void                move_to_origin(bool force_left_edge=false);
+    void                move_to_caret_position(bool force_column=false);
+    void                move_to_end_of_display(bool cr=false);
     void                erase_display();
     void                end_display_lf();
 

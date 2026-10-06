@@ -252,14 +252,15 @@ public:
     bool                is_displayed() const;
     bool                display();
     void                force_redisplay();
-    void                move_to_end_of_display();
-    void                move_to_caret_position();
+    void                move_to_origin(bool force_left_edge=false);
+    void                move_to_end_of_display(bool cr=false);
+    void                move_to_caret_position(bool force_column=false);
     void                erase_display();
     void                end_display_lf();
 
 private:
-    void                move_to_row(coord& cursor, uint16_t y, uint16_t inner_offset);
-    void                move_to_column(coord& cursor, uint16_t x, uint16_t inner_offset);
+    void                move_to_row(coord& cursor, int16_t y, uint16_t inner_offset);
+    void                move_to_column(coord& cursor, int16_t x, uint16_t inner_offset, bool force=false);
     void                print_text_with_faces(coord& cursor, const char* text, const char* faces, size_t len);
     const char*         get_face_def(char face) const;
     bool                try_update_caret_only();
