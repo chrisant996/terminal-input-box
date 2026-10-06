@@ -1039,7 +1039,7 @@ void editor_context::clear_overwrite_input()
 
 void editor_context::apply_message_text()
 {
-    if (has_numeric_argument())
+    if (has_numeric_argument() && (m_numflags & (NUMFLAG_ARGUMENT_MODE|NUMFLAG_UNIVERSAL_MODE)))
     {
         static const char c_normal[] = "\x1b[m";
         cstring msg;
