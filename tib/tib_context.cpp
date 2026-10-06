@@ -1406,7 +1406,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 
     set_auto_clear_numeric_argument();
 
-    if (binding)
+    if (binding && *binding)
     {
         switch (binding->get_type())
         {
