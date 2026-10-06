@@ -271,11 +271,16 @@ void term_end()
 
     if (s_term_began == 1)
     {
+        display_accumulator coalesce;
+
         term_out(c_show_cursor);
         // FUTURE: cursor shape.
         term_out("\x1b[m");
 
         enable_mouse_input(mouse_input_mode::none, false);
+
+        // Flush before nulling the globals.
+        coalesce.flush();
 
         delete s_terminal_in;
         s_terminal_in = nullptr;
@@ -494,6 +499,7 @@ display_accumulator::display_accumulator()
         s_acc.empty();
     }
 
+    assert(m_active);
     ++s_nested;
 
     if (s_nested == 1)
@@ -511,18 +517,27 @@ display_accumulator::display_accumulator()
 
 display_accumulator::~display_accumulator()
 {
+    end();
+}
+
+void display_accumulator::end()
+{
+    if (!m_active)
+        return;
+
+    m_active = false;
     --s_nested;
 
     if (s_active && s_nested == 0)
     {
-        end();
+        cancel();
         assert(!s_active);
         assert(!s_synchronized_output);
         assert(s_acc.empty());
     }
 }
 
-void display_accumulator::end()
+void display_accumulator::cancel()
 {
     if (s_active)
     {
@@ -534,7 +549,12 @@ void display_accumulator::end()
 
 void display_accumulator::flush()
 {
-    assert(implies(!s_active, s_acc.empty()));
+    if (!s_active)
+    {
+        assert(implies(!s_active, s_acc.empty()));
+        return;
+    }
+
     static int32_t s_in_flush = 0;
     if (s_active && s_in_flush <= 0)
     {

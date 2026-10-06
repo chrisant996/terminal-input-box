@@ -110,6 +110,7 @@ public:
                         ~display_accumulator();
                         display_accumulator();
     void                end();
+    void                cancel();
     static void         synchronize_output(bool sync) { s_can_synchronize_output = sync; }
     static bool         active() { return s_active; }
     static bool         synchronized_output() { return s_synchronized_output; }
@@ -121,6 +122,7 @@ private:
     static bool         s_can_synchronize_output;
     static bool         s_active;
     static bool         s_synchronized_output;
+    bool                m_active = true;
 };
 
 #ifdef _WIN32
