@@ -30,6 +30,7 @@ static macro_playback* s_macro_playback = nullptr;
 
 static terminal_in* s_terminal_in = nullptr;
 static terminal_out* s_terminal_out = nullptr;
+static terminal_out* s_terminal_old_out = nullptr;
 static int32_t s_term_began = 0;
 static bool s_term_zombie = false;
 
@@ -236,6 +237,7 @@ void term_begin()
     {
         assert(!s_terminal_in);
         assert(!s_terminal_out);
+        assert(!s_terminal_old_out);
         s_term_began = 0;
     }
 
@@ -250,6 +252,7 @@ void term_begin()
 
         assert(!s_terminal_in);
         assert(!s_terminal_out);
+        assert(!s_terminal_old_out);
         s_terminal_in = hook_new_terminal_in ? hook_new_terminal_in(s_pushed) : new_basic_terminal_in(s_pushed);
         s_terminal_out = hook_new_terminal_out ? hook_new_terminal_out() : new_basic_terminal_out();
     }
@@ -282,6 +285,9 @@ void term_end()
         // Flush before nulling the globals.
         coalesce.flush();
 
+        if (s_terminal_old_out)
+            term_redirect(nullptr);
+
         delete s_terminal_in;
         s_terminal_in = nullptr;
         delete s_terminal_out;
@@ -289,6 +295,26 @@ void term_end()
     }
 
     --s_term_began;
+}
+
+bool term_redirect(terminal_out* redirect)
+{
+    if (s_terminal_out)
+    {
+        if (s_terminal_old_out && !redirect)
+        {
+            s_terminal_out = s_terminal_old_out;
+            s_terminal_old_out = nullptr;
+            return true;
+        }
+        else if (!s_terminal_old_out && redirect)
+        {
+            s_terminal_old_out = s_terminal_out;
+            s_terminal_out = redirect;
+            return true;
+        }
+    }
+    return false;
 }
 
 void term_sigint()

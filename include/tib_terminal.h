@@ -48,6 +48,7 @@ extern hook_new_terminal_out_func_t hook_new_terminal_out;
 
 void term_begin();
 void term_end();
+bool term_redirect(terminal_out* redirect); // Only one at a time.
 void term_sigint();
 #ifdef _WIN32
 void term_sigclose();
