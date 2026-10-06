@@ -330,6 +330,20 @@ int32_t cua_forward_char(editor_context& ctx, int32_t key, const char* name, con
     });
 }
 
+int32_t cua_backward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return do_with_numeric_argument(ctx, key, name, params, cua_forward_bigword, [&]() {
+        return ctx.move_left(2/*bigword*/, true/*select*/);
+    }, false/*ding*/);
+}
+
+int32_t cua_forward_bigword(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+{
+    return do_with_numeric_argument(ctx, key, name, params, cua_backward_bigword, [&]() {
+        return ctx.move_right(2/*bigword*/, true/*select*/);
+    }, false/*ding*/);
+}
+
 int32_t cua_backward_word(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, cua_forward_word, [&]() {
