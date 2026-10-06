@@ -26,6 +26,8 @@ static const char c_mouse_click_x[] = "mouse_input_click_x";
 static const char c_mouse_click_y[] = "mouse_input_click_y";
 static const char c_last_click_tick[] = "mouse_input_last_click_tick";
 
+uint32_t g_add_to_kill_ring = 0;
+
 static bool is_in_string_list(const char* s, const char* const* list)
 {
     while (*list)
@@ -62,10 +64,7 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
     return int16_t(cursor_column);
 }
 
-constexpr uint8_t NO_DING               = 1 << 0;
-constexpr uint8_t UNDO_GROUP            = 1 << 1;
-
-static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const char* name, const binding_params* params, editor_command_func_t inverted, std::function<bool(void)> doit, uint8_t flags=0) noexcept
+int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const char* name, const binding_params* params, editor_command_func_t inverted, std::function<bool(void)> doit, uint8_t flags) noexcept
 {
     int32_t n = ctx.get_numeric_argument();
     if (inverted && n < 0)
@@ -79,6 +78,10 @@ static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const 
     {
         const bool had_selection = ctx.get_selection_state().has_selection();
         const bool group = ((flags & UNDO_GROUP) && n > 1);
+        const bool kill_ring = ((flags & KILL_RING) || ((flags & KILL_RING_MULTI) && n > 1));
+
+        if (kill_ring)
+            ++g_add_to_kill_ring;
 
         if (group)
             ctx.begin_undo_group();
@@ -92,6 +95,9 @@ static int32_t do_with_numeric_argument(editor_context& ctx, int32_t key, const 
 
         if (group)
             ctx.end_undo_group();
+
+        if (kill_ring)
+            --g_add_to_kill_ring;
     }
 
     if (!did && !(flags & NO_DING))
@@ -204,19 +210,21 @@ int32_t del_char_left(editor_context& ctx, int32_t key, const char* name, const 
 {
     return do_with_numeric_argument(ctx, key, name, params, del_char_right, [&]() {
         return ctx.backspace();
-    }, UNDO_GROUP);
+    }, UNDO_GROUP|KILL_RING_MULTI);
 }
 
 int32_t del_char_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_char_left, [&]() {
         return ctx.del();
-    }, UNDO_GROUP);
+    }, NO_DING|UNDO_GROUP|KILL_RING_MULTI);
 }
 
-int32_t del_line(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
+int32_t del_line(editor_context& ctx, int32_t, const char*, const binding_params*) noexcept
 {
+    ++g_add_to_kill_ring;
     ctx.del_line();
+    --g_add_to_kill_ring;
     return 0;
 }
 
@@ -224,28 +232,28 @@ int32_t del_word_left(editor_context& ctx, int32_t key, const char* name, const 
 {
     return do_with_numeric_argument(ctx, key, name, params, del_word_right, [&]() {
         return ctx.backspace(true/*word*/);
-    }, NO_DING|UNDO_GROUP);
+    }, NO_DING|UNDO_GROUP|KILL_RING);
 }
 
 int32_t del_word_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_word_left, [&]() {
         return ctx.del(true/*word*/);
-    }, NO_DING|UNDO_GROUP);
+    }, NO_DING|UNDO_GROUP|KILL_RING);
 }
 
 int32_t del_bigword_left(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_bigword_right, [&]() {
         return ctx.backspace(2/*bigword*/);
-    }, NO_DING|UNDO_GROUP);
+    }, NO_DING|UNDO_GROUP|KILL_RING);
 }
 
 int32_t del_bigword_right(editor_context& ctx, int32_t key, const char* name, const binding_params* params) noexcept
 {
     return do_with_numeric_argument(ctx, key, name, params, del_bigword_left, [&]() {
         return ctx.del(2/*bigword*/);
-    }, NO_DING|UNDO_GROUP);
+    }, NO_DING|UNDO_GROUP|KILL_RING);
 }
 
 //------------------------------------------------------------------------------
