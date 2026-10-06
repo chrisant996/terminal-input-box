@@ -183,9 +183,19 @@ public:
     void                dump_undo_stack();
 #endif
 
+    struct stricmp_less
+    {
+        using is_transparent = void;
+        bool operator()(const char* lhs, const char* rhs) const
+        {
+            return _stricmp(lhs, rhs) < 0;
+        }
+    };
+
     static void         ensure_commands();
+    static void         clear_all_commands();
     static void         register_command(const char* name, editor_command_func_t func);
-    static const std::vector<editor_command>& get_registered_commands();
+    static const std::map<const char*, editor_command_func_t, stricmp_less>& get_registered_commands();
     static editor_command_func_t lookup_command(const char* name);
 
                         // Methods on the tib::dispatcher_target interface.
@@ -205,8 +215,6 @@ private:
     void                clear_overwrite_input();
     void                apply_message_text();
     void                apply_override_bindings();
-
-    static void         ensure_commands_sorted();
 
 private:
     struct cstring_less
@@ -269,9 +277,8 @@ private:
 #endif
 
     // Commands.
-    static std::vector<editor_command> s_commands;
     static std::vector<cstring> s_command_names;
-    static bool         s_unsorted_commands;
+    static std::map<const char*, editor_command_func_t, stricmp_less> s_commands;
 };
 
 } // namespace tib
