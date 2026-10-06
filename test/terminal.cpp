@@ -287,9 +287,9 @@ TEST_CASE("Terminal shutdown runs before interface destruction and only on the f
     tib::term_end();
     const bool deferred = s_shutdown_events.empty();
     tib::term_end();
-    const bool ordered = s_shutdown_events == "\x1b[?25h\x1b[mMIO";
+    const bool ordered = s_shutdown_events == "M\x1b[?25h\x1b[mIO";
     tib::term_out("unexpected");
-    const bool detached = s_shutdown_events == "\x1b[?25h\x1b[mMIO";
+    const bool detached = s_shutdown_events == "M\x1b[?25h\x1b[mIO";
     tib::hook_new_terminal_in = input_hook;
     tib::hook_new_terminal_out = output_hook;
     tib::term_begin();
