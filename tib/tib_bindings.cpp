@@ -434,6 +434,7 @@ void binding_resolver::add_target(std::weak_ptr<dispatcher_target> target)
 
 void binding_resolver::reset()
 {
+    m_state->quoted_insert_target.reset();
     m_sequence.clear();
 }
 
@@ -442,7 +443,6 @@ resolved_binding binding_resolver::step(uint8_t c)
     if (!m_state->quoted_insert_target.expired())
     {
         const std::weak_ptr<dispatcher_target> weak = m_state->quoted_insert_target;
-        m_state->quoted_insert_target.reset();
         reset();
 
         resolved_binding resolved(m_state);
