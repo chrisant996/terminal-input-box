@@ -1567,6 +1567,8 @@ void display_manager::end_display_lf()
     if (m_display_ended)
         return;
 
+    display();
+
     // A final row used only for the caret already supplies the line break.
     if (m_displayed.m_phantom_last_row)
         --m_displayed.m_extent.y;
