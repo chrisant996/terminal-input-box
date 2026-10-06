@@ -1044,6 +1044,7 @@ void display_manager::print_text_with_faces(coord& cursor, const char* t, const 
 bool display_manager::try_update_caret_only()
 {
     if (m_invalidated ||
+        m_force_redisplay ||
         !m_displayed.m_change_counter ||
         m_buffer->get_change_counter() != m_displayed.m_change_counter ||
         m_displayed.m_anchor != m_displayed.m_pos ||
