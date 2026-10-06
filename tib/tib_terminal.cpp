@@ -300,6 +300,11 @@ void term_sigclose()
 {
     s_term_zombie = true;
 }
+
+bool is_term_sigclose()
+{
+    return s_term_zombie;
+}
 #endif
 
 class auto_term_end

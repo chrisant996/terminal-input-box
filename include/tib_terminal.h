@@ -51,6 +51,7 @@ void term_end();
 void term_sigint();
 #ifdef _WIN32
 void term_sigclose();
+bool is_term_sigclose();
 #endif
 
 int32_t term_in();
