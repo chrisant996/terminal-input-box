@@ -950,6 +950,7 @@ bool display_manager::is_displayed() const
 bool display_manager::display()
 {
     ++s_display.total;
+    m_any_output = false;
 
     assert(is_initialized());
     if (!is_initialized())
@@ -1522,7 +1523,13 @@ bool display_manager::display_internal(display_lines& lines)
     move_to_row(cursor, lines.m_cursor.y, lines.m_inner_offset.y);
     move_to_column(cursor, lines.m_cursor.x, lines.m_inner_offset.x);
 
-    output_color("");
+    // Don't emit this unless there was some other output.  This lets the
+    // display_accumulator completely suppress operations that would consist
+    // only of the Synchronize Output codes.  And this can also reduce the
+    // logging spew if a host logging all output.
+    if (m_any_output)
+        output_color("");
+
     if (g_show_hide_cursor)
         output(c_show_cursor);
 
@@ -2274,7 +2281,11 @@ void display_manager::output(const char* s, size_t len)
     m_pending_wrap = false;
 #endif
 
-    term_out(s, len);
+    if (len)
+    {
+        term_out(s, len);
+        m_any_output = true;
+    }
 }
 
 void display_manager::outputf(const char* format, ...)
@@ -2290,7 +2301,11 @@ void display_manager::outputf(const char* format, ...)
     va_start(args, format);
 
     s.printfv(format, args);
-    term_out(s.c_str(), s.length());
+    if (s.length())
+    {
+        term_out(s.c_str(), s.length());
+        m_any_output = true;
+    }
 
     va_end(args);
 }
@@ -2301,6 +2316,7 @@ void display_manager::output_color(const char* sgr_params)
     cstring s;
     s.append_color(sgr_params);
     term_out(s.c_str(), s.length());
+    m_any_output = true;
 }
 
 void display_manager::output_spaces(size_t n)
@@ -2315,6 +2331,7 @@ void display_manager::output_spaces(size_t n)
         cstring s;
         s.append_spaces(n);
         term_out(s.c_str(), s.length());
+        m_any_output = true;
     }
 }
 

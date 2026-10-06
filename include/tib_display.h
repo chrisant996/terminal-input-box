@@ -304,6 +304,7 @@ private:
     bool                m_border_dirty = false;
     bool                m_invalidated = false;
     bool                m_force_redisplay = false;
+    bool                m_any_output = false;
     bool                m_hwheel_exclusion = false;
     textpos_t           m_hwheel_exclusion_left = 0;
     textpos_t           m_hwheel_exclusion_caret = 0;
