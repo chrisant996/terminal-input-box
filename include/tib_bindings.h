@@ -119,7 +119,9 @@ private:
     int8_t              m_can_self_insert = -1;
 };
 
-typedef std::vector<std::shared_ptr<key_table>> key_table_list;
+class key_table_list : public std::vector<std::shared_ptr<key_table>>, public std::enable_shared_from_this<key_table_list>
+{
+};
 
 enum class dispatch_outcome
 {
