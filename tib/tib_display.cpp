@@ -18,6 +18,10 @@ namespace tib {
 
 bool g_show_hide_cursor = true;
 
+#ifdef DEBUG
+bool g_can_optimize_display_lines = true;
+#endif
+
 static bool s_show_statistics = false;
 
 constexpr uint16_t c_right_text_padding = 2;
@@ -1224,9 +1228,9 @@ bool display_manager::display_internal(display_lines& lines)
         ++s_display.row_total;
 
 #ifdef _WIN32
-        const bool can_optimize = !m_horizpos_workaround;
+        const bool can_optimize = g_can_optimize_display_lines && !m_horizpos_workaround;
 #else
-        const bool can_optimize = true;
+        const bool can_optimize = g_can_optimize_display_lines;
 #endif
 
         // Does the new line exactly match the previously displayed line?

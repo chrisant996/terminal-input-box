@@ -21,6 +21,12 @@ namespace tib {
 
 extern bool g_show_hide_cursor;
 
+#ifdef DEBUG
+extern bool g_can_optimize_display_lines;
+#else
+constexpr bool g_can_optimize_display_lines = true;
+#endif
+
 struct border_definition
 {
 #if 0
