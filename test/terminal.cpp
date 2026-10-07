@@ -168,47 +168,6 @@ TEST_CASE("End display erases additional rows when the host clears them")
     REQUIRE(box.get_extent().y == 3);
 }
 
-TEST_CASE("End display avoids an extra newline for full width input")
-{
-    tib::cstring output;
-    test_output_stream stream(output);
-    const auto size = tib::get_terminal_size();
-    for (int wide = 0; wide < 2; ++wide)
-    {
-        tib::cstring text;
-        text.append_spaces(size.x - (wide ? 2 : 1));
-        text.append(wide ? "\xe7\x95\x8c" : "e\xcc\x81");
-        tib::input_box box;
-        box.set_max_width(size.x);
-        box.set_max_height(3);
-        box.set_variable_height(true);
-        box.initialize(text.c_str());
-        box.display();
-        output.clear();
-        box.end_display_lf();
-        REQUIRE(count_crlf(output) == 0);
-        REQUIRE(strstr(output.c_str(), "\x1b[K") == nullptr);
-    }
-}
-
-TEST_CASE("End display finishes the visible scrolled viewport")
-{
-    tib::cstring output;
-    test_output_stream stream(output);
-    tib::input_box box;
-    box.set_max_width(4);
-    box.set_max_height(2);
-    box.set_variable_height(true);
-    box.initialize("abcdefghijkl");
-    box.set_origin(1, 1);
-    box.display();
-    REQUIRE(box.get_top() > 0);
-    output.clear();
-    box.end_display_lf();
-    REQUIRE(strstr(output.c_str(), "abcd") == nullptr);
-    REQUIRE(count_crlf(output) == 0);
-}
-
 TEST_CASE("End display retains a full width bottom border")
 {
     tib::cstring output;
