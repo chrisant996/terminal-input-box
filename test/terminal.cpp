@@ -27,6 +27,11 @@ static size_t count_crlf(const tib::cstring& output)
     return count;
 }
 
+static bool ends_with_lf(const tib::cstring& output)
+{
+    return output.length() && output.c_str()[output.length() - 1] == '\n';
+}
+
 TEST_CASE("End display preserves input and requires a fresh begin_display")
 {
     tib::cstring output;
@@ -38,6 +43,7 @@ TEST_CASE("End display preserves input and requires a fresh begin_display")
     output.clear();
     box.end_display_lf();
     REQUIRE(count_crlf(output) == 1);
+    REQUIRE(ends_with_lf(output));
     REQUIRE(box.get_text() == "abc");
     REQUIRE(box.get_selection_state().get_caret() == 1);
     REQUIRE(!box.is_done());
@@ -69,6 +75,7 @@ TEST_CASE("End display renders pending input changes")
         box.end_display_lf();
         REQUIRE(strstr(output.c_str(), "def") != nullptr);
         REQUIRE(count_crlf(output) == 1);
+        REQUIRE(ends_with_lf(output));
         REQUIRE(box.get_text() == "abcdef");
         REQUIRE(box.get_selection_state().get_caret() == 6);
         REQUIRE(box.get_extent().y == 0);
@@ -93,9 +100,9 @@ TEST_CASE("End display distinguishes phantom rows from intentional empty rows")
             REQUIRE(box.get_extent().y == 2);
             output.clear();
             box.end_display_lf();
-            // The caret already occupies the phantom row; intentional
-            // empty rows still need a final line break.
-            REQUIRE(count_crlf(output) == size_t(fixed || newline));
+            // The final LF advances beyond both phantom and intentional rows.
+            REQUIRE(count_crlf(output) == 1);
+            REQUIRE(ends_with_lf(output));
         }
     }
 }
