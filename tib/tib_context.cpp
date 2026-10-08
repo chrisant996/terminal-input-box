@@ -1040,7 +1040,7 @@ void editor_context::clear_overwrite_input()
 
 void editor_context::apply_message_text()
 {
-    if (has_numeric_argument() && (m_numflags & (NUMFLAG_ARGUMENT_MODE|NUMFLAG_UNIVERSAL_MODE)))
+    if (has_numeric_argument() && (m_numflags & NUMFLAG_ARGUMENT_MODE))
     {
         static const char c_normal[] = "\x1b[m";
         cstring msg;
@@ -1065,7 +1065,7 @@ void editor_context::apply_override_bindings()
         bindings = (uni ? get_universal_argument_key_table() : get_digit_argument_key_table());
     }
 
-    override_bindings(bindings);
+    override_bindings(bindings, true);
 }
 
 void editor_context::insert_raw_char(char c)
@@ -1570,15 +1570,14 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
     return ret;
 }
 
-bool editor_context::on_binding_miss(const cstring&, int32_t) noexcept
+void editor_context::on_binding_fallback() noexcept
 {
-    if (!(m_numflags & NUMFLAG_ARGUMENT_MODE))
-        return false;
-
-    m_numflags &= ~NUMFLAG_ARGUMENT_MODE;
-    apply_override_bindings();
-    apply_message_text();
-    return true;
+    if (m_numflags & NUMFLAG_ARGUMENT_MODE)
+    {
+        m_numflags &= ~NUMFLAG_ARGUMENT_MODE;
+        apply_override_bindings();
+        apply_message_text();
+    }
 }
 
 #ifdef DEBUG
