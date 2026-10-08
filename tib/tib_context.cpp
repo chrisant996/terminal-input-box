@@ -1523,6 +1523,11 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                         input.append(&next, 1);
                         peek = term_in_peek();
                     }
+                    if (hook_input_trace)
+                    {
+                        for (size_t i = 0; i < input.length(); ++i)
+                            hook_input_trace("insert batch byte", uint8_t(input.c_str()[i]), i);
+                    }
                     insert_text(input.c_str(), input.length(), get_overwrite_mode());
                     handled = true;
                 }
@@ -1535,7 +1540,11 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 {
                     begin_undo_group();
                     while (n-- > 0)
+                    {
+                        if (hook_input_trace)
+                            hook_input_trace("insert char", uint8_t(c), n);
                         insert_char(c, get_overwrite_mode());
+                    }
                     end_undo_group();
                 }
             }

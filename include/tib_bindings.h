@@ -213,6 +213,7 @@ public:
                         // Commit the longest complete binding in the pending
                         // sequence, normally after an ambiguity timeout.
     resolved_binding    resolve_pending();
+    bool                pending() const { return !m_sequence.empty(); }
 
 private:
     resolved_binding    resolve(bool force);

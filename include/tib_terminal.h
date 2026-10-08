@@ -42,8 +42,10 @@ public:
 
 typedef terminal_in* (*hook_new_terminal_in_func_t)(pushed_input& pushed);
 typedef terminal_out* (*hook_new_terminal_out_func_t)();
+typedef void (*hook_input_trace_func_t)(const char* event, int32_t value, size_t count);
 extern hook_new_terminal_in_func_t hook_new_terminal_in;
 extern hook_new_terminal_out_func_t hook_new_terminal_out;
+extern hook_input_trace_func_t hook_input_trace;
 
 void term_begin();
 void term_end();
@@ -78,6 +80,7 @@ public:
                         pushed_input(const pushed_input&) = delete;
     pushed_input&       operator=(const pushed_input&) = delete;
     bool                empty() const noexcept { return !m_count; }
+    size_t              size() const noexcept { return m_count; }
     bool                push(int16_t c) noexcept;
     bool                push(const char* text, size_t len=c_auto_length) noexcept;
     bool                push_front(const char* text, size_t len) noexcept;
