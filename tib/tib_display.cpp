@@ -1708,9 +1708,11 @@ const char* display_manager::get_face_def(char face) const
 
     switch (face)
     {
+    case FACE_INPUT:        return m_colors->get_color(tib::color_element::input);
     case FACE_SELECTION:    return m_colors->get_color(tib::color_element::input_selection);
     case FACE_MARK:         return m_colors->get_color(tib::color_element::input_mark);
     case FACE_SCROLLER:     return m_colors->get_color(tib::color_element::input_scroller);
+    case FACE_SUGGESTION:   return m_colors->get_color(tib::color_element::suggestion);
     }
 
     return m_colors->get_color(tib::color_element::base);
@@ -1756,7 +1758,7 @@ bool display_manager::build(display_lines& out)
     const size_t real_text_len = text.length();
 
     cstring faces;
-    faces.append_spaces(text.length());     // FACE_DEFAULT == space.
+    faces.append_char(FACE_INPUT, text.length());
     if (m_callbacks)
     {
         m_callbacks->provide_faces(*m_buffer, faces);
