@@ -421,7 +421,8 @@ void display_manager::set_right_text(const char* right, uint16_t width)
 
 void display_manager::set_suggestion_text(const char* suggestion, size_t len)
 {
-    if (m_suggestion_text.set(suggestion, len))
+    if (!m_suggestion_text.equals(suggestion, len) &&
+        m_suggestion_text.set(suggestion, len))
         invalidate();
 }
 
