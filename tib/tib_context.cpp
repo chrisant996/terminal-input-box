@@ -288,7 +288,8 @@ void editor_context::reset_state() noexcept
     m_named_values.clear();
     clear_numeric_argument();
 
-    m_last_command.clear();
+    m_last_command_name.clear();
+    m_last_command_func = nullptr;
     if (m_callbacks)
         m_callbacks->on_dispatched(nullptr);
 
@@ -776,9 +777,16 @@ void editor_context::replace_from_history(const cstring& s, bool keep_undo)
 }
 #endif
 
-void editor_context::set_last_command(const char* name)
+void editor_context::set_last_command(const char* name, editor_command_func_t func)
 {
-    m_last_command.set(name);
+    assert(name && *name);
+    assert(func);
+
+    if (!name || !*name || !func)
+        return;
+
+    m_last_command_name.set(name);
+    m_last_command_func = func;
 
     if (m_callbacks && !m_in_on_dispatched)
     {
@@ -1449,20 +1457,20 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                     ret = func(*this, key, name, params);
                     if (ret == c_dispatch_request_quoted_insert)
                         m_quoted_insert_count = get_numeric_argument();
+                    set_last_command(name, func);
                 }
                 else
                 {
                     ret = 0;
                     ding();
                 }
-                set_last_command(name);
             }
             break;
 
         case binding_type::quoted_insert:
             {
                 ret = 0;
-                set_last_command("self-insert");
+                set_last_command("quoted-insert", quoted_insert);
                 const char c = binding->get_char();
                 int32_t repeat = m_quoted_insert_count;
                 if (repeat < 0)
@@ -1494,7 +1502,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
         {
             const char c = char(key);
             bool handled = false;
-            set_last_command("self-insert");
+            set_last_command("self-insert", self_insert);
 
             // The self-insert optimization collects as much raw insertable
             // input as possible into a single insert operation, requiring

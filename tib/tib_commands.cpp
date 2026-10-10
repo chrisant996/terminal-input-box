@@ -28,6 +28,12 @@ static const char c_last_click_tick[] = "mouse_input_last_click_tick";
 
 uint32_t g_add_to_kill_ring = 0;
 
+static const char* s_trick_the_linker = 0;
+extern "C" void prevent_COMDAT_folding(const char* str)
+{
+    s_trick_the_linker = str;
+}
+
 static bool is_in_string_list(const char* s, const char* const* list)
 {
     while (*list)
@@ -45,8 +51,8 @@ static int16_t cursor_column_continuation(editor_context& ctx, const char* comma
 
     const char* const have_operation = ctx.get_named_value(c_cursor_column_operation_var_name);
     const bool continuing = ((!operation || (operation && have_operation && !strcmp(have_operation, operation))) &&
-                             (!strcmp(ctx.get_last_command(), command_name) ||
-                              (alt_command_names && is_in_string_list(ctx.get_last_command(), alt_command_names))));
+                             (!strcmp(ctx.get_last_command_name(), command_name) ||
+                              (alt_command_names && is_in_string_list(ctx.get_last_command_name(), alt_command_names))));
 
     int32_t cursor_column;
     if (continuing)
