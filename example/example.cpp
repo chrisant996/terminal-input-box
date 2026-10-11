@@ -485,24 +485,28 @@ no_border:
                 {
                     tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_norm_base);
+                    colors->set_color(tib::color_element::input, c_norm_base);
                     border = &tib::c_light_border;
                 }
                 else if (_stricmp(argv[i], "padding") == 0)
                 {
                     tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
+                    colors->set_color(tib::color_element::input, c_padding_base);
                     border = &c_padding_border;
                 }
                 else if (_stricmp(argv[i], "bar-padding") == 0)
                 {
                     tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
+                    colors->set_color(tib::color_element::input, c_padding_base);
                     border = &c_bar_padding_border;
                 }
                 else if (_stricmp(argv[i], "first-line") == 0)
                 {
                     tib->set_empty_face(tib::FACE_DEFAULT);
                     colors->set_color(tib::color_element::base, c_padding_base);
+                    colors->set_color(tib::color_element::input, c_padding_base);
                     border = &c_first_line_border;
                 }
                 else if (_stricmp(argv[i], "none") == 0)
