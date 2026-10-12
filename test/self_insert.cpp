@@ -11,17 +11,17 @@ class self_insert_tester : public tib::editor_context
     typedef tib::editor_context base;
 
 public:
-    int32_t             dispatch(const tib::cstring& sequence, int32_t key, const tib::binding_target* binding, const tib::resolved_binding* params) noexcept override;
+    int32_t             dispatch(const tib::cstring& sequence, int32_t key, const tib::binding_target* binding, const tib::resolved_binding* resolved) noexcept override;
     uint32_t            get_dispatch_count() const noexcept { return m_dispatch_count; }
 
 private:
     uint32_t            m_dispatch_count = 0;
 };
 
-int32_t self_insert_tester::dispatch(const tib::cstring& sequence, int32_t key, const tib::binding_target* binding, const tib::resolved_binding* params) noexcept
+int32_t self_insert_tester::dispatch(const tib::cstring& sequence, int32_t key, const tib::binding_target* binding, const tib::resolved_binding* resolved) noexcept
 {
     ++m_dispatch_count;
-    return base::dispatch(sequence, key, binding, params);
+    return base::dispatch(sequence, key, binding, resolved);
 }
 
 static void dispatch_macro(const char* text, std::shared_ptr<self_insert_tester>& input, tib::binding_resolver& resolver)
