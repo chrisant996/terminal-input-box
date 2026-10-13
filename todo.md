@@ -2,11 +2,11 @@
 
 # TO DO
 
-- [ ] The threading assertions need to relax when exiting in response to the CLOSE event during the CtrlHandler thread.
+- [x] The threading assertions need to relax when exiting in response to the CLOSE event during the CtrlHandler thread.
 - [ ] Need a way to tell `display_manager` about faces that include hyperlinks:
   - [ ] The display optimizations must not split a run of a face that includes a hyperlink.
   - [ ] A hyperlink needs to be terminated when a run of the face ends.
-- Support DECSET 2026 Synchronize Output.
+- [x] Support DECSET 2026 Synchronize Output.
 - Needs a way to indicate whether a given `editor_context` is active, so that inactive ones do not set the cursor position.
 
 ## Open Questions
@@ -26,7 +26,7 @@
     - [ ] `del-line` and/or `clink-reset-line` needs to be able to clear suggestions.
 - [ ] `del-line` and/or `clink-reset-line` needs to integrate with history provider support.
 - [x] Readline supports "shadowing", where `a` can be bound to one thing, `abc` can be bound to another thing, and typing `abx` dispatches the `a` binding with `bx` still in the input queue.
-- [ ] Does tib need to include a VI mode?
+- [ ] Does tib need to include a VI mode?  _[Yes.]_
 - [x] Make sure a host (e.g. example.exe) can provide a command/mode to read a command name and invoke it. _[The host can erase the current tib and do whatever they want (including start a new tib) to select a command, and then show the original tib again and run the command (or even run the command and then show the tib).]_
 - [x] Enough built-in capabilities for a host to support recording keyboard macros. _[The `dispatcher_target::dispatch` callback has everything that the host needs -- the host can track the recording state, and `dispatch` receives the key sequence.  That doesn't get confused when replaying macros because a key sequence that invokes a macro is not dispatched; only the macro content gets dispatched.]_
 - [x] Make sure the host has enough influence to easily allow some hooks:
