@@ -263,6 +263,7 @@ private:
     cstring             m_last_command_name;
     editor_command_func_t m_last_command_func = nullptr;
     std::map<cstring, cstring, cstring_less> m_named_values;
+    int32_t             m_dispatching = 0;
     bool                m_in_on_dispatched = false;
 
     // Numeric argument.

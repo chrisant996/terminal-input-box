@@ -1500,6 +1500,12 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
 {
     int32_t ret = -1;
 
+    if (!m_dispatching)
+        clear_error_messages();
+
+    cleanup cleanup([this]() { --m_dispatching; });
+    ++m_dispatching;
+
     set_auto_clear_numeric_argument();
     clear_error_messages();
 
