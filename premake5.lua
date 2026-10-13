@@ -92,6 +92,7 @@ project("test")
     links("tib_host")
     links("tib_wcwidth")
 
+    includedirs("tib")
     files("test/*.cpp")
     files("test/test.rc")
 
