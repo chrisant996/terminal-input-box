@@ -296,8 +296,6 @@ void editor_context::reset_state() noexcept
 
     clear_was_kill_command();
     g_add_to_kill_ring = 0;
-
-    term_clear_playback();
 }
 
 void editor_context::set_callbacks(editor_callbacks* callbacks)
