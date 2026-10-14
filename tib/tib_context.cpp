@@ -1474,14 +1474,7 @@ int32_t editor_context::play_last_kbd_macro(int32_t count)
     {
         while (count-- > 0)
         {
-            const auto pushed = term_push_playback(true/*is_macro*/, m_last_macro.c_str(), m_last_macro.length());
-            if (pushed < 0)
-            {
-                cstring msg;
-                msg.printf("Maximum macro execution depth exceeded (%d).", c_max_playback_depth);
-                term_clear_playback();
-                report_error(msg.c_str());
-            }
+            const auto pushed = push_macro_text(m_last_macro.c_str(), m_last_macro.length());
             if (pushed <= 0)
                 return pushed;
         }
