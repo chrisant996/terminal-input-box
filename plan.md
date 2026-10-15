@@ -12,8 +12,8 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 
 - [x] Customizable key bindings.
     - [x] Allow "overlaying" a set of key bindings.
-- Bindable commands.
-    - Basic set of bindable commands for input editing.
+- [x] Bindable commands.
+    - [x] Basic set of bindable commands for input editing.
     - [x] Extensibility framework to allow registering custom bindable commands.
 - [ ] History integration through a history provider interface.
     - [ ] Default to no history integration.
@@ -54,6 +54,7 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
     - [x] Max height.
     - [x] Variable height (grow up to max height).
 - [x] Max input size.
+- [ ] Bracketed paste:  ON: `\x1b[?2004h`, OFF: `\x1b[?2004l`, BEGIN: `\x1b[200~`, END: `\x1b[201~`.
 
 ## The Host Must Always Control The Input Loop
 
