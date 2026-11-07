@@ -106,20 +106,6 @@ TEST_CASE("Back one grapheme")
     }
 }
 
-class display_test_buffer : public tib::input_buffer
-{
-public:
-    void set_text(const char* text, tib::textpos_t caret, tib::textpos_t anchor=-1)
-    {
-        m_text.set(text);
-        if (anchor < 0)
-            set_caret(caret);
-        else
-            set_selection(anchor, caret);
-        inc_change_counter();
-    }
-};
-
 class display_test_callbacks : public tib::editor_callbacks
 {
 public:
@@ -163,9 +149,17 @@ public:
         s_display_output.clear();
     }
 
+    void set_text(const char* text, tib::textpos_t caret, tib::textpos_t anchor=-1)
+    {
+        m_buffer.m_text.set(text);
+        m_buffer.m_selection.set_selection(anchor < 0 ? caret : anchor, caret);
+        m_buffer.m_selection.reset_word_anchor();
+        ++m_buffer.m_change_counter;
+    }
+
     bool display_initial(const char* text, tib::textpos_t caret, tib::textpos_t anchor=-1)
     {
-        m_buffer.set_text(text, caret, anchor);
+        set_text(text, caret, anchor);
         const bool any_updates = m_display.display();
         s_display_output.clear();
         return any_updates;
@@ -179,7 +173,7 @@ public:
         return nullptr;
     }
 
-    display_test_buffer m_buffer;
+    tib::input_buffer m_buffer;
     tib::display_manager m_display;
     std::map<char, tib::cstring> m_face_defs;
 
@@ -216,7 +210,7 @@ TEST_CASE("Display differential updates")
     SECTION("Clears a variable-height line through the full terminal width")
     {
         display_test_fixture fixture(tib::int16_max, false, 3, true);
-        fixture.m_buffer.set_text("abc\ndef", 7);
+        fixture.set_text("abc\ndef", 7);
 
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[K") != nullptr);
@@ -273,7 +267,7 @@ TEST_CASE("Display differential updates")
 
         // A change at the beginning exercises the matching-suffix
         // optimization while leaving begin at zero.
-        fixture.m_buffer.set_text("Xbcde", 5);
+        fixture.set_text("Xbcde", 5);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[7G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
@@ -282,7 +276,7 @@ TEST_CASE("Display differential updates")
 
         // A change at the end exercises the matching-prefix optimization.
         s_display_output.clear();
-        fixture.m_buffer.set_text("XbcdY", 5);
+        fixture.set_text("XbcdY", 5);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[11G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
@@ -298,7 +292,7 @@ TEST_CASE("Display differential updates")
 
         // A change at the beginning exercises the matching-suffix
         // optimization while leaving begin at zero.
-        fixture.m_buffer.set_text("Xbcde", 5);
+        fixture.set_text("Xbcde", 5);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[10G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
@@ -307,7 +301,7 @@ TEST_CASE("Display differential updates")
 
         // A change at the end exercises the matching-prefix optimization.
         s_display_output.clear();
-        fixture.m_buffer.set_text("XbcdY", 5);
+        fixture.set_text("XbcdY", 5);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "\x1b[14G") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "Y") != nullptr);
@@ -323,7 +317,7 @@ TEST_CASE("Display differential updates")
 
         // Moving the caret forces a rebuild with an unchanged line.  Reusing
         // the displayed line must avoid outputting either part of that line.
-        fixture.m_buffer.set_selection(1, 1);
+        fixture.m_buffer.m_selection.set_selection(1, 1);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(strpbrk(s_display_output.c_str(), "abc") == nullptr);
         REQUIRE(strpbrk(s_display_output.c_str(), "xyz") == nullptr);
@@ -343,7 +337,7 @@ TEST_CASE("Display differential updates")
         fixture.m_display.set_right_text("xyz", 3);
         REQUIRE(fixture.display_initial("first\n1234567890\nlast", 21) == true);
 
-        fixture.m_buffer.set_text("first\n123\nlast", 14);
+        fixture.set_text("first\n123\nlast", 14);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "xyz") != nullptr);
     }
@@ -356,7 +350,7 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("abcde12345", 1) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(7, 7);
+        fixture.m_buffer.m_selection.set_selection(7, 7);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(callbacks.m_calls == 1);
         const tib::coord expected = { 2, 1 };
@@ -373,7 +367,7 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("a\xe4\xb8\xad" "b", 0) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(4, 4);
+        fixture.m_buffer.m_selection.set_selection(4, 4);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(callbacks.m_calls == 1);
         const tib::coord expected = { 3, 0 };
@@ -388,16 +382,16 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("aaaaaaa\t", 8) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(7, 7);
+        fixture.m_buffer.m_selection.set_selection(7, 7);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(callbacks.m_calls == 1);
         const tib::coord before_control = { 7, 0 };
         REQUIRE(fixture.m_display.get_relative_cursor() == before_control);
 
-        fixture.m_buffer.set_text("abcdefgh", 0);
+        fixture.set_text("abcdefgh", 0);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(callbacks.m_calls == 2);
-        fixture.m_buffer.set_selection(8, 8);
+        fixture.m_buffer.m_selection.set_selection(8, 8);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(callbacks.m_calls == 2);
         const tib::coord phantom_row = { 0, 1 };
@@ -412,7 +406,7 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("abc", 0) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(3, 3);
+        fixture.m_buffer.m_selection.set_selection(3, 3);
         REQUIRE(fixture.m_display.display() == false);
         REQUIRE(callbacks.m_calls == 1);
         const tib::coord expected = { 3, 0 };
@@ -427,7 +421,7 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("abcdefghijklmno", 1) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(12, 12);
+        fixture.m_buffer.m_selection.set_selection(12, 12);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(callbacks.m_calls == 2);
         const uint32_t expected_top = (tib::c_horz_scroll_indicator_chars == 3) ? 2 : 1;
@@ -444,7 +438,7 @@ TEST_CASE("Display differential updates")
         REQUIRE(fixture.display_initial("abc", 0) == true);
         REQUIRE(callbacks.m_calls == 1);
 
-        fixture.m_buffer.set_selection(0, 1);
+        fixture.m_buffer.m_selection.set_selection(0, 1);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(callbacks.m_calls == 2);
     }
@@ -454,7 +448,7 @@ TEST_CASE("Display differential updates")
         display_test_fixture fixture;
         REQUIRE(fixture.display_initial("abcde", 5) == true);
 
-        fixture.m_buffer.set_text("abXde", 5);
+        fixture.set_text("abXde", 5);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "ab") == nullptr);
@@ -466,7 +460,7 @@ TEST_CASE("Display differential updates")
         display_test_fixture fixture;
         REQUIRE(fixture.display_initial("abc", 0) == true);
 
-        fixture.m_buffer.set_selection(1, 2);
+        fixture.m_buffer.m_selection.set_selection(1, 2);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "b") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "a") == nullptr);
@@ -478,7 +472,7 @@ TEST_CASE("Display differential updates")
         display_test_fixture fixture;
         REQUIRE(fixture.display_initial("a\xcc\x81x", 4) == true);
 
-        fixture.m_buffer.set_text("a\xcc\x88x", 4);
+        fixture.set_text("a\xcc\x88x", 4);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "a\xcc\x88") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
@@ -489,7 +483,7 @@ TEST_CASE("Display differential updates")
         display_test_fixture fixture;
         REQUIRE(fixture.display_initial("xa\xcc\x81", 4) == true);
 
-        fixture.m_buffer.set_text("xb\xcc\x81", 4);
+        fixture.set_text("xb\xcc\x81", 4);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(strstr(s_display_output.c_str(), "b\xcc\x81") != nullptr);
         REQUIRE(strstr(s_display_output.c_str(), "x") == nullptr);
@@ -504,7 +498,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(5, false, 3, true);
             fixture.m_display.set_left_text("> ", 2);
-            fixture.m_buffer.set_text("abcd", 4);
+            fixture.set_text("abcd", 4);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "> ") != nullptr);
@@ -516,7 +510,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(5, false, 3, true);
             fixture.m_display.set_left_text("12345", 5);
-            fixture.m_buffer.set_text("abcd", 4);
+            fixture.set_text("abcd", 4);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "12345") == nullptr);
@@ -528,7 +522,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(8, true);
             fixture.m_display.set_left_text("1234567", 7);
-            fixture.m_buffer.set_text("abcdefghijkl", 12);
+            fixture.set_text("abcdefghijkl", 12);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(fixture.m_display.get_left() > 0);
@@ -539,7 +533,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(8, true);
             fixture.m_display.set_left_text("> ", 2);
-            fixture.m_buffer.set_text("abc", 3);
+            fixture.set_text("abc", 3);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(fixture.m_display.get_left() == 0);
@@ -550,7 +544,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(5, false, 2);
             fixture.m_display.set_left_text("> ", 2);
-            fixture.m_buffer.set_text("abcdefghijkl", 12);
+            fixture.set_text("abcdefghijkl", 12);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(fixture.m_display.get_top() > 0);
@@ -565,20 +559,24 @@ TEST_CASE("Display text components")
             display_test_fixture fixture(10, false, 3, true);
             fixture.m_face_defs.emplace(tib::FACE_SUGGESTION, "35");
             fixture.m_display.set_suggestion_text("def", 3);
-            fixture.m_buffer.set_text("abc", 3);
+            fixture.set_text("abc", 3);
+            const uint32_t navigation_counter = fixture.m_buffer.m_selection.get_navigation_counter();
+            const uint32_t change_counter = fixture.m_buffer.m_change_counter;
 
             REQUIRE(fixture.m_display.display() == true);
+            REQUIRE(fixture.m_buffer.m_selection.get_navigation_counter() == navigation_counter);
+            REQUIRE(fixture.m_buffer.m_change_counter == change_counter);
             REQUIRE(strstr(s_display_output.c_str(), "\x1b[35mdef") != nullptr);
             const tib::coord expected_cursor = { 3, 0 };
             REQUIRE(fixture.m_display.get_relative_cursor() == expected_cursor);
-            REQUIRE(fixture.m_buffer.get_text() == "abc");
+            REQUIRE(fixture.m_buffer.m_text == "abc");
         }
 
         SECTION("Wraps without moving the real caret onto the suggestion row")
         {
             display_test_fixture fixture(5, false, 3, true);
             fixture.m_display.set_suggestion_text("\xe4\xb8\xad", 3);
-            fixture.m_buffer.set_text("abcd", 4);
+            fixture.set_text("abcd", 4);
 
             REQUIRE(fixture.m_display.display() == true);
             const tib::coord expected_cursor = { 0, 1 };
@@ -610,7 +608,7 @@ TEST_CASE("Display text components")
             display_test_fixture fixture(10, false, 3, true);
             fixture.m_display.set_right_text("right", 5);
             fixture.m_display.set_usage_text("use", 3);
-            fixture.m_buffer.set_text("1234567890\nabc", 14);
+            fixture.set_text("1234567890\nabc", 14);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
@@ -621,7 +619,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(10, false, 3, true);
             fixture.m_display.set_usage_text("use", 3);
-            fixture.m_buffer.set_text("12345678", 8);
+            fixture.set_text("12345678", 8);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
@@ -633,7 +631,7 @@ TEST_CASE("Display text components")
         {
             display_test_fixture fixture(10, false, 3, false);
             fixture.m_display.set_usage_text("use", 3);
-            fixture.m_buffer.set_text("12345678", 8);
+            fixture.set_text("12345678", 8);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "use") != nullptr);
@@ -646,7 +644,7 @@ TEST_CASE("Display text components")
             display_test_fixture fixture(10);
             fixture.m_display.set_right_text("right", 5);
             fixture.m_display.set_usage_text("use", 3);
-            fixture.m_buffer.set_text("12345678", 8);
+            fixture.set_text("12345678", 8);
 
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "use") == nullptr);
@@ -655,23 +653,48 @@ TEST_CASE("Display text components")
     }
 }
 
-TEST_CASE("Display vertical caret movement")
+TEST_CASE("Display horizontal position calculation preserves selection")
+{
+    display_test_fixture fixture(5, true);
+    REQUIRE(fixture.display_initial("abcdefghij", 1, 0));
+    const int32_t column = fixture.m_display.get_relative_cursor().x;
+    const uint32_t navigation_counter = fixture.m_buffer.m_selection.get_navigation_counter();
+    const uint32_t change_counter = fixture.m_buffer.m_change_counter;
+    tib::textpos_t pos = -1;
+
+    REQUIRE(fixture.m_display.scroll_horizontally(1, column, pos));
+    REQUIRE(fixture.m_display.get_left() == 1);
+    REQUIRE(pos == 2);
+    REQUIRE(fixture.m_buffer.m_selection.get_anchor() == 0);
+    REQUIRE(fixture.m_buffer.m_selection.get_caret() == 1);
+    REQUIRE(fixture.m_buffer.m_selection.get_navigation_counter() == navigation_counter);
+    REQUIRE(fixture.m_buffer.m_change_counter == change_counter);
+    REQUIRE(fixture.m_buffer.m_text == "abcdefghij");
+}
+
+TEST_CASE("Display vertical position calculation preserves selection")
 {
     display_test_fixture fixture(5, false, 3, true);
     REQUIRE(fixture.display_initial("abc\ndef\nghi", 1, 0) == true);
 
     const int32_t cursor_column = fixture.m_display.get_relative_cursor().x;
+    const uint32_t navigation_counter = fixture.m_buffer.m_selection.get_navigation_counter();
+    const uint32_t change_counter = fixture.m_buffer.m_change_counter;
+    tib::textpos_t pos = -1;
     fixture.m_display.invalidate();
-    REQUIRE(fixture.m_display.move_caret_vertically(
-                1, cursor_column, fixture.m_buffer, true/*select*/));
-    REQUIRE(fixture.m_buffer.get_selection_state().get_anchor() == 0);
-    REQUIRE(fixture.m_buffer.get_selection_state().get_caret() == 5);
+    REQUIRE(fixture.m_display.get_pos_vertically(1, cursor_column, pos));
+    REQUIRE(pos == 5);
+    REQUIRE(fixture.m_buffer.m_selection.get_anchor() == 0);
+    REQUIRE(fixture.m_buffer.m_selection.get_caret() == 1);
+    REQUIRE(fixture.m_buffer.m_selection.get_navigation_counter() == navigation_counter);
+    REQUIRE(fixture.m_buffer.m_change_counter == change_counter);
 
+    fixture.m_buffer.m_selection.set_selection(0, pos);
     REQUIRE(fixture.m_display.display() == true);
-    REQUIRE(fixture.m_display.move_caret_vertically(
-                -1, cursor_column, fixture.m_buffer));
-    REQUIRE(fixture.m_buffer.get_selection_state().get_anchor() == 1);
-    REQUIRE(fixture.m_buffer.get_selection_state().get_caret() == 1);
+    REQUIRE(fixture.m_display.get_pos_vertically(-1, cursor_column, pos));
+    REQUIRE(pos == 1);
+    REQUIRE(fixture.m_buffer.m_selection.get_anchor() == 0);
+    REQUIRE(fixture.m_buffer.m_selection.get_caret() == 5);
 }
 
 TEST_CASE("Display multiline wrapping")
@@ -706,7 +729,7 @@ TEST_CASE("Display pending wrap")
             display_test_fixture fixture(tib::int16_max, false, 3, true);
             tib::cstring text;
             text.append_char('x', tib::get_terminal_size().x);
-            fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
+            fixture.set_text(text.c_str(), tib::textpos_t(text.length()));
 
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected_output(text);
@@ -722,7 +745,7 @@ TEST_CASE("Display pending wrap")
             tib::cstring text;
             text.append_char('x', tib::get_terminal_size().x - 1);
             text.append(" ");
-            fixture.m_buffer.set_text(text.c_str(), tib::textpos_t(text.length()));
+            fixture.set_text(text.c_str(), tib::textpos_t(text.length()));
 
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected_output(text);
@@ -750,7 +773,7 @@ TEST_CASE("Display pending wrap")
         SECTION("Finishes wraps at the terminal edge with an offset origin")
         {
             display_test_fixture fixture(tib::int16_max, false, 2, false, &border, 5);
-            fixture.m_buffer.set_text("abc", 3);
+            fixture.set_text("abc", 3);
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected("||");
             expected.append(suffix);
@@ -773,7 +796,7 @@ TEST_CASE("Display pending wrap")
         SECTION("Leaves borders short of the terminal edge unchanged")
         {
             display_test_fixture fixture(10, false, 2, false, &border, 5);
-            fixture.m_buffer.set_text("abc", 3);
+            fixture.set_text("abc", 3);
             REQUIRE(fixture.m_display.display() == true);
             REQUIRE(strstr(s_display_output.c_str(), "||\r\n") != nullptr);
             REQUIRE(strstr(s_display_output.c_str(), "!!\r\n") != nullptr);
@@ -826,7 +849,7 @@ TEST_CASE("Display horizontal scrolling")
     SECTION("Scroll marker placement")
     {
         display_test_fixture fixture(10, true);
-        fixture.m_buffer.set_text("abcdefghijk", 0);
+        fixture.set_text("abcdefghijk", 0);
 
         REQUIRE(fixture.m_display.display() == true);
         tib::cstring expected;
@@ -843,7 +866,7 @@ TEST_CASE("Display horizontal scrolling")
         display_test_fixture fixture(max_width, true);
         fixture.m_display.set_left_text("> ", left_text_width);
         const tib::textpos_t caret = max_width - tib::c_horz_scroll_indicator_chars - left_text_width;
-        fixture.m_buffer.set_text("abcdefghijk", caret);
+        fixture.set_text("abcdefghijk", caret);
 
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(fixture.m_display.get_left() == 1);
@@ -859,7 +882,7 @@ TEST_CASE("Display horizontal scrolling")
         REQUIRE(fixture.display_initial("abcdefghijk", 6) == true);
         REQUIRE(fixture.m_display.get_left() == 2);
 
-        fixture.m_buffer.set_selection(2, 2);
+        fixture.m_buffer.m_selection.set_selection(2, 2);
         REQUIRE(fixture.m_display.display() == true);
         REQUIRE(fixture.m_display.get_left() == 0);
         const tib::coord expected = { 4, 0 };
@@ -915,7 +938,7 @@ TEST_CASE("Display vertical scrolling")
         SECTION("Pads newline-terminated rows before applying the marker")
         {
             display_test_fixture fixture(10, false, 2);
-            fixture.m_buffer.set_text("x\nabc \ndef", 2);
+            fixture.set_text("x\nabc \ndef", 2);
 
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected;
@@ -930,7 +953,7 @@ TEST_CASE("Display vertical scrolling")
         SECTION("Applies a marker to a blank newline-delimited row")
         {
             display_test_fixture fixture(10, false, 2);
-            fixture.m_buffer.set_text("x\n\nz", 4);
+            fixture.set_text("x\n\nz", 4);
 
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected;
@@ -942,7 +965,7 @@ TEST_CASE("Display vertical scrolling")
         SECTION("Pads rows when the next grapheme does not fit")
         {
             display_test_fixture fixture(10, false, 2);
-            fixture.m_buffer.set_text("x\n123456789\xe4\xb8\xadz", 2);
+            fixture.set_text("x\n123456789\xe4\xb8\xadz", 2);
 
             REQUIRE(fixture.m_display.display() == true);
             tib::cstring expected;

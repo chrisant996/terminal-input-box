@@ -300,7 +300,7 @@ void custom_input_box::provide_faces(const tib::input_buffer& buffer, tib::cstri
     {
         uint8_t c = 0;
         bool space = true;
-        const tib::cstring& text = buffer.get_text();
+        const tib::cstring& text = buffer.m_text;
         const char* s = text.c_str();
         const size_t len = text.length();
         assert(len == faces.length());
