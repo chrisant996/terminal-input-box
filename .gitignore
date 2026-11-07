@@ -3,7 +3,6 @@
 .github
 .history
 .vs
-.vscode
 bin*86/**
 bin*64/**
 bin*arm/**
@@ -13,3 +12,5 @@ tags
 *.exe
 *.log
 *.patch
+
+!.vscode
