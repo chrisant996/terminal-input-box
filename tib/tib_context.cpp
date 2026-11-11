@@ -48,6 +48,23 @@ static std::shared_ptr<const key_table_list> make_digit_argument_key_table(bool 
     return table_list;
 }
 
+static std::shared_ptr<key_table> make_parameter_key_table()
+{
+    auto t = make_default_key_table();
+    t->remove("\r");
+#ifdef DEBUG
+    for (const auto b : *t)
+    {
+        assert(!b.target.is_func_name("accept-line"));
+        assert(!b.target.is_func_name("call-last-kbd-macro"));
+        assert(!b.target.is_func_name("end-kbd-macro"));
+        assert(!b.target.is_func_name("lorem-ipsum"));
+        assert(!b.target.is_func_name("start-kbd-macro"));
+    }
+#endif
+    return t;
+}
+
 static std::shared_ptr<const key_table_list> get_digit_argument_key_table()
 {
     static const auto s_digits_table_list = make_digit_argument_key_table();
@@ -300,6 +317,8 @@ void editor_context::initialize(const char* text, size_t len)
 
 void editor_context::reset_state() noexcept
 {
+    cancel_read_parameter();
+
     m_can_drag = false;
     clear_overwrite_input();
     m_edit->m_named_values.clear();
@@ -313,6 +332,12 @@ void editor_context::reset_state() noexcept
 
     clear_was_kill_command();
     g_add_to_kill_ring = 0;
+}
+
+void editor_context::set_done() noexcept
+{
+    cancel_read_parameter();
+    m_done = true;
 }
 
 void editor_context::set_callbacks(editor_callbacks* callbacks)
@@ -1021,12 +1046,16 @@ int32_t editor_context::get_argument_sign() const
 
 void editor_context::set_argument_sign(int32_t sign)
 {
+    if (is_read_parameter())
+        return;
     m_sign_numeric_argument = (sign >= 0) ? 1 : -1;
     apply_message_text();
 }
 
 void editor_context::invert_argument_sign()
 {
+    if (is_read_parameter())
+        return;
     m_sign_numeric_argument = 0 - m_sign_numeric_argument;
     apply_message_text();
 }
@@ -1038,6 +1067,8 @@ int32_t editor_context::get_numeric_argument() const
 
 void editor_context::set_numeric_argument(int32_t value)
 {
+    if (is_read_parameter())
+        return;
     m_numflags |= NUMFLAG_HAS_ARGUMENT|NUMFLAG_HAS_ARG_DIGITS;
     m_sign_numeric_argument = (value >= 0) ? 1 : -1;
     m_numeric_argument = (value >= 0) ? value : 0 - value;
@@ -1046,6 +1077,8 @@ void editor_context::set_numeric_argument(int32_t value)
 
 bool editor_context::numeric_digit(int32_t key)
 {
+    if (is_read_parameter())
+        return false;
     switch (key)
     {
     case '0':
@@ -1122,6 +1155,8 @@ bool editor_context::numeric_digit(int32_t key)
 
 bool editor_context::universal_argument()
 {
+    if (is_read_parameter())
+        return false;
     const bool uni_mode = !!(m_numflags & NUMFLAG_UNIVERSAL_MODE);
     const bool uni_digits = !!(m_numflags & NUMFLAG_HAS_UNI_DIGITS);
     assert(implies(!uni_mode, !uni_digits));
@@ -1161,6 +1196,113 @@ bool editor_context::universal_argument()
     apply_message_text();
     return true;
 }
+
+bool editor_context::start_read_parameter(parameter_request request)
+{
+#if 0
+    assert(!m_done);
+    if (m_done)
+        return false;
+
+    assert(!m_reading_parameter);
+    if (m_reading_parameter)
+        return false;
+
+    assert(!m_edit->undo.m_grouping);
+    if (m_edit->undo.m_grouping)
+        return false;
+
+    assert(request.bindings);
+    if (!request.bindings)
+        return false;
+
+    request.max_length = min<uint32_t>(request.max_length, int16_max);
+    if (request.initial_text.length() > request.max_length)
+        return false;
+
+    static std::shared_ptr<key_table> s_parameter_key_table;
+    if (!s_parameter_key_table)
+        s_parameter_key_table = make_parameter_key_table();
+    auto tables = std::make_shared<key_table_list>();
+    tables->emplace_back(s_parameter_key_table);
+    tables->emplace_back(m_reading_parameter->request.bindings);
+
+    m_reading_parameter = std::make_unique<reading_parameter>();
+    m_reading_parameter->request = std::move(request);
+    m_reading_parameter->bindings = std::move(tables);
+// TODO-PARAM: remember orig states.
+    // m_reading_parameter->orig_buffer
+    // m_reading_parameter->orig_editing_state
+    // m_reading_parameter->orig_presentation
+// TODO-PARAM: orig last command.
+    m_reading_parameter->had_argument = has_numeric_argument();
+    m_reading_parameter->orig_argument = get_numeric_argument();
+
+// TODO-PARAM: input_buffer.
+// TODO-PARAM: initial_text.
+// TODO-PARAM: editing_state.
+// TODO-PARAM: presentation.
+// TODO-PARAM: m_reading_parameter->request.prompt.
+    clear_numeric_argument();
+    set_overwrite_mode(get_overwrite_mode());
+    clear_was_kill_command();
+
+// TODO-PARAM: reset quoted insert states.
+// TODO-PARAM: reset mouse input states.
+
+    apply_override_bindings();
+    force_redisplay();
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool editor_context::accept_read_parameter(cstring& parameter)
+{
+    if (!m_reading_parameter)
+    {
+        parameter.clear();
+        return false;
+    }
+
+    parameter = std::move(m_buffer.m_text);
+    cancel_read_parameter();
+    return true;
+}
+
+void editor_context::cancel_read_parameter()
+{
+#if 0
+    if (!m_reading_parameter)
+        return;
+
+    auto r = std::move(m_reading_parameter);
+
+// TODO-PARAM: restore input_buffer.
+// TODO-PARAM: restore editing_state.
+// TODO-PARAM: restore presentation.
+// TODO-PARAM: restore last command.
+
+    if (r->had_argument)
+        set_numeric_argument(r->orig_argument);
+    else
+        clear_numeric_argument();
+    set_overwrite_mode(get_overwrite_mode());
+    clear_was_kill_command();
+
+// TODO-PARAM: reset quoted insert states.
+// TODO-PARAM: reset mouse input states.
+
+    apply_override_bindings();
+    force_redisplay();
+#endif
+}
+
+// TODO-PARAM: When hosted in Clink the parameter input override bindings have
+// to be able to allow an additional set of host bindings to supersede the
+// override bindings so that clink-select-complete's interactive completion
+// can work.
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column, bool exclude_auto_scroll)
 {
@@ -1239,6 +1381,12 @@ void editor_context::apply_message_text()
 
 void editor_context::apply_override_bindings()
 {
+    if (m_reading_parameter)
+    {
+        override_bindings(m_reading_parameter->bindings, false/*fall_back_on_miss*/);
+        return;
+    }
+
     std::shared_ptr<const key_table_list> bindings;
 
     if (m_numflags & NUMFLAG_ARGUMENT_MODE)
@@ -1249,7 +1397,7 @@ void editor_context::apply_override_bindings()
         bindings = (uni ? get_universal_argument_key_table() : get_digit_argument_key_table());
     }
 
-    override_bindings(bindings, true);
+    override_bindings(bindings, true/*fall_back_on_miss*/);
 }
 
 void editor_context::insert_raw_char(char c)
@@ -1263,7 +1411,7 @@ void editor_context::insert_raw_char(char c)
 
     inc_change_counter();
 
-    if (m_buffer.m_text.length() < m_max_length)
+    if (m_buffer.m_text.length() < get_input_max_length())
     {
         if (m_buffer.m_selection.get_caret() == m_buffer.m_text.length())
         {
@@ -1382,7 +1530,7 @@ void editor_context::insert_text(const char* s, size_t available, bool overwrite
         }
 
         const size_t candidate_length = base.length() - (candidate_end - replace_begin) + accepted + source_length;
-        if (candidate_length > m_max_length)
+        if (candidate_length > get_input_max_length())
         {
             context.set_length(context.length() - source_length);
             context_graphemes = old_context_graphemes;
@@ -1443,6 +1591,11 @@ bool editor_context::elide_selected_text()
     const textpos_t end = m_buffer.m_selection.get_sel_end();
     remove_text(begin, end);
     return true;
+}
+
+uint32_t editor_context::get_input_max_length() const noexcept
+{
+    return m_reading_parameter ? m_reading_parameter->request.max_length : m_max_length;
 }
 
 void editor_context::init_undo()
@@ -1660,6 +1813,7 @@ void editor_context::clear_kbd_macro()
 
 void editor_context::transfer_text(cstring& out)
 {
+    cancel_read_parameter();
     out = std::move(m_buffer.m_text);
     initialize();
 }

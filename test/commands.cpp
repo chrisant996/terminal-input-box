@@ -9,6 +9,14 @@
 #include "tib.h"
 #include "tib_private.h"
 
+static std::shared_ptr<tib::key_table_list> make_main_key_table(bool numeric_argument=false)
+{
+    auto t = tib::make_default_key_table(numeric_argument);
+    auto tables = std::make_shared<tib::key_table_list>();
+    tables->emplace_back(std::move(t));
+    return tables;
+}
+
 static void initialize_context(tib::editor_context& context, const char* text,
                                tib::textpos_t caret)
 {
@@ -87,7 +95,7 @@ TEST_CASE("Keyboard macros")
 
         auto context = std::make_shared<tib::editor_context>();
         context->initialize();
-        context->set_bindings(tib::make_default_key_table());
+        context->set_bindings(make_main_key_table());
         tib::binding_resolver resolver;
         resolver.add_target(context);
         REQUIRE(context->start_kbd_macro(false));
@@ -456,7 +464,7 @@ TEST_CASE("Screen line cursor column continuation")
     context->set_max_height(3);
     context->set_variable_height(true);
     initialize_context(*context, "abcdefgh\nxy\nabcdefgh", 7);
-    context->set_bindings(tib::make_default_key_table());
+    context->set_bindings(make_main_key_table());
 
     tib::binding_resolver resolver;
     resolver.add_target(context);

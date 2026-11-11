@@ -6,6 +6,14 @@
 #include "test_util.h"
 #include "tib.h"
 
+static std::shared_ptr<tib::key_table_list> make_main_key_table(bool numeric_argument=false)
+{
+    auto t = tib::make_default_key_table(numeric_argument);
+    auto tables = std::make_shared<tib::key_table_list>();
+    tables->emplace_back(std::move(t));
+    return tables;
+}
+
 #ifdef _WIN32
 TEST_CASE("Repeated key input")
 {
@@ -96,9 +104,12 @@ TEST_CASE("Adding a key binding moves its sequence storage")
     REQUIRE(table.begin()->sequence.c_str() == sequence_storage);
 }
 
+namespace tib {
+
 class binding_fallback_tester : public dispatcher_tester
 {
 public:
+    void                set_override_bindings(std::shared_ptr<const key_table_list> bindings, bool fall_back_on_miss=false);
     uint32_t            get_fallback_count() const noexcept { return m_fallback_count; }
     void                on_binding_fallback() noexcept override;
 
@@ -106,10 +117,19 @@ private:
     uint32_t            m_fallback_count = 0;
 };
 
+void binding_fallback_tester::set_override_bindings(std::shared_ptr<const key_table_list> bindings, bool fall_back_on_miss)
+{
+    override_bindings(std::move(bindings), fall_back_on_miss);
+}
+
 void binding_fallback_tester::on_binding_fallback() noexcept
 {
     ++m_fallback_count;
 }
+
+} // namespace tib
+
+using tib::binding_fallback_tester;
 
 TEST_CASE("Partial match suppresses later binding fallback")
 {
@@ -127,7 +147,7 @@ TEST_CASE("Partial match suppresses later binding fallback")
 
     auto miss_target = std::make_shared<binding_fallback_tester>();
     miss_target->set_bindings(std::move(miss_tables));
-    miss_target->override_bindings(std::make_shared<tib::key_table_list>(), true);
+    miss_target->set_override_bindings(std::make_shared<tib::key_table_list>(), true);
 
     tib::binding_resolver resolver;
     resolver.add_target(prefix_target);
@@ -156,7 +176,7 @@ TEST_CASE("Binding fallback commits only on dispatch")
 
     auto target = std::make_shared<binding_fallback_tester>();
     target->set_bindings(std::move(base_tables));
-    target->override_bindings(std::move(argument_tables), true);
+    target->set_override_bindings(std::move(argument_tables), true);
 
     tib::binding_resolver resolver;
     resolver.add_target(target);
@@ -171,7 +191,7 @@ TEST_CASE("Binding fallback commits only on dispatch")
     REQUIRE(target->get_fallback_count() == 0);
     REQUIRE(resolved.dispatch());
     REQUIRE(target->get_fallback_count() == 1);
-    target->override_bindings(nullptr);
+    target->set_override_bindings(nullptr);
     REQUIRE(!resolver.is_keyseq_recognized("z", 1));
 }
 
@@ -189,7 +209,7 @@ TEST_CASE("Binding fallback is reported on a final miss")
 
     auto target = std::make_shared<binding_fallback_tester>();
     target->set_bindings(std::move(base_tables));
-    target->override_bindings(std::move(argument_tables), true);
+    target->set_override_bindings(std::move(argument_tables), true);
 
     tib::binding_resolver resolver;
     resolver.add_target(target);
@@ -482,7 +502,7 @@ TEST_CASE("Shadowed key bindings")
         miss_tables->emplace_back(std::move(miss_table));
         auto miss_target = std::make_shared<binding_fallback_tester>();
         miss_target->set_bindings(std::move(miss_tables));
-        miss_target->override_bindings(std::make_shared<tib::key_table_list>(), true);
+        miss_target->set_override_bindings(std::make_shared<tib::key_table_list>(), true);
         resolver.add_target(miss_target);
 
         REQUIRE(resolver.step('a').ambiguous());
@@ -602,7 +622,7 @@ TEST_CASE("Shadowed key bindings")
         miss_tables->emplace_back(std::move(miss_table));
         auto miss_target = std::make_shared<binding_fallback_tester>();
         miss_target->set_bindings(std::move(miss_tables));
-        miss_target->override_bindings(std::make_shared<tib::key_table_list>(), true);
+        miss_target->set_override_bindings(std::make_shared<tib::key_table_list>(), true);
 
         tib::binding_resolver resolver;
         resolver.add_target(prefix_target);
@@ -661,7 +681,7 @@ TEST_CASE("UTF8 multi-byte input")
 
         auto input = std::make_shared<tib::editor_context>();
         input->initialize();
-        input->set_bindings(tib::make_default_key_table());
+        input->set_bindings(make_main_key_table());
 
         tib::binding_resolver resolver;
         resolver.add_target(input);

@@ -146,7 +146,6 @@ public:
     // bindings after a miss in override bindings.
     std::shared_ptr<const key_table_list> get_bindings(bool fallback_requested=false) const;
     void                set_bindings(std::shared_ptr<const key_table_list> bindings);
-    void                override_bindings(std::shared_ptr<const key_table_list> bindings, bool fall_back_on_miss=false);
     int32_t             push_macro_text(const char* macro, size_t len);
 
     // The binding_resolver::step() produces a resolved_binding in three cases:
@@ -171,6 +170,11 @@ public:
     // Called to report error messages; the dispatcher_target gets to choose
     // how/whether to present them to a user.
     virtual void        report_error(const char* msg) noexcept {}
+
+private:
+    friend class editor_context;
+    friend class binding_fallback_tester;
+    void                override_bindings(std::shared_ptr<const key_table_list> bindings, bool fall_back_on_miss=false);
 
 private:
     std::shared_ptr<const key_table_list> m_bindings;

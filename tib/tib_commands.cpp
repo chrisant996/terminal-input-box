@@ -991,7 +991,7 @@ int32_t lorem_ipsum(editor_context& ctx, int32_t key, const char* name, const re
 
 //------------------------------------------------------------------------------
 
-std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
+std::shared_ptr<key_table> make_default_key_table(bool numeric_argument)
 {
     auto t = std::make_shared<key_table>(true/*can_self_insert*/);
 
@@ -1052,9 +1052,7 @@ std::shared_ptr<key_table_list> make_default_key_table(bool numeric_argument)
         t->add("\033-", binding_target_func("digit-argument"));
     }
 
-    auto tables = std::make_shared<key_table_list>();
-    tables->emplace_back(std::move(t));
-    return tables;
+    return t;
 }
 
 //------------------------------------------------------------------------------

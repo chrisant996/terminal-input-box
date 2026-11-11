@@ -247,8 +247,8 @@ public:
     coord               get_extent() const;
     coord               get_inner_extent() const;
 
-    textpos_t           get_left() const { return m_input.m_left; }
-    uint32_t            get_top() const { return m_input.m_top; }
+    textpos_t           get_left() const { return m_presentation.m_left; }
+    uint32_t            get_top() const { return m_presentation.m_top; }
     void                set_scroll_offsets(textpos_t left, uint32_t top);
     void                clear_scroll_offsets();
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, textpos_t& caret);
@@ -267,6 +267,8 @@ public:
     void                move_to_caret_position(bool force_column=false);
     void                erase_display();
     void                end_display_lf();
+
+    void                override_input_presentation(input_presentation* presentation) noexcept;
 
 private:
     void                move_to_row(coord& cursor, int16_t y, uint16_t inner_offset);
@@ -302,7 +304,7 @@ private:
     coord               m_term_size;
     std::shared_ptr<const color_table> m_colors;
     display_lines       m_displayed;
-    input_presentation  m_input;
+    input_presentation  m_presentation;
     bool                m_display_ended = false;
     bool                m_final_display = false;
     bool                m_border_dirty = false;
@@ -323,6 +325,8 @@ private:
 #endif
 
     std::vector<grapheme_info> m_tmp_graphemes;
+
+    std::unique_ptr<input_presentation> m_saved_input_presentation;
 };
 
 void show_display_manager_statistics(bool show);

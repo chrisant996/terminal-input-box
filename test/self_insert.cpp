@@ -47,21 +47,27 @@ static void dispatch_macro(const char* text, std::shared_ptr<self_insert_tester>
     }
 }
 
+static std::shared_ptr<tib::key_table_list> make_main_key_table(bool numeric_argument=false)
+{
+    auto t = tib::make_default_key_table(numeric_argument);
+    auto tables = std::make_shared<tib::key_table_list>();
+    tables->emplace_back(std::move(t));
+    return tables;
+}
+
 static std::shared_ptr<tib::key_table_list> make_quoted_insert_key_table(bool numeric_argument=false)
 {
-    auto tables = tib::make_default_key_table(numeric_argument);
-    REQUIRE(!tables->empty());
-    REQUIRE(tables->back()->add("\021", tib::binding_target_func("quoted-insert")));
+    auto tables = make_main_key_table(numeric_argument);
+    tables->back()->add("\021", tib::binding_target_func("quoted-insert"));
     return tables;
 }
 
 static std::shared_ptr<tib::key_table_list> make_universal_argument_key_table(bool quoted_insert=false)
 {
-    auto tables = tib::make_default_key_table(true/*numeric_argument*/);
-    REQUIRE(!tables->empty());
-    REQUIRE(tables->back()->add("\025", tib::binding_target_func("universal-argument")));
+    auto tables = make_main_key_table(true/*numeric_argument*/);
+    tables->back()->add("\025", tib::binding_target_func("universal-argument"));
     if (quoted_insert)
-        REQUIRE(tables->back()->add("\021", tib::binding_target_func("quoted-insert")));
+        tables->back()->add("\021", tib::binding_target_func("quoted-insert"));
     return tables;
 }
 
@@ -293,7 +299,7 @@ TEST_CASE("Digit argument uses a modal key table")
 {
     auto input = std::make_shared<self_insert_tester>();
     input->initialize();
-    input->set_bindings(tib::make_default_key_table(true/*numeric_argument*/));
+    input->set_bindings(make_main_key_table(true/*numeric_argument*/));
 
     tib::binding_resolver resolver;
     resolver.add_target(input);
@@ -462,7 +468,7 @@ TEST_CASE("Uppercase Alt input resolves in the same key table")
 {
     auto input = std::make_shared<self_insert_tester>();
     input->initialize();
-    input->set_bindings(tib::make_default_key_table());
+    input->set_bindings(make_main_key_table());
 
     tib::binding_resolver resolver;
     resolver.add_target(input);
@@ -628,7 +634,7 @@ TEST_CASE("Self insert optimization")
 
     auto input = std::make_shared<self_insert_tester>();
     input->initialize();
-    input->set_bindings(tib::make_default_key_table());
+    input->set_bindings(make_main_key_table());
 
     tib::binding_resolver resolver;
     resolver.add_target(input);
@@ -658,7 +664,7 @@ TEST_CASE("Numeric self insert repeats a complete UTF8 codepoint")
     {
         auto input = std::make_shared<self_insert_tester>();
         input->initialize();
-        input->set_bindings(tib::make_default_key_table(true/*numeric_argument*/));
+        input->set_bindings(make_main_key_table(true/*numeric_argument*/));
 
         tib::binding_resolver resolver;
         resolver.add_target(input);
@@ -701,7 +707,7 @@ TEST_CASE("Malformed UTF8 self insert does not stall subsequent input")
 {
     auto input = std::make_shared<self_insert_tester>();
     input->initialize();
-    input->set_bindings(tib::make_default_key_table());
+    input->set_bindings(make_main_key_table());
     tib::binding_resolver resolver;
     resolver.add_target(input);
 
@@ -724,7 +730,7 @@ TEST_CASE("Self insert optimization respects bindings")
         test_input_stream stream("abx");
         auto input = std::make_shared<self_insert_tester>();
         input->initialize();
-        auto tables = tib::make_default_key_table();
+        auto tables = make_main_key_table();
         REQUIRE(tables->back()->add("x", tib::binding_target_func("toggle-overwrite-mode")));
         input->set_bindings(tables);
 
@@ -744,7 +750,7 @@ TEST_CASE("Self insert optimization respects bindings")
         test_input_stream stream("abc");
         auto input = std::make_shared<self_insert_tester>();
         input->initialize();
-        auto tables = tib::make_default_key_table();
+        auto tables = make_main_key_table();
         REQUIRE(tables->back()->add("bc", tib::binding_target_func("toggle-overwrite-mode")));
         input->set_bindings(tables);
 
@@ -767,7 +773,7 @@ TEST_CASE("Self insert optimization respects bindings")
         test_input_stream stream("a\xc2\xa2");
         auto input = std::make_shared<self_insert_tester>();
         input->initialize();
-        auto tables = tib::make_default_key_table();
+        auto tables = make_main_key_table();
         REQUIRE(tables->back()->add("\xc2\xa2", tib::binding_target_func("toggle-overwrite-mode")));
         input->set_bindings(tables);
 
@@ -792,7 +798,7 @@ TEST_CASE("Self insert optimization respects bindings")
         test_input_stream stream("b");
         auto input = std::make_shared<self_insert_tester>();
         input->initialize();
-        input->set_bindings(tib::make_default_key_table());
+        input->set_bindings(make_main_key_table());
 
         tib::resolved_binding resolved;
         {
@@ -829,7 +835,7 @@ TEST_CASE("Optimized self insert undo grouping")
 
     auto input = std::make_shared<self_insert_tester>();
     input->initialize();
-    input->set_bindings(tib::make_default_key_table());
+    input->set_bindings(make_main_key_table());
 
     tib::binding_resolver resolver;
     resolver.add_target(input);

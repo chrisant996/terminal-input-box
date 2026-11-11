@@ -90,6 +90,15 @@ struct editing_state
     std::map<cstring, cstring, cstring_less> m_named_values;
 };
 
+struct parameter_request
+{
+    // cstring             purpose;
+    text_and_width      prompt;
+    cstring             initial_text;
+    uint32_t            max_length = int16_max;
+    std::shared_ptr<key_table> bindings;
+};
+
 class editor_context
     : public dispatcher_target // enable_shared_from_this
 {
@@ -101,7 +110,7 @@ public:
     void                initialize(const char* text=nullptr, size_t len=c_auto_length);
     void                reset_state() noexcept;
     bool                is_done() const noexcept { return m_done; }
-    void                set_done() noexcept { m_done = true; }
+    void                set_done() noexcept;
     void                transfer_text(cstring& out);
 
     // tib::dispatcher_target interface...
@@ -248,6 +257,12 @@ public:
     bool                numeric_digit(int32_t key);
     bool                universal_argument();
 
+    // Read parameter string.
+    bool                start_read_parameter(parameter_request request);
+    bool                is_read_parameter() const noexcept { return !!m_reading_parameter; }
+    bool                accept_read_parameter(cstring& parameter);
+    void                cancel_read_parameter();
+
     // Scrolling.
     bool                scroll_horizontally(int32_t columns, int32_t cursor_column, bool exclude_auto_scroll=true);
     bool                move_caret_vertically(int32_t rows, int32_t cursor_column, bool select=false);
@@ -302,6 +317,7 @@ public:
     static editor_command_func_t lookup_command(const char* name);
 
 private:
+    uint32_t            get_input_max_length() const noexcept;
     void                init_undo();
     void                clear_undo_internal();
     void                unlink_endo_entry(undo_entry* p);
@@ -345,6 +361,19 @@ private:
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
     int32_t             m_quoted_insert_count = 0;
+
+    // Read parameter string.
+    struct reading_parameter
+    {
+        parameter_request   request;
+        std::shared_ptr<const key_table_list> bindings;
+        input_buffer        orig_buffer;
+        std::unique_ptr<editing_state> orig_editing_state;
+        input_presentation  orig_presentation;
+        bool                had_argument = false;
+        int32_t             orig_argument = 1;
+    };
+    std::unique_ptr<reading_parameter> m_reading_parameter;
 
     // Keyboard macro recording.
     cstring             m_recording;
