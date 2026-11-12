@@ -268,7 +268,7 @@ public:
     void                erase_display();
     void                end_display_lf();
 
-    void                override_input_presentation(input_presentation* presentation) noexcept;
+    void                override_input_presentation(const char* override_prompt) noexcept;
 
 private:
     void                move_to_row(coord& cursor, int16_t y, uint16_t inner_offset);

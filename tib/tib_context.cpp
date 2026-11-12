@@ -1206,7 +1206,6 @@ bool editor_context::universal_argument()
 
 bool editor_context::start_read_parameter(parameter_request request)
 {
-#if 0
     assert(!m_done);
     if (m_done)
         return false;
@@ -1232,37 +1231,30 @@ bool editor_context::start_read_parameter(parameter_request request)
         s_parameter_key_table = make_parameter_key_table();
     auto tables = std::make_shared<key_table_list>();
     tables->emplace_back(s_parameter_key_table);
-    tables->emplace_back(m_reading_parameter->request.bindings);
+    tables->emplace_back(request.bindings);
 
     m_reading_parameter = std::make_unique<reading_parameter>();
     m_reading_parameter->request = std::move(request);
     m_reading_parameter->bindings = std::move(tables);
-// TODO-PARAM: remember orig states.
-    // m_reading_parameter->orig_buffer
-    // m_reading_parameter->orig_editing_state
-    // m_reading_parameter->orig_presentation
-// TODO-PARAM: orig last command.
+    m_reading_parameter->orig_buffer = std::move(m_buffer);
+    m_reading_parameter->orig_editing_state = std::move(m_edit);
     m_reading_parameter->had_argument = has_numeric_argument();
     m_reading_parameter->orig_argument = get_numeric_argument();
 
-// TODO-PARAM: input_buffer.
-// TODO-PARAM: initial_text.
-// TODO-PARAM: editing_state.
-// TODO-PARAM: presentation.
-// TODO-PARAM: m_reading_parameter->request.prompt.
+    m_buffer.m_text = m_reading_parameter->request.initial_text.c_str();
+    m_buffer.m_selection.set_caret(0);
+    inc_change_counter(); // Implicit side effect: resets mouse input states.
+
+    m_edit = std::make_unique<editing_state>();
+    m_display.override_input_presentation(m_reading_parameter->request.prompt.c_str());
+
     clear_numeric_argument();
     set_overwrite_mode(get_overwrite_mode());
     clear_was_kill_command();
 
-// TODO-PARAM: reset quoted insert states.
-// TODO-PARAM: reset mouse input states.
-
     apply_override_bindings();
     force_redisplay();
     return true;
-#else
-    return false;
-#endif
 }
 
 bool editor_context::accept_read_parameter(cstring& parameter)
@@ -1280,16 +1272,17 @@ bool editor_context::accept_read_parameter(cstring& parameter)
 
 void editor_context::cancel_read_parameter()
 {
-#if 0
     if (!m_reading_parameter)
         return;
 
     auto r = std::move(m_reading_parameter);
 
-// TODO-PARAM: restore input_buffer.
-// TODO-PARAM: restore editing_state.
-// TODO-PARAM: restore presentation.
-// TODO-PARAM: restore last command.
+    m_buffer.m_selection = std::move(r->orig_buffer.m_selection);
+    m_buffer.m_text = std::move(r->orig_buffer.m_text);
+    inc_change_counter(); // Implicit side effect: resets mouse input states.
+
+    m_edit = std::move(r->orig_editing_state);
+    m_display.override_input_presentation(nullptr);
 
     if (r->had_argument)
         set_numeric_argument(r->orig_argument);
@@ -1298,12 +1291,8 @@ void editor_context::cancel_read_parameter()
     set_overwrite_mode(get_overwrite_mode());
     clear_was_kill_command();
 
-// TODO-PARAM: reset quoted insert states.
-// TODO-PARAM: reset mouse input states.
-
     apply_override_bindings();
     force_redisplay();
-#endif
 }
 
 // TODO-PARAM: When hosted in Clink the parameter input override bindings have
@@ -1367,8 +1356,8 @@ static size_t count_graphemes(const char* s, size_t len)
 
 void editor_context::clear_overwrite_input()
 {
-    m_overwrite_input.clear();
-    m_overwrite_input_original_text.clear();
+    m_edit->m_overwrite_input.clear();
+    m_edit->m_overwrite_input_original_text.clear();
 }
 
 void editor_context::apply_message_text()
@@ -1452,13 +1441,15 @@ void editor_context::insert_char(char c, bool overwrite)
         return;
     }
 
-    bool continuing = (!m_overwrite_input.empty() &&
-                       m_overwrite_input_change_counter == m_buffer.m_change_counter &&
-                       m_overwrite_input_navigation_counter == m_buffer.m_selection.get_navigation_counter() &&
+    // FUTURE:  The overwrite mode was added by AI, and it's becoming
+    // increasingly clear that it's a bit jumbled and poorly factored.
+    bool continuing = (!m_edit->m_overwrite_input.empty() &&
+                       m_edit->m_overwrite_input_change_counter == m_buffer.m_change_counter &&
+                       m_edit->m_overwrite_input_navigation_counter == m_buffer.m_selection.get_navigation_counter() &&
                        !m_buffer.m_selection.has_selection());
     if (continuing)
     {
-        cstring candidate(m_overwrite_input);
+        cstring candidate(m_edit->m_overwrite_input);
         candidate.append(&c, 1);
         str_iter iter(candidate.c_str(), candidate.length());
         iter.next();
@@ -1467,28 +1458,28 @@ void editor_context::insert_char(char c, bool overwrite)
 
     if (continuing)
     {
-        m_overwrite_input.append(&c, 1);
+        m_edit->m_overwrite_input.append(&c, 1);
         begin_undo_group(true);
-        m_buffer.m_text.set(m_overwrite_input_original_text);
-        m_buffer.m_selection = m_overwrite_input_original_selection;
+        m_buffer.m_text.set(m_edit->m_overwrite_input_original_text);
+        m_buffer.m_selection = m_edit->m_overwrite_input_original_selection;
     }
     else
     {
         clear_overwrite_input();
-        m_overwrite_input.append(&c, 1);
-        m_overwrite_input_original_text.set(m_buffer.m_text);
-        m_overwrite_input_original_selection = m_buffer.m_selection;
+        m_edit->m_overwrite_input.append(&c, 1);
+        m_edit->m_overwrite_input_original_text.set(m_buffer.m_text);
+        m_edit->m_overwrite_input_original_selection = m_buffer.m_selection;
     }
 
-    m_replaying_overwrite_input = true;
-    insert_text(m_overwrite_input.c_str(), m_overwrite_input.length(), true);
-    m_replaying_overwrite_input = false;
+    m_edit->m_replaying_overwrite_input = true;
+    insert_text(m_edit->m_overwrite_input.c_str(), m_edit->m_overwrite_input.length(), true);
+    m_edit->m_replaying_overwrite_input = false;
 
     if (continuing)
         end_undo_group();
 
-    m_overwrite_input_change_counter = m_buffer.m_change_counter;
-    m_overwrite_input_navigation_counter = m_buffer.m_selection.get_navigation_counter();
+    m_edit->m_overwrite_input_change_counter = m_buffer.m_change_counter;
+    m_edit->m_overwrite_input_navigation_counter = m_buffer.m_selection.get_navigation_counter();
 }
 
 void editor_context::insert_text(const char* s, size_t available, bool overwrite)
@@ -1496,7 +1487,7 @@ void editor_context::insert_text(const char* s, size_t available, bool overwrite
     if (!available)
         return;
 
-    if (!m_replaying_overwrite_input)
+    if (!m_edit->m_replaying_overwrite_input)
         clear_overwrite_input();
 
     available = min<size_t>(int16_max, resolve_auto_length(available, s));

@@ -82,10 +82,20 @@ struct editing_state
     };
 
     undo_history        undo;
-    bool                m_auto_deactivate_mark = true;
-    bool                m_overwrite_mode = false;
-    cstring             m_last_command_name;
+
     text_and_width      m_message_text;
+
+    bool                m_auto_deactivate_mark = true;
+
+    bool                m_overwrite_mode = false;
+    bool                m_replaying_overwrite_input = false;
+    cstring             m_overwrite_input;
+    cstring             m_overwrite_input_original_text;
+    selection_state     m_overwrite_input_original_selection;
+    uint32_t            m_overwrite_input_change_counter = 0;
+    uint32_t            m_overwrite_input_navigation_counter = 0;
+
+    cstring             m_last_command_name;
     editor_command_func_t m_last_command_func = nullptr;
 
     struct named_value
@@ -354,12 +364,6 @@ private:
     bool                m_done = false;
     bool                m_can_drag = false;
     bool                m_allow_optimized_self_insert = true;
-    bool                m_replaying_overwrite_input = false;
-    cstring             m_overwrite_input;
-    cstring             m_overwrite_input_original_text;
-    selection_state     m_overwrite_input_original_selection;
-    uint32_t            m_overwrite_input_change_counter = 0;
-    uint32_t            m_overwrite_input_navigation_counter = 0;
     int32_t             m_dispatching = 0;
     bool                m_in_on_dispatched = false;
 
@@ -376,7 +380,6 @@ private:
         std::shared_ptr<const key_table_list> bindings;
         input_buffer        orig_buffer;
         std::unique_ptr<editing_state> orig_editing_state;
-        input_presentation  orig_presentation;
         bool                had_argument = false;
         int32_t             orig_argument = 1;
     };

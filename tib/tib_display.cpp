@@ -451,14 +451,26 @@ void display_manager::clear_additional_lines()
     m_presentation.m_additional_lines.clear();
 }
 
-void display_manager::override_input_presentation(input_presentation* presentation) noexcept
+void display_manager::override_input_presentation(const char* override_prompt) noexcept
 {
-    if (presentation)
+    if (override_prompt)
     {
         assert(!m_saved_input_presentation);
         if (!m_saved_input_presentation)
+        {
+            cstring left_text;
+            uint16_t left_width = m_presentation.m_left_text.width();
+            left_text.set(m_presentation.m_left_text.c_str());
+            m_colors->append_color(left_text, color_element::base, color_element::message);
+            left_text.append(override_prompt);
+            left_width += cell_count(override_prompt, -1);
+
             m_saved_input_presentation = std::make_unique<input_presentation>(std::move(m_presentation));
-        m_presentation = std::move(*presentation);
+
+            input_presentation presentation;
+            presentation.m_left_text.set(left_text.c_str(), left_width);
+            m_presentation = std::move(presentation);
+        }
     }
     else
     {
