@@ -545,7 +545,7 @@ void binding_resolver::reset()
 
 resolved_binding binding_resolver::step(uint8_t c)
 {
-    if (!m_state->quoted_insert_target.expired())
+    if (quoted_insert_pending())
     {
         const std::weak_ptr<dispatcher_target> weak = m_state->quoted_insert_target;
         reset();
