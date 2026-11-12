@@ -155,37 +155,34 @@ int32_t movement_mode(tib::editor_context& ctx, int32_t, const char*, const tib:
     return 0;
 }
 
-#if 0
-static int32_t print_parameter_result(editor_context& ctx, int32_t, const char*, const resolved_binding*) noexcept
+static int32_t print_parameter_result(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
 {
-    cstring text;
-    if (!ctx.end_parameter_session(text))
+    tib::cstring text;
+    if (!ctx.accept_read_parameter(text))
     {
-        ding();
+        tib::ding();
         return 0;
     }
     const auto origin_x = ctx.get_origin().x;
     ctx.end_display_lf();
-    term_out(text.c_str(), text.length());
-    term_out("\r\n", 2);
+    tib::term_out(text.c_str(), text.length());
+    tib::term_out("\r\n", 2);
     ctx.set_origin(origin_x);
     ctx.begin_display();
     return 0;
 }
-#endif
 
 int32_t print_parameter(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
 {
+    static const auto commands = std::make_shared<const tib::command_table>(tib::command_table{
+        { "print-parameter-result", print_parameter_result },
+    });
     auto bindings = std::make_shared<tib::key_table>();
-#if 0
-    bindings->front()->add("\r", tib::binding_target_func(print_parameter_result));
-#endif
+    bindings->add("\r", tib::binding_target_func("print-parameter-result"));
     tib::parameter_request request;
-#if 0
-    request.purpose = "print-parameter";
-#endif
     request.prompt.set("Text: ", 6);
     request.bindings = std::move(bindings);
+    request.commands = commands;
     if (!ctx.start_read_parameter(std::move(request)))
         tib::ding();
     return 0;

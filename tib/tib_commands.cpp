@@ -1183,6 +1183,23 @@ editor_command_func_t editor_context::lookup_command(const char* name)
     return found->second;
 }
 
+editor_command_func_t editor_context::find_available_command(const char* name) const
+{
+    if (!name)
+        return nullptr;
+
+    if (m_reading_parameter && m_reading_parameter->request.commands)
+    {
+        for (const auto& command : *m_reading_parameter->request.commands)
+        {
+            if (_stricmp(command.name, name) == 0)
+                return command.func;
+        }
+    }
+
+    return lookup_command(name);
+}
+
 std::vector<cstring> editor_context::s_command_names;
 std::map<const char*, editor_command_func_t, editor_context::stricmp_less> editor_context::s_commands;
 

@@ -37,6 +37,145 @@ static void dispatch_macro_command(tib::editor_context& context, const char* seq
     REQUIRE(context.dispatch(sequence, 0, &binding, nullptr) == 0);
 }
 
+static int32_t accept_test_parameter(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
+{
+    tib::cstring parameter;
+    if (!ctx.accept_read_parameter(parameter))
+        return -1;
+    ctx.insert_text(parameter.c_str());
+    return 0;
+}
+
+TEST_CASE("Parameter request commands")
+{
+    auto context = std::make_shared<tib::editor_context>();
+    context->initialize("original");
+    context->set_bindings(make_main_key_table());
+    tib::parameter_request request;
+    request.initial_text = "abc";
+    request.bindings = std::make_shared<tib::key_table>();
+
+    SECTION("request commands shadow globals without changing other editors")
+    {
+        tib::editor_context other;
+        other.initialize();
+        tib::parameter_request other_request;
+        other_request.bindings = std::make_shared<tib::key_table>();
+        other_request.commands = std::make_shared<const tib::command_table>(tib::command_table{
+            { "parameter-end", tib::begin_of_line },
+        });
+        REQUIRE(other.start_read_parameter(std::move(other_request)));
+
+        request.commands = std::make_shared<const tib::command_table>(tib::command_table{
+            { "parameter-end", tib::end_of_line },
+            { "FORWARD-CHAR", tib::begin_of_line },
+        });
+        request.bindings->add("\t", tib::binding_target_func("PARAMETER-END"));
+        request.bindings->add("\006", tib::binding_target_func("forward-char"));
+        REQUIRE(context->find_available_command("parameter-end") == nullptr);
+        REQUIRE(context->start_read_parameter(std::move(request)));
+        REQUIRE(context->find_available_command("PaRaMeTeR-EnD") == tib::end_of_line);
+        REQUIRE(context->find_available_command("forward-char") == tib::begin_of_line);
+        REQUIRE(context->find_available_command("backward-char") == tib::backward_char);
+        REQUIRE(context->find_available_command(nullptr) == nullptr);
+        REQUIRE(context->find_available_command("missing-command") == nullptr);
+        REQUIRE(tib::editor_context::lookup_command("parameter-end") == nullptr);
+        REQUIRE(tib::editor_context::lookup_command("forward-char") == tib::forward_char);
+        REQUIRE(other.find_available_command("parameter-end") == tib::begin_of_line);
+        REQUIRE(other.find_available_command("forward-char") == tib::forward_char);
+
+        tib::binding_resolver resolver;
+        resolver.add_target(context);
+        auto resolved = resolver.step('\t');
+        REQUIRE(resolved.is_func_name("parameter-end"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(context->get_caret() == 3);
+        REQUIRE(context->get_last_command_func() == tib::end_of_line);
+        resolved = resolver.step('\006');
+        REQUIRE(resolved.dispatch());
+        REQUIRE(context->get_caret() == 0);
+        // This binding comes from the normal parameter editing table.
+        REQUIRE(resolver.step('\033').more());
+        REQUIRE(resolver.step('[').more());
+        resolved = resolver.step('F');
+        REQUIRE(resolved.dispatch());
+        REQUIRE(context->get_caret() == 3);
+
+        context->cancel_read_parameter();
+        REQUIRE(context->find_available_command("parameter-end") == nullptr);
+        REQUIRE(context->find_available_command("forward-char") == tib::forward_char);
+        REQUIRE(context->get_text() == "original");
+        REQUIRE(other.find_available_command("parameter-end") == tib::begin_of_line);
+    }
+
+    SECTION("a shared owner keeps dynamic names alive until acceptance")
+    {
+        struct command_storage
+        {
+            tib::cstring name;
+            tib::command_table commands;
+        };
+        auto storage = std::make_shared<command_storage>();
+        storage->name = "parameter-accept";
+        storage->commands.push_back({ storage->name.c_str(), accept_test_parameter });
+        std::weak_ptr<command_storage> lifetime = storage;
+        request.commands = std::shared_ptr<const tib::command_table>(storage, &storage->commands);
+        request.bindings->add("\r", tib::binding_target_func(storage->name.c_str()));
+        storage.reset();
+        REQUIRE(context->start_read_parameter(std::move(request)));
+        REQUIRE(!lifetime.expired());
+        REQUIRE(context->find_available_command("parameter-accept") == accept_test_parameter);
+
+        tib::binding_resolver resolver;
+        resolver.add_target(context);
+        auto resolved = resolver.step('\r');
+        REQUIRE(resolved.is_func_name("parameter-accept"));
+        REQUIRE(resolved.dispatch());
+        REQUIRE(!context->is_read_parameter());
+        REQUIRE(lifetime.expired());
+        REQUIRE(context->find_available_command("parameter-accept") == nullptr);
+        REQUIRE(context->get_text() == "originalabc");
+        REQUIRE(!context->is_done());
+    }
+
+    SECTION("one table can be reused and released by each request independently")
+    {
+        auto commands = std::make_shared<const tib::command_table>(tib::command_table{
+            { "parameter-end", tib::end_of_line },
+        });
+        std::weak_ptr<const tib::command_table> lifetime = commands;
+        tib::editor_context other;
+        other.initialize();
+        tib::parameter_request other_request;
+        other_request.bindings = std::make_shared<tib::key_table>();
+        other_request.commands = commands;
+        request.commands = commands;
+        REQUIRE(context->start_read_parameter(std::move(request)));
+        REQUIRE(other.start_read_parameter(std::move(other_request)));
+        commands.reset();
+        context->reset_state();
+        REQUIRE(!context->is_read_parameter());
+        REQUIRE(context->find_available_command("parameter-end") == nullptr);
+        REQUIRE(!lifetime.expired());
+        REQUIRE(other.find_available_command("parameter-end") == tib::end_of_line);
+        other.set_done();
+        REQUIRE(!other.is_read_parameter());
+        REQUIRE(other.find_available_command("parameter-end") == nullptr);
+        REQUIRE(lifetime.expired());
+    }
+
+    SECTION("requests without additional commands keep global lookup")
+    {
+        REQUIRE(context->start_read_parameter(std::move(request)));
+        REQUIRE(context->find_available_command("forward-char") == tib::forward_char);
+        context->cancel_read_parameter();
+        request.bindings = std::make_shared<tib::key_table>();
+        request.commands = std::make_shared<const tib::command_table>();
+        REQUIRE(context->start_read_parameter(std::move(request)));
+        REQUIRE(context->find_available_command("forward-char") == tib::forward_char);
+    }
+}
+
 TEST_CASE("Keyboard macros")
 {
     SECTION("records commands and omits recording controls")

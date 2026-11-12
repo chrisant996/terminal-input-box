@@ -1859,7 +1859,7 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
                 if (m_callbacks && m_callbacks->on_dispatch(*this, name))
                     break;
 
-                editor_command_func_t func = lookup_command(name);
+                editor_command_func_t func = find_available_command(name);
                 if (func)
                 {
                     ret = func(*this, key, name, resolved);

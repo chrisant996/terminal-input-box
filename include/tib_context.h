@@ -30,6 +30,8 @@ struct editor_command
     editor_command_func_t func;
 };
 
+typedef std::vector<editor_command> command_table;
+
 textpos_t pos_mover(const char* s, const size_t _len, textpos_t& pos, const bool forward, const uint8_t word);
 
 struct editor_callbacks;
@@ -113,6 +115,7 @@ struct parameter_request
     cstring             initial_text;
     uint32_t            max_length = int16_max;
     std::shared_ptr<key_table> bindings;
+    std::shared_ptr<const command_table> commands;
 };
 
 class editor_context
@@ -331,7 +334,8 @@ public:
     static void         clear_all_commands();
     static void         register_command(const char* name, editor_command_func_t func);
     static const std::map<const char*, editor_command_func_t, stricmp_less>& get_registered_commands();
-    static editor_command_func_t lookup_command(const char* name);
+    static editor_command_func_t lookup_command(const char* name); // Global commands only.
+    editor_command_func_t find_available_command(const char* name) const; // Includes contextual commands (m_reading_parameter).
 
 private:
     uint32_t            get_input_max_length() const noexcept;
