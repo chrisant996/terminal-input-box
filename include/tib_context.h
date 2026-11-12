@@ -87,7 +87,13 @@ struct editing_state
     cstring             m_last_command_name;
     text_and_width      m_message_text;
     editor_command_func_t m_last_command_func = nullptr;
-    std::map<cstring, cstring, cstring_less> m_named_values;
+
+    struct named_value
+    {
+        cstring         text;
+        uint32_t        change_counter = 0; // Zero means unpinned.
+    };
+    std::map<cstring, named_value, cstring_less> m_named_values;
 };
 
 struct parameter_request
@@ -215,8 +221,9 @@ public:
     // Named values (allows commands to store state in the editor_context).
     const char*         get_named_value(const char* name) const;
     int32_t             get_named_value_int(const char* name, int32_t def=0) const;
-    void                set_named_value(const char* name, const char* value);
-    void                set_named_value_int(const char* name, int32_t value);
+    // Pinned values appear unset after the input change counter advances.
+    void                set_named_value(const char* name, const char* value, bool pin=true);
+    void                set_named_value_int(const char* name, int32_t value, bool pin=true);
     void                clear_named_value(const char* name);
 
 #pragma region Editing operations

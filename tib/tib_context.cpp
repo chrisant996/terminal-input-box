@@ -980,7 +980,12 @@ void editor_context::set_last_command(const char* name, editor_command_func_t fu
 const char* editor_context::get_named_value(const char* name) const
 {
     const auto found = m_edit->m_named_values.find(name);
-    return (found == m_edit->m_named_values.end()) ? nullptr : found->second.c_str();
+    if (found == m_edit->m_named_values.end())
+        return nullptr;
+    const auto& value = found->second;
+    if (value.change_counter && value.change_counter != get_change_counter())
+        return nullptr;
+    return value.text.c_str();
 }
 
 int32_t editor_context::get_named_value_int(const char* name, int32_t def) const
@@ -991,25 +996,27 @@ int32_t editor_context::get_named_value_int(const char* name, int32_t def) const
     return atoi(value);
 }
 
-void editor_context::set_named_value(const char* name, const char* value)
+void editor_context::set_named_value(const char* name, const char* value, bool pin)
 {
     auto found = m_edit->m_named_values.find(name);
     if (found == m_edit->m_named_values.end())
-        m_edit->m_named_values.emplace(cstring(name), cstring(value));
+        found = m_edit->m_named_values.emplace(cstring(name), editing_state::named_value{cstring(value)}).first;
     else
-        found->second.set(value);
+        found->second.text.set(value);
+    found->second.change_counter = pin ? get_change_counter() : 0;
 }
 
-void editor_context::set_named_value_int(const char* name, int32_t value)
+void editor_context::set_named_value_int(const char* name, int32_t value, bool pin)
 {
     cstring tmp;
     tmp.printf("%d", value);
 
     auto found = m_edit->m_named_values.find(name);
     if (found == m_edit->m_named_values.end())
-        m_edit->m_named_values.emplace(cstring(name), std::move(tmp));
+        found = m_edit->m_named_values.emplace(cstring(name), editing_state::named_value{std::move(tmp)}).first;
     else
-        found->second = std::move(tmp);
+        found->second.text = std::move(tmp);
+    found->second.change_counter = pin ? get_change_counter() : 0;
 }
 
 void editor_context::clear_named_value(const char* name)

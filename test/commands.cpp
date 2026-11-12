@@ -169,7 +169,7 @@ TEST_CASE("Abort command")
         context.set_border(&border);
         context.set_selection(0, 2);
         context.set_overwrite_mode(true);
-        context.set_named_value("operation", "pending");
+        context.set_named_value("operation", "pending", false);
         context.set_numeric_argument(-12);
         context.set_last_command("dummy-command", dummy_command);
 
@@ -713,5 +713,161 @@ TEST_CASE("Transpose words command")
         context.undo();
         REQUIRE(context.get_text() == "one two");
         REQUIRE(context.get_caret() == 4);
+    }
+}
+
+TEST_CASE("Named value pinning")
+{
+    tib::editor_context context;
+    context.initialize("abc");
+
+    SECTION("pinned values expire and unpinned values survive edits")
+    {
+        context.set_named_value("text", "pending", true);
+        context.set_named_value_int("number", 42, true);
+        context.set_named_value("persistent", "saved", false);
+        context.set_named_value_int("persistent-number", 7, false);
+        REQUIRE(!strcmp(context.get_named_value("text"), "pending"));
+        REQUIRE(context.get_named_value_int("number") == 42);
+        context.insert_char('d');
+        REQUIRE(context.get_named_value("text") == nullptr);
+        REQUIRE(context.get_named_value_int("number", -1) == -1);
+        REQUIRE(!strcmp(context.get_named_value("persistent"), "saved"));
+        REQUIRE(context.get_named_value_int("persistent-number") == 7);
+    }
+
+    SECTION("setters replace stale values and replace their pins")
+    {
+        context.set_named_value("text", "old", true);
+        context.set_named_value_int("number", 1, true);
+        context.inc_change_counter();
+        context.set_named_value("text", "new", true);
+        context.set_named_value_int("number", 2, true);
+        REQUIRE(!strcmp(context.get_named_value("text"), "new"));
+        REQUIRE(context.get_named_value_int("number") == 2);
+        context.inc_change_counter();
+        REQUIRE(context.get_named_value("text") == nullptr);
+        REQUIRE(context.get_named_value_int("number", -1) == -1);
+        context.set_named_value("text", "unpinned", false);
+        context.set_named_value_int("number", 3, false);
+        context.inc_change_counter();
+        REQUIRE(!strcmp(context.get_named_value("text"), "unpinned"));
+        REQUIRE(context.get_named_value_int("number") == 3);
+        context.set_named_value("text", "pinned", true);
+        context.set_named_value_int("number", 4, true);
+        context.inc_change_counter();
+        REQUIRE(context.get_named_value("text") == nullptr);
+        REQUIRE(context.get_named_value_int("number", -1) == -1);
+        context.clear_named_value("text");
+        context.clear_named_value("number");
+        REQUIRE(context.get_named_value("text") == nullptr);
+        REQUIRE(context.get_named_value_int("number", -1) == -1);
+    }
+}
+
+static int32_t dispatch_mouse(tib::editor_context& context, uint32_t button,
+                              char key, uint32_t x, uint32_t y=1)
+{
+    tib::resolved_binding resolved;
+    resolved.params.resize(3);
+    resolved.params[0].printf("%u", button);
+    resolved.params[1].printf("%u", x);
+    resolved.params[2].printf("%u", y);
+    tib::cstring sequence;
+    sequence.printf("\x1b[<%u;%u;%u%c", button, x, y, key);
+    const auto binding = tib::binding_target_func("mouse-input");
+    return context.dispatch(sequence, key, &binding, &resolved);
+}
+
+TEST_CASE("Mouse state pinning")
+{
+    tib::editor_context context;
+    context.initialize("one two three");
+    context.set_max_width(20);
+    context.set_origin(1, 1);
+    context.display();
+
+    SECTION("drag requires an accepted press and stops at release")
+    {
+        REQUIRE(dispatch_mouse(context, 32, 'M', 6) == 0);
+        REQUIRE(!context.get_selection_state().has_selection());
+        REQUIRE(dispatch_mouse(context, 0, 'M', 2) == 0);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 6) == 0);
+        REQUIRE(context.get_selection_state().get_anchor() == 1);
+        REQUIRE(context.get_caret() == 6);
+        REQUIRE(dispatch_mouse(context, 0, 'm', 6) == -1);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 8) == 0);
+        REQUIRE(context.get_caret() == 6);
+        REQUIRE(dispatch_mouse(context, 0, 'M', 9) == 0);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 11) == 0);
+        REQUIRE(context.get_selection_state().get_anchor() == 8);
+        REQUIRE(context.get_caret() == 11);
+        REQUIRE(dispatch_mouse(context, 0, 'M', 30) == -1);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 12) == 0);
+        REQUIRE(context.get_caret() == 11);
+    }
+
+    SECTION("buffer edits invalidate a held press")
+    {
+        REQUIRE(dispatch_mouse(context, 0, 'M', 2) == 0);
+        context.insert_char('x');
+        context.display();
+        const auto caret = context.get_caret();
+        REQUIRE(dispatch_mouse(context, 32, 'M', 6) == 0);
+        REQUIRE(context.get_caret() == caret);
+        REQUIRE(!context.get_selection_state().has_selection());
+        REQUIRE(dispatch_mouse(context, 0, 'M', 4) == 0);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 6) == 0);
+        REQUIRE(context.get_selection_state().get_anchor() == 3);
+        REQUIRE(context.get_caret() == 6);
+    }
+
+    SECTION("double clicks and word drags continue only on the same baseline")
+    {
+        REQUIRE(dispatch_mouse(context, 0, 'M', 2) == 0);
+        REQUIRE(dispatch_mouse(context, 0, 'm', 2) == -1);
+        REQUIRE(dispatch_mouse(context, 0, 'M', 2) == 0);
+        REQUIRE(context.get_selection_state().get_sel_begin() == 0);
+        REQUIRE(context.get_selection_state().get_sel_end() == 3);
+        REQUIRE(dispatch_mouse(context, 32, 'M', 6) == 0);
+        REQUIRE(context.get_selection_state().get_sel_begin() == 0);
+        REQUIRE(context.get_selection_state().get_sel_end() == 7);
+        context.inc_change_counter();
+        REQUIRE(dispatch_mouse(context, 0, 'M', 2) == 0);
+        REQUIRE(!context.get_selection_state().has_selection());
+        REQUIRE(context.get_caret() == 1);
+    }
+}
+
+TEST_CASE("Cursor column pinning")
+{
+    tib::editor_context context;
+    context.set_max_width(10);
+    context.set_max_height(4);
+    context.set_variable_height(true);
+    initialize_context(context, "abcdefgh\nxy\nabcdefgh\nabcdefgh", 7);
+    context.set_origin(1, 1);
+    context.display();
+
+    SECTION("keyboard continuation captures a new column after the baseline changes")
+    {
+        dispatch_macro_command(context, "\x1b[B", "screen-line-down");
+        REQUIRE(context.get_caret() == 11);
+        context.display();
+        const auto column = context.get_relative_cursor().x;
+        context.inc_change_counter();
+        dispatch_macro_command(context, "\x1b[B", "screen-line-down");
+        REQUIRE(context.get_caret() == 12 + column);
+    }
+
+    SECTION("wheel continuation captures a new column after the baseline changes")
+    {
+        REQUIRE(dispatch_mouse(context, 65, 'M', 1) == 0);
+        context.set_caret(13);
+        context.display();
+        const auto column = context.get_relative_cursor().x;
+        context.inc_change_counter();
+        REQUIRE(dispatch_mouse(context, 65, 'M', 1) == 0);
+        REQUIRE(context.get_named_value_int("cursor_column_continuation", -1) == column);
     }
 }
