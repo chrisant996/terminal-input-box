@@ -165,6 +165,8 @@ public:
         return any_updates;
     }
 
+    void set_empty_face(char face) { m_style.empty_face = face; }
+
     const char* get_face_def(const tib::input_buffer& buffer, char face) override
     {
         const auto def = m_face_defs.find(face);
@@ -173,6 +175,27 @@ public:
         return nullptr;
     }
 
+    void provide_faces(const tib::input_buffer& buffer, tib::cstring& faces) override
+    {
+        ++m_face_calls;
+        if (m_faces.length())
+        {
+            REQUIRE(m_faces.length() == buffer.m_text.length());
+            faces.set(m_faces.c_str(), m_faces.length());
+        }
+    }
+
+    const char* get_face_hyperlink(char face) override
+    {
+        ++m_hyperlink_calls;
+        const auto found = m_face_hyperlinks.find(face);
+        return found == m_face_hyperlinks.end() ? nullptr : found->second;
+    }
+
+    tib::cstring m_faces;
+    std::map<char, const char*> m_face_hyperlinks;
+    uint32_t m_face_calls = 0;
+    uint32_t m_hyperlink_calls = 0;
     tib::input_buffer m_buffer;
     tib::display_manager m_display;
     std::map<char, tib::cstring> m_face_defs;
@@ -184,6 +207,371 @@ private:
     tib::style_info m_style;
     bool m_old_coalesce = false;
 };
+
+struct printed_hyperlink
+{
+    tib::cstring uri;
+    tib::cstring text;
+};
+
+// Inspect the actual OSC 8 stream, ignoring color changes but rejecting cursor
+// movement inside a hyperlink.  Each result is one begin/end pair.
+static std::vector<printed_hyperlink> printed_hyperlinks()
+{
+    std::vector<printed_hyperlink> runs;
+    const char* p = s_display_output.c_str();
+    while ((p = strstr(p, "\x1b]8;;")) != nullptr)
+    {
+        p += 5;
+        printed_hyperlink run;
+        const char* terminator = strchr(p, '\a');
+        REQUIRE(terminator != nullptr);
+        REQUIRE(terminator != p); // An unmatched end sequence has no URI.
+        run.uri.set(p, terminator - p);
+        p = terminator + 1;
+        while (strncmp(p, "\x1b]8;;\a", 6))
+        {
+            REQUIRE(*p != '\0');
+            if (*p == '\x1b')
+            {
+                REQUIRE(p[1] == '[');
+                p += 2;
+                while (*p && (*p < '@' || *p > '~'))
+                    ++p;
+                REQUIRE(*p == 'm');
+                ++p;
+            }
+            else
+                run.text.append(p++, 1);
+        }
+        p += 6;
+        runs.emplace_back(std::move(run));
+    }
+    return runs;
+}
+
+TEST_CASE("Display hyperlinks")
+{
+    constexpr const char* uri = "https://example.com/one";
+
+    SECTION("Adjacent linked faces use separate begin/end pairs even with equal URIs")
+    {
+        display_test_fixture fixture(20);
+        fixture.m_faces.set(".AAABBB.");
+        fixture.m_face_hyperlinks = { { 'A', uri }, { 'B', uri } };
+        fixture.set_text("(onetwo)", 8);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 2);
+        REQUIRE(runs[0].text == "one");
+        REQUIRE(runs[1].text == "two");
+        REQUIRE(runs[0].uri == uri);
+        REQUIRE(runs[1].uri == uri);
+        REQUIRE(fixture.m_hyperlink_calls == 4); // One lookup per face transition.
+    }
+
+    SECTION("An unchanged face run is reused, including caret-only updates")
+    {
+        display_test_fixture fixture;
+        fixture.m_faces.set(".AAA.");
+        fixture.m_face_hyperlinks['A'] = uri;
+        REQUIRE(fixture.display_initial("(one)", 5));
+        const uint32_t calls = fixture.m_hyperlink_calls;
+        fixture.m_display.invalidate();
+        REQUIRE(!fixture.m_display.display());
+        REQUIRE(printed_hyperlinks().empty());
+        REQUIRE(fixture.m_hyperlink_calls == calls);
+        const uint32_t face_calls = fixture.m_face_calls;
+        fixture.m_buffer.m_selection.set_caret(2);
+        REQUIRE(!fixture.m_display.display());
+        REQUIRE(fixture.m_face_calls == face_calls);
+        REQUIRE(fixture.m_hyperlink_calls == calls);
+    }
+
+    SECTION("Changing any byte repaints the whole face run and preserves its neighbor")
+    {
+        for (tib::textpos_t offset = 1; offset <= 3; ++offset)
+        {
+            display_test_fixture fixture(20);
+            fixture.m_faces.set(".AAABBB.");
+            fixture.m_face_hyperlinks = { { 'A', uri }, { 'B', uri } };
+            REQUIRE(fixture.display_initial("(onetwo)", 8));
+            fixture.m_buffer.m_text.set_at(offset, 'X');
+            ++fixture.m_buffer.m_change_counter;
+            REQUIRE(fixture.m_display.display());
+            const auto runs = printed_hyperlinks();
+            REQUIRE(runs.size() == 1);
+            REQUIRE(runs[0].text.length() == 3);
+            REQUIRE(runs[0].text.c_str()[offset - 1] == 'X');
+        }
+    }
+
+    SECTION("Selection changes repaint only the new face runs")
+    {
+        for (bool linked_selection : { false, true })
+        {
+            display_test_fixture fixture;
+            fixture.m_faces.set(".AAA.");
+            fixture.m_face_hyperlinks['A'] = uri;
+            if (linked_selection)
+                fixture.m_face_hyperlinks[tib::FACE_SELECTION] = uri;
+            REQUIRE(fixture.display_initial("(one)", 5));
+            fixture.m_buffer.m_selection.set_selection(2, 3);
+            REQUIRE(fixture.m_display.display());
+            auto runs = printed_hyperlinks();
+            if (linked_selection)
+            {
+                REQUIRE(runs.size() == 1);
+                REQUIRE(runs[0].text == "n");
+            }
+            else
+            {
+                REQUIRE(runs.empty());
+                REQUIRE(strstr(s_display_output.c_str(), "n") != nullptr);
+            }
+            s_display_output.clear();
+            fixture.m_buffer.m_selection.set_caret(3);
+            REQUIRE(fixture.m_display.display());
+            runs = printed_hyperlinks();
+            REQUIRE(runs.size() == 1);
+            REQUIRE(runs[0].text == "one");
+        }
+    }
+
+    SECTION("Matching whole linked faces can be trimmed from both ends")
+    {
+        display_test_fixture fixture;
+        fixture.m_faces.set("AAA.BBB");
+        fixture.m_face_hyperlinks = { { 'A', uri }, { 'B', uri } };
+        REQUIRE(fixture.display_initial("one-two", 7));
+        const uint32_t calls = fixture.m_hyperlink_calls;
+        fixture.set_text("one+two", 7);
+        REQUIRE(fixture.m_display.display());
+        REQUIRE(printed_hyperlinks().empty());
+        REQUIRE(strstr(s_display_output.c_str(), "+") != nullptr);
+        REQUIRE(fixture.m_hyperlink_calls == calls + 3); // Two trim faces and the printed unlinked face.
+    }
+
+    SECTION("A grapheme can contain multiple faces while trimming complete runs")
+    {
+        display_test_fixture fixture;
+        fixture.m_faces.set("ABBCC..DEEFF");
+        for (char face = 'A'; face <= 'F'; ++face)
+            fixture.m_face_hyperlinks[face] = uri;
+        REQUIRE(fixture.display_initial("a\xcc\x81\xcc\x82-xb\xcc\x81\xcc\x82", 12));
+        fixture.set_text("a\xcc\x81\xcc\x82+xb\xcc\x81\xcc\x82", 12);
+        REQUIRE(fixture.m_display.display());
+        REQUIRE(printed_hyperlinks().empty());
+    }
+
+    SECTION("Changing faces adds, changes, and removes hyperlinks")
+    {
+        display_test_fixture fixture;
+        fixture.m_faces.set(".AAA.");
+        fixture.m_face_hyperlinks = { { 'A', uri }, { 'B', "https://example.com/two" } };
+        REQUIRE(fixture.display_initial("(one)", 5));
+        for (const char* faces : { ".BBB.", ".....", ".AAA." })
+        {
+            s_display_output.clear();
+            fixture.m_faces.set(faces);
+            fixture.m_display.invalidate();
+            REQUIRE(fixture.m_display.display());
+            const auto runs = printed_hyperlinks();
+            if (faces[1] == '.')
+            {
+                REQUIRE(runs.empty());
+                REQUIRE(strstr(s_display_output.c_str(), "one") != nullptr);
+            }
+            else
+            {
+                REQUIRE(runs.size() == 1);
+                REQUIRE(runs[0].text == "one");
+                REQUIRE(runs[0].uri == fixture.m_face_hyperlinks[faces[1]]);
+            }
+        }
+    }
+
+    SECTION("Nonzero character values can identify linked faces")
+    {
+        for (char face : { char(1), char(0xff) })
+        {
+            display_test_fixture fixture;
+            fixture.m_faces.append_char(face, 3);
+            fixture.m_face_hyperlinks[face] = uri;
+            fixture.set_text("one", 3);
+            REQUIRE(fixture.m_display.display());
+            const auto runs = printed_hyperlinks();
+            REQUIRE(runs.size() == 1);
+            REQUIRE(runs[0].text == "one");
+        }
+    }
+
+    SECTION("Empty faces are never queried for hyperlinks")
+    {
+        for (char face : { tib::FACE_EMPTY, 'E' })
+        {
+            display_test_fixture fixture;
+            fixture.set_empty_face(face);
+            fixture.m_faces.append_char(face, 3);
+            fixture.m_face_hyperlinks[face] = uri;
+            REQUIRE(fixture.display_initial("abc", 3));
+            REQUIRE(fixture.m_hyperlink_calls == 0);
+            fixture.set_text("aXc", 3);
+            REQUIRE(fixture.m_display.display());
+            REQUIRE(fixture.m_hyperlink_calls == 0);
+            REQUIRE(printed_hyperlinks().empty());
+            REQUIRE(strstr(s_display_output.c_str(), "X") != nullptr);
+            REQUIRE(strstr(s_display_output.c_str(), "aXc") == nullptr);
+        }
+    }
+
+    SECTION("Empty faces close linked runs without starting hyperlinks")
+    {
+        for (char face : { tib::FACE_EMPTY, 'E' })
+        {
+            display_test_fixture fixture;
+            fixture.set_empty_face(face);
+            fixture.m_faces.append_char('A');
+            fixture.m_faces.append_char(face);
+            fixture.m_faces.append_char('A');
+            fixture.m_face_hyperlinks = { { 'A', uri }, { face, uri } };
+            fixture.set_text("a b", 3);
+            REQUIRE(fixture.m_display.display());
+            const auto runs = printed_hyperlinks();
+            REQUIRE(runs.size() == 2);
+            REQUIRE(runs[0].text == "a");
+            REQUIRE(runs[1].text == "b");
+            REQUIRE(fixture.m_hyperlink_calls == 2);
+        }
+    }
+
+    SECTION("Padding, empty rows, and erasing do not query empty-face hyperlinks")
+    {
+        display_test_fixture fixture(8, false, 2);
+        fixture.set_empty_face('E');
+        fixture.m_face_hyperlinks = { { tib::FACE_INPUT, uri }, { 'E', uri }, { tib::FACE_EMPTY, uri } };
+        fixture.set_text("abc", 3);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 1);
+        REQUIRE(runs[0].text == "abc");
+        REQUIRE(fixture.m_hyperlink_calls == 1);
+        s_display_output.clear();
+        fixture.set_text("", 0);
+        REQUIRE(fixture.m_display.display());
+        REQUIRE(printed_hyperlinks().empty());
+        REQUIRE(fixture.m_hyperlink_calls == 1);
+    }
+
+    SECTION("Wrapped linked faces are anchored and diffed separately per row")
+    {
+        display_test_fixture fixture(8, false, 3, true);
+        fixture.m_faces.set(".AAAAAAAAAAAA.");
+        fixture.m_face_hyperlinks['A'] = uri;
+        fixture.set_text("(abcdefghijkl)", 14);
+        REQUIRE(fixture.m_display.display());
+        auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 2);
+        REQUIRE(runs[0].text == "abcdefg");
+        REQUIRE(runs[1].text == "hijkl");
+        s_display_output.clear();
+        fixture.set_text("(abcXefghijkl)", 14);
+        REQUIRE(fixture.m_display.display());
+        runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 1);
+        REQUIRE(runs[0].text == "abcXefg");
+    }
+
+    SECTION("UTF-8, expanded controls, and invalid bytes use their assigned faces")
+    {
+        display_test_fixture fixture(30);
+        fixture.m_faces.set(".AAAAAAB.");
+        fixture.m_face_hyperlinks = { { 'A', uri }, { 'B', uri } };
+        fixture.set_text("(a\xcc\x81\x01\xc2\xa2\xff)", 9);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 2);
+        REQUIRE(runs[0].text == "a\xcc\x81^A\xc2\xa2");
+        REQUIRE(runs[1].text == tib::c_replacement_character);
+    }
+
+    SECTION("A control character split between rows links both printed halves")
+    {
+        display_test_fixture fixture(8, false, 3, true);
+        fixture.m_faces.set("......AAA");
+        fixture.m_face_hyperlinks['A'] = uri;
+        fixture.set_text("abcdefg\x01h", 9);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 2);
+        REQUIRE(runs[0].text == "g^");
+        REQUIRE(runs[1].text == "Ah");
+    }
+
+    SECTION("Suggestions do not inherit the input face's hyperlink")
+    {
+        display_test_fixture fixture(20);
+        fixture.m_face_hyperlinks[tib::FACE_INPUT] = uri;
+        fixture.m_display.set_suggestion_text("suggestion", 10);
+        fixture.set_text("one", 3);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 1);
+        REQUIRE(runs[0].text == "one");
+        REQUIRE(fixture.m_buffer.m_text == "one");
+    }
+
+    SECTION("Horizontal scroll markers have their own unlinked face")
+    {
+        display_test_fixture fixture(10, true);
+        fixture.m_face_hyperlinks[tib::FACE_INPUT] = uri;
+        fixture.set_text("abcdefghijklmnopqrst", 8);
+        fixture.m_display.set_scroll_offsets(4, 0);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 1);
+        REQUIRE(runs[0].text == "fghijklm");
+    }
+
+    SECTION("Vertical scroll markers and padding have their own unlinked faces")
+    {
+        display_test_fixture fixture(8, true, 2);
+        fixture.m_face_hyperlinks[tib::FACE_INPUT] = uri;
+        fixture.set_text("abcdefgh\xe4\xb8\xadijklmnopqrstuvwxyz123456", 20);
+        fixture.m_display.set_scroll_offsets(0, 1);
+        REQUIRE(fixture.m_display.display());
+        const auto runs = printed_hyperlinks();
+        REQUIRE(runs.size() == 2);
+        REQUIRE(runs[0].text == "ijklmn");
+        REQUIRE(runs[1].text == "opqrstu");
+    }
+
+    SECTION("Finishing a physical terminal wrap repaints complete linked faces")
+    {
+        for (int full_row = 0; full_row < 2; ++full_row)
+        {
+            display_test_fixture fixture(tib::int16_max, false, 3, true);
+            const tib::textpos_t width = tib::get_terminal_size().x;
+            const tib::textpos_t length = full_row ? width : 5;
+            tib::cstring text;
+            text.append_char('x', width);
+            text.append_char('L', length);
+            fixture.m_faces.append_char('.', width);
+            fixture.m_faces.append_char('A', length);
+            fixture.m_face_hyperlinks['A'] = uri;
+            fixture.set_text(text.c_str(), tib::textpos_t(text.length()));
+            REQUIRE(fixture.m_display.display());
+            const auto runs = printed_hyperlinks();
+            REQUIRE(runs.size() == 2);
+            for (const auto& run : runs)
+            {
+                REQUIRE(run.text.length() == size_t(length));
+                REQUIRE(strspn(run.text.c_str(), "L") == size_t(length));
+            }
+            REQUIRE(fixture.m_display.get_relative_cursor().y == (full_row ? 2 : 1));
+        }
+    }
+}
 
 TEST_CASE("Display differential updates")
 {

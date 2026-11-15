@@ -274,6 +274,7 @@ private:
     void                move_to_row(coord& cursor, int16_t y, uint16_t inner_offset);
     void                move_to_column(coord& cursor, int16_t x, uint16_t inner_offset, bool force=false);
     void                print_text_with_faces(coord& cursor, const char* text, const char* faces, size_t len);
+    const char*         get_face_hyperlink(char face) const;
     const char*         get_face_def(char face) const;
     bool                try_update_caret_only();
     bool                display_internal(display_lines& lines);

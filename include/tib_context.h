@@ -428,6 +428,7 @@ struct editor_callbacks
 {
     virtual void        provide_faces(const input_buffer& buffer, cstring& faces) {}
     virtual const char* get_face_def(const input_buffer& buffer, char face) { return nullptr; }
+    virtual const char* get_face_hyperlink(char face) { return nullptr; }
     virtual void        do_display(editor_context& ctx) { ctx.display(); }
     virtual bool        on_dispatch(editor_context& ctx, const char* name) { return false; }
     virtual void        on_dispatched(editor_context& ctx, const char* name) {}

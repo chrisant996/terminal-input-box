@@ -1032,11 +1032,28 @@ void display_manager::force_redisplay()
 
 void display_manager::print_text_with_faces(coord& cursor, const char* t, const char* f, size_t len)
 {
-    char face = 0;
+    static const char c_hyperlink[] = "\x1b]8;;";
+    static const char c_BEL[] = "\a";
+
+    char face = FACE_EMPTY;
+    bool hyperlink = false;
     while (len > 0)
     {
         if (*f != face)
         {
+            if (hyperlink)
+            {
+                output(c_hyperlink);
+                output(c_BEL);
+            }
+            const char* uri = get_face_hyperlink(*f);
+            hyperlink = (uri && *uri);
+            if (hyperlink)
+            {
+                output(c_hyperlink);
+                output(uri);
+                output(c_BEL);
+            }
             output_color(get_face_def(*f));
             face = *f;
         }
@@ -1058,6 +1075,11 @@ void display_manager::print_text_with_faces(coord& cursor, const char* t, const 
         f += clen;
         len -= clen;
         cursor.x += iter.character_wcwidth_twoctrl();
+    }
+    if (hyperlink)
+    {
+        output(c_hyperlink);
+        output(c_BEL);
     }
 }
 
@@ -1308,23 +1330,34 @@ bool display_manager::display_internal(display_lines& lines)
                 const size_t limit_forward_skip = min(displayed->m_text.length(), line->m_text.length());
 
                 // Walk forward past a leading portion that exactly matches.
-                size_t displayed_begin = 0;
+                size_t candidate_begin = 0;
+                uint16_t candidate_width = 0;
+                char face = FACE_EMPTY;
+                bool hyperlink = false;
                 const size_t displayed_length = displayed->m_text.length();
-                while (reuse_left_text && begin < end && displayed_begin < limit_forward_skip)
+                while (reuse_left_text && candidate_begin < limit_forward_skip)
                 {
                     uint16_t width;
-                    const size_t next = forward_one_grapheme(line->m_text.c_str(), end, uint32_t(begin), &width);
-                    const size_t displayed_next = forward_one_grapheme(displayed->m_text.c_str(), displayed_length, uint32_t(displayed_begin));
-                    const size_t length = next - begin;
-                    const size_t displayed_grapheme_length = displayed_next - displayed_begin;
-                    if (length != displayed_grapheme_length ||
-                        memcmp(line->m_text.c_str() + begin, displayed->m_text.c_str() + displayed_begin, length) != 0 ||
-                        memcmp(line->m_faces.c_str() + begin, displayed->m_faces.c_str() + displayed_begin, length) != 0)
+                    const size_t next = forward_one_grapheme(line->m_text.c_str(), end, uint32_t(candidate_begin), &width);
+                    const size_t displayed_next = forward_one_grapheme(displayed->m_text.c_str(), displayed_length, uint32_t(candidate_begin));
+                    const size_t length = next - candidate_begin;
+                    if (next != displayed_next ||
+                        memcmp(line->m_text.c_str() + candidate_begin, displayed->m_text.c_str() + candidate_begin, length) != 0 ||
+                        memcmp(line->m_faces.c_str() + candidate_begin, displayed->m_faces.c_str() + candidate_begin, length) != 0)
                         break;
 
-                    begin = next;
-                    displayed_begin = displayed_next;
-                    begin_width += width;
+                    candidate_begin = next;
+                    candidate_width += width;
+                    if (face != line->m_faces.c_str()[next - 1])
+                    {
+                        face = line->m_faces.c_str()[next - 1];
+                        hyperlink = get_face_hyperlink(face) != nullptr;
+                    }
+                    if (!hyperlink || next == end || line->m_faces.c_str()[next] != face)
+                    {
+                        begin = candidate_begin;
+                        begin_width = candidate_width;
+                    }
                 }
 
                 // Walk backward past a trailing portion that exactly matches.
@@ -1343,20 +1376,30 @@ bool display_manager::display_internal(display_lines& lines)
                 // could reduce the number of bytes printed to the terminal.
                 if (displayed->m_x2 == line->m_x2)
                 {
+                    size_t candidate_end = end;
                     size_t displayed_end = displayed_length;
-                    while (end > begin && displayed_end > displayed_begin)
+                    face = FACE_EMPTY;
+                    hyperlink = false;
+                    while (candidate_end > begin && displayed_end > candidate_begin)
                     {
-                        const size_t previous = backward_one_grapheme(line->m_text.c_str(), line->m_text.length(), uint32_t(end));
+                        const size_t previous = backward_one_grapheme(line->m_text.c_str(), line->m_text.length(), uint32_t(candidate_end));
                         const size_t displayed_previous = backward_one_grapheme(displayed->m_text.c_str(), displayed_length, uint32_t(displayed_end));
-                        const size_t length = end - previous;
+                        const size_t length = candidate_end - previous;
                         const size_t displayed_grapheme_length = displayed_end - displayed_previous;
                         if (length != displayed_grapheme_length ||
                             memcmp(line->m_text.c_str() + previous, displayed->m_text.c_str() + displayed_previous, length) != 0 ||
                             memcmp(line->m_faces.c_str() + previous, displayed->m_faces.c_str() + displayed_previous, length) != 0)
                             break;
 
-                        end = previous;
+                        candidate_end = previous;
                         displayed_end = displayed_previous;
+                        if (face != line->m_faces.c_str()[previous])
+                        {
+                            face = line->m_faces.c_str()[previous];
+                            hyperlink = get_face_hyperlink(face) != nullptr;
+                        }
+                        if (!hyperlink || !previous || line->m_faces.c_str()[previous - 1] != face)
+                            end = candidate_end;
                     }
                 }
             }
@@ -1714,6 +1757,19 @@ void display_manager::move_to_column(coord& cursor, int16_t x, uint16_t inner_of
     }
 
     cursor.x = x;
+}
+
+const char* display_manager::get_face_hyperlink(char face) const
+{
+    if (!(face == FACE_EMPTY) &&
+        m_callbacks &&
+        !(m_style && face == m_style->empty_face))
+    {
+        const char* uri = m_callbacks->get_face_hyperlink(face);
+        if (uri && *uri)
+            return uri;
+    }
+    return nullptr;
 }
 
 const char* display_manager::get_face_def(char face) const
@@ -2475,8 +2531,17 @@ void display_manager::finish_pending_wrap(coord& cursor)
             bytes = uint32_t(iter.get_pointer() - d.m_text.c_str());
             if (bytes)
             {
-                coord dummy;
+                // Forcing a wrap must also repaint the whole linked face run.
+                const char face = d.m_faces.c_str()[bytes - 1];
+                if (get_face_hyperlink(face))
+                {
+                    while (bytes < d.m_text.length() && d.m_faces.c_str()[bytes] == face)
+                        ++bytes;
+                }
+                coord dummy = { 0, 0 };
                 print_text_with_faces(dummy, d.m_text.c_str(), d.m_faces.c_str(), bytes);
+                if (m_autowrap_bug && dummy.x >= m_term_size.x)
+                    output(term_move_up(1));
                 output("\r", 1);
             }
         }
