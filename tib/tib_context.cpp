@@ -26,7 +26,7 @@ constexpr uint8_t NUMFLAG_HAS_ARG_DIGITS    = 0x08; // Because minus sign is not
 constexpr uint8_t NUMFLAG_UNIVERSAL_MODE    = 0x10; // Universal-argument mode; behaves slightly differently than digit-argument mode.
 constexpr uint8_t NUMFLAG_HAS_UNI_DIGITS    = 0x20; // Digits entered since the last universal-argument.
 
-static std::shared_ptr<const key_table_list> make_digit_argument_key_table(bool leading_minus=false)
+static std::shared_ptr<const key_table> make_digit_argument_key_table(bool leading_minus=false)
 {
     auto table = std::make_shared<key_table>(false/*can_self_insert*/);
     char seq[3] = { 0x1b, '0' };
@@ -43,12 +43,10 @@ static std::shared_ptr<const key_table_list> make_digit_argument_key_table(bool 
         table->add(seq + 1, binding_target_func("digit-argument"));
     }
 
-    auto table_list = std::make_shared<key_table_list>();
-    table_list->emplace_back(std::move(table));
-    return table_list;
+    return table;
 }
 
-static std::shared_ptr<key_table> make_parameter_key_table()
+static std::shared_ptr<const key_table> make_parameter_key_table()
 {
     auto t = make_default_key_table();
     t->remove("\r");
@@ -65,16 +63,16 @@ static std::shared_ptr<key_table> make_parameter_key_table()
     return t;
 }
 
-static std::shared_ptr<const key_table_list> get_digit_argument_key_table()
+static std::shared_ptr<const key_table> get_digit_argument_key_table()
 {
-    static const auto s_digits_table_list = make_digit_argument_key_table();
-    return s_digits_table_list;
+    static const auto s_digits_table = make_digit_argument_key_table();
+    return s_digits_table;
 }
 
-static std::shared_ptr<const key_table_list> get_universal_argument_key_table()
+static std::shared_ptr<const key_table> get_universal_argument_key_table()
 {
-    static const auto s_universal_table_list = make_digit_argument_key_table(true/*leading_minus*/);
-    return s_universal_table_list;
+    static const auto s_universal_table = make_digit_argument_key_table(true/*leading_minus*/);
+    return s_universal_table;
 }
 
 undo_entry::~undo_entry()
@@ -1037,7 +1035,7 @@ void editor_context::clear_numeric_argument()
     m_numflags = 0;
     m_sign_numeric_argument = 1;
     m_numeric_argument = 0;
-    apply_override_bindings();
+    apply_argument_bindings();
     apply_message_text();
 }
 
@@ -1155,7 +1153,7 @@ bool editor_context::numeric_digit(int32_t key)
 
     set_auto_clear_numeric_argument(false);
     m_numflags |= NUMFLAG_ARGUMENT_MODE;
-    apply_override_bindings();
+    apply_argument_bindings();
     apply_message_text();
     return true;
 }
@@ -1199,13 +1197,19 @@ bool editor_context::universal_argument()
     }
 
     set_auto_clear_numeric_argument(false);
-    apply_override_bindings();
+    apply_argument_bindings();
     apply_message_text();
     return true;
 }
 
 bool editor_context::start_read_parameter(parameter_request request)
 {
+    // Ideally this would require at least one non-empty key_table and one
+    // non-empty command_table.  But that makes unit tests messy, and an
+    // author should test their code, so they should realize very quickly
+    // when they've forgotten to add key bindings and/or commands to accept
+    // the parameter string.
+
     assert(!m_done);
     if (m_done)
         return false;
@@ -1218,24 +1222,22 @@ bool editor_context::start_read_parameter(parameter_request request)
     if (m_edit->undo.m_grouping)
         return false;
 
-    assert(request.bindings);
-    if (!request.bindings)
-        return false;
-
     request.max_length = min<uint32_t>(request.max_length, int16_max);
     if (request.initial_text.length() > request.max_length)
         return false;
 
-    static std::shared_ptr<key_table> s_parameter_key_table;
+    static std::shared_ptr<const key_table> s_parameter_key_table;
     if (!s_parameter_key_table)
         s_parameter_key_table = make_parameter_key_table();
+
     auto tables = std::make_shared<key_table_list>();
-    tables->emplace_back(s_parameter_key_table);
-    tables->emplace_back(request.bindings);
+    tables->push_back(s_parameter_key_table);
+    const auto& bindings = request.bindings;
+    tables->insert(tables->end(), bindings.begin(), bindings.end());
 
     m_reading_parameter = std::make_unique<reading_parameter>();
     m_reading_parameter->request = std::move(request);
-    m_reading_parameter->bindings = std::move(tables);
+    m_reading_parameter->bindings = add_bindings(std::move(tables), binding_policy::exclusive);
     m_reading_parameter->orig_buffer = std::move(m_buffer);
     m_reading_parameter->orig_editing_state = std::move(m_edit);
     m_reading_parameter->had_argument = has_numeric_argument();
@@ -1252,7 +1254,6 @@ bool editor_context::start_read_parameter(parameter_request request)
     set_overwrite_mode(get_overwrite_mode());
     clear_was_kill_command();
 
-    apply_override_bindings();
     force_redisplay();
     return true;
 }
@@ -1276,6 +1277,7 @@ void editor_context::cancel_read_parameter()
         return;
 
     auto r = std::move(m_reading_parameter);
+    r->bindings.remove();
 
     m_buffer.m_selection = std::move(r->orig_buffer.m_selection);
     m_buffer.m_text = std::move(r->orig_buffer.m_text);
@@ -1291,14 +1293,9 @@ void editor_context::cancel_read_parameter()
     set_overwrite_mode(get_overwrite_mode());
     clear_was_kill_command();
 
-    apply_override_bindings();
+    apply_argument_bindings();
     force_redisplay();
 }
-
-// TODO-PARAM: When hosted in Clink the parameter input override bindings have
-// to be able to allow an additional set of host bindings to supersede the
-// override bindings so that clink-select-complete's interactive completion
-// can work.
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column, bool exclude_auto_scroll)
 {
@@ -1375,25 +1372,21 @@ void editor_context::apply_message_text()
     }
 }
 
-void editor_context::apply_override_bindings()
+void editor_context::apply_argument_bindings()
 {
-    if (m_reading_parameter)
-    {
-        override_bindings(m_reading_parameter->bindings, false/*fall_back_on_miss*/);
-        return;
-    }
-
-    std::shared_ptr<const key_table_list> bindings;
-
-    if (m_numflags & NUMFLAG_ARGUMENT_MODE)
+    if (!m_reading_parameter && (m_numflags & NUMFLAG_ARGUMENT_MODE))
     {
         const bool uni = ((m_numflags & NUMFLAG_UNIVERSAL_MODE) &&
                           !(m_numflags & NUMFLAG_HAS_ARG_DIGITS) &&
                           m_sign_numeric_argument > 0);
-        bindings = (uni ? get_universal_argument_key_table() : get_digit_argument_key_table());
+        auto table = (uni ? get_universal_argument_key_table() : get_digit_argument_key_table());
+        m_argument_bindings.remove();
+        m_argument_bindings = add_bindings(std::move(table), binding_policy::fallback);
     }
-
-    override_bindings(bindings, true/*fall_back_on_miss*/);
+    else
+    {
+        m_argument_bindings.remove();
+    }
 }
 
 void editor_context::insert_raw_char(char c)
@@ -1959,17 +1952,23 @@ int32_t editor_context::dispatch(const cstring& sequence, int32_t key, const bin
     return ret;
 }
 
-void editor_context::on_binding_fallback() noexcept
+void editor_context::on_binding_fallback(const binding_handle& handle_crossed) noexcept
 {
-    if (m_numflags & NUMFLAG_ARGUMENT_MODE)
+    if (m_argument_bindings &&
+        handle_crossed == m_argument_bindings &&
+        (m_numflags & NUMFLAG_ARGUMENT_MODE))
     {
         m_numflags &= ~NUMFLAG_ARGUMENT_MODE;
-        apply_override_bindings();
+        apply_argument_bindings();
         apply_message_text();
         if (m_callbacks)
             m_callbacks->do_display(*this);
         else
             display();
+    }
+    else if (m_callbacks)
+    {
+        m_callbacks->on_binding_fallback(*this, handle_crossed);
     }
 }
 

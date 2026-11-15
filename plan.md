@@ -60,7 +60,25 @@ Do not use word-wrapping in this document; it's unnecessary because the human re
 
 Readline likes to go into modal dispatch loops.  That design choice creates problems for some hosts.  When tib wants a modal dispatch loop, it needs to find a stateful way to achieve the desired functional behaviors without actually using a modal dispatch loop.
 
-`digit_argument` and `editor_context::apply_override_bindings` show how to accomplish the effect of a modal dispatch loop without actually using a modal dispatch loop.
+`digit_argument` and `editor_context::apply_argument_bindings` show how to accomplish the effect of a modal dispatch loop without actually using a modal dispatch loop.
+
+## Binding stack
+
+Each noncopyable `dispatcher_target` is owned by a `shared_ptr`.  Each registration supplies one explicit `key_table_list` and one `binding_policy`.  `add_bindings(tables, policy)` retains the supplied list as-is; `add_bindings(table, policy)` wraps a single non-null table in a new list.  The supplier owns the list's contents and may add, remove, reorder, or replace tables without changing the registration or its policy.  Later tables within a list have priority for equal-length matches, and all tables within the list participate in longest-match resolution.  An empty list is allowed and retains its policy boundary.
+
+Both overloads return a value-type `binding_handle` which the caller may discard without removing the bindings.  `handle.remove()` explicitly removes that registration without reordering the others and is harmless if already expired.  Registering the same table or list twice creates distinct registrations.  A handle is only a weak reference; it does not own the target or tables.  Default-constructed, moved-from, and removed handles evaluate to false; copies identify the same registration and observe removal through any copy.  `get_bindings()` exposes const group records for inspection.  Vector mutations can invalidate references and iterators to those records, while copied handles remain usable.
+
+Each group's policy describes its relationship to lower registrations:
+
+- `binding_policy::overlay` searches the list together with lower groups.  Longest-match resolution spans those groups, with later-group priority for equal-length matches, until a fallback or exclusive policy determines whether to continue.
+- `binding_policy::fallback` searches below only after a miss.  A viable prefix, complete binding, or self-insert candidate prevents fallback.  On a miss the accumulated sequence is retried against the next group.
+- `binding_policy::exclusive` never searches below, even on a miss.  This only excludes lower registrations on that target; it does not exclude other dispatcher targets.
+
+The policy belongs to the registered list, so removing its first table does not remove a boundary or change which registration receives a fallback notification.  A boundary with no lower groups has nowhere to fall back.  Fallback does not remove registrations automatically.  Each crossed boundary is remembered by its handle while the input sequence is pending, and `on_binding_fallback(handle)` is called in search order when dispatch commits the result, including a final miss.  Probing never invokes callbacks.  Pending notifications retain neither targets nor lists.  Removed registrations are skipped, including removal by an earlier callback.  Re-registering the same list creates a new identity and cannot revive a notification for a removed registration.  Discarding a handle preserves notification; removing its registration cancels it.  An owner can end its mode by calling `handle.remove()`, or leave it active to keep allowing fallthrough.  `editor_context` handles its numeric-argument group itself and forwards host groups to `editor_callbacks::on_binding_fallback(ctx, handle)`.
+
+Numeric-argument bindings use a fallback group; switching argument tables removes the old registration and adds the appropriate table through the public API.  Numeric argument mode does not support pushing other modes above it and then switching its tables beneath them.  Parameter requests must supply a nonempty vector of non-null shared key tables so the caller cannot forget to provide bindings to accept the parameter.  The editor builds one exclusive list containing the built-in parameter-editing table followed by the request's tables in vector order; later tables have priority.  The vector supplies additional tables rather than a separately registered group.  Hosts can append sub-mode groups with any policy while a request is active.  Ending the request removes only its own group through its handle.  Other registrations remain active regardless of when they were added, and their suppliers are responsible for removing them.  Outstanding copies of the request group's handle become expired.
+
+To supply a group of overlaid tables, put them in one `key_table_list` and register the list with the desired policy.  Use the single-table overload when only one table is needed.  To supersede outer bindings, register the new list or table using `exclusive`.
 
 ## Internal encoding
 

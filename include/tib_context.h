@@ -110,11 +110,17 @@ struct editing_state
 
 struct parameter_request
 {
-    // cstring             purpose;
     text_and_width      prompt;
     cstring             initial_text;
     uint32_t            max_length = int16_max;
-    std::shared_ptr<key_table> bindings;
+    // Additional tables, in priority order; later tables override earlier
+    // ones and the built-in parameter bindings.  At least one non-null table
+    // is required.
+    std::vector<std::shared_ptr<key_table>> bindings;
+    // Additional commands, invokable only while the parameter_request is
+    // active (note that the commands are invokable from any key tables for as
+    // long as the parameter_request is active.  At least one command is
+    // required (otherwise how could a parameter be accepted?).
     std::shared_ptr<const command_table> commands;
 };
 
@@ -134,7 +140,7 @@ public:
 
     // tib::dispatcher_target interface...
     int32_t             dispatch(const cstring& sequence, int32_t key, const binding_target* binding, const resolved_binding* resolved) noexcept override;
-    void                on_binding_fallback() noexcept override;
+    void                on_binding_fallback(const binding_handle& handle_crossed) noexcept override;
     void                report_error(const char* msg) noexcept override;
 
     // Configuration.
@@ -346,7 +352,7 @@ private:
     void                insert_raw_char(char c);
     void                clear_overwrite_input();
     void                apply_message_text();
-    void                apply_override_bindings();
+    void                apply_argument_bindings();
 
 private:
     // Configuration.
@@ -376,12 +382,13 @@ private:
     int8_t              m_sign_numeric_argument = 0;
     int32_t             m_numeric_argument = 0;
     int32_t             m_quoted_insert_count = 0;
+    binding_handle      m_argument_bindings;
 
     // Read parameter string.
     struct reading_parameter
     {
         parameter_request   request;
-        std::shared_ptr<const key_table_list> bindings;
+        binding_handle      bindings;
         input_buffer        orig_buffer;
         std::unique_ptr<editing_state> orig_editing_state;
         bool                had_argument = false;
@@ -424,6 +431,7 @@ struct editor_callbacks
     virtual void        do_display(editor_context& ctx) { ctx.display(); }
     virtual bool        on_dispatch(editor_context& ctx, const char* name) { return false; }
     virtual void        on_dispatched(editor_context& ctx, const char* name) {}
+    virtual void        on_binding_fallback(editor_context& ctx, const binding_handle& handle_crossed) {}
 };
 
 } // namespace tib

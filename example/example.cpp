@@ -134,8 +134,9 @@ static const bar_padding_border_definition c_bar_padding_border;
 static const bar_padding_border_definition c_first_line_border("> ", " HH:MM");
 #pragma endregion // Example customizations.
 
-std::shared_ptr<tib::key_table_list> s_normal_bindings;
-std::shared_ptr<tib::key_table_list> s_movement_bindings;
+std::vector<std::shared_ptr<tib::key_table>> s_normal_bindings;
+std::shared_ptr<tib::key_table> s_movement_bindings;
+tib::binding_handle s_movement_handle;
 
 int32_t insert_newline(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
 {
@@ -145,13 +146,14 @@ int32_t insert_newline(tib::editor_context& ctx, int32_t, const char*, const tib
 
 int32_t normal_mode(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
 {
-    ctx.set_bindings(s_normal_bindings);
+    s_movement_handle.remove();
     return 0;
 }
 
 int32_t movement_mode(tib::editor_context& ctx, int32_t, const char*, const tib::resolved_binding*) noexcept
 {
-    ctx.set_bindings(s_movement_bindings);
+    if (!s_movement_handle)
+        s_movement_handle = ctx.add_bindings(s_movement_bindings, tib::binding_policy::exclusive);
     return 0;
 }
 
@@ -181,7 +183,7 @@ int32_t print_parameter(tib::editor_context& ctx, int32_t, const char*, const ti
     bindings->add("\r", tib::binding_target_func("print-parameter-result"));
     tib::parameter_request request;
     request.prompt.set("Text: ", 6);
-    request.bindings = std::move(bindings);
+    request.bindings.push_back(std::move(bindings));
     request.commands = commands;
     if (!ctx.start_read_parameter(std::move(request)))
         tib::ding();
@@ -195,11 +197,11 @@ void make_key_tables()
     tib::editor_context::register_command("movement-mode", movement_mode);
     tib::editor_context::register_command("print-parameter", print_parameter);
 
-    s_normal_bindings = std::make_shared<tib::key_table_list>();
+    s_normal_bindings.clear();
     {
         auto t = tib::make_default_key_table(true/*numeric_argument*/);
         t->remove("\030");   // Avoid shadowing Ctrl-X.
-        s_normal_bindings->emplace_back(std::move(t));
+        s_normal_bindings.emplace_back(std::move(t));
 
         t = std::make_shared<tib::key_table>();
         t->add("\033", tib::binding_target_func("del-line"));           // ESC by itself
@@ -215,10 +217,9 @@ void make_key_tables()
         t->add("\030(", tib::binding_target_func("start-kbd-macro"));               // Ctrl-X,(
         t->add("\030)", tib::binding_target_func("end-kbd-macro"));                 // Ctrl-X,)
         t->add("\030e", tib::binding_target_func("call-last-kbd-macro"));           // Ctrl-X,e
-        s_normal_bindings->emplace_back(t);
+        s_normal_bindings.emplace_back(t);
     }
 
-    s_movement_bindings = std::make_shared<tib::key_table_list>();
     {
         auto t = std::make_shared<tib::key_table>();
         t->add("\033", tib::binding_target_func("normal-mode"));        // ESC by itself
@@ -268,7 +269,7 @@ void make_key_tables()
             t->add(seq, tib::binding_target_func("digit-argument"));
         t->add("-", tib::binding_target_func("digit-argument"));
         t->add("\030\001", tib::binding_target_func("normal-mode"));    // Ctrl-X,Ctrl-A
-        s_movement_bindings->emplace_back(t);
+        s_movement_bindings = std::move(t);
     }
 }
 
@@ -399,7 +400,7 @@ static void display_feedback(tib::editor_context& ctx, const tib::cstring& show_
     tib::cstring tmp;
     std::vector<tib::additional_display_line> additional;
 
-    if (ctx.get_bindings() == s_movement_bindings)
+    if (s_movement_handle)
     {
         add_feedback_line("96;44", "^A=begline  ^B=left  ^E=endline  ^F=right  ^Q=up  ^Z=down", additional);
         add_feedback_line("96;44", "b/B=left-char/word  f/F=right-char/word  q/z=line-up/down", additional);
@@ -446,7 +447,8 @@ int main(int argc, const char** argv)
 
     std::shared_ptr<custom_input_box> tib = std::make_shared<custom_input_box>();
     make_key_tables();  // BUGBUG: should not require an editor_context to have been created.
-    tib->set_bindings(s_normal_bindings);
+    for (const auto& table : s_normal_bindings)
+        tib->add_bindings(table);
     tib->set_max_width(40);
 
 #pragma region Example customizations.
