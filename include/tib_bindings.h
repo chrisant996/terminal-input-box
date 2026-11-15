@@ -197,6 +197,7 @@ public:
     // the returned handle if needed for inspection or explicit removal.
     // get_bindings() exposes a copy of the binding stack for inspection.
     const binding_stack& get_bindings() const noexcept { return m_bindings; }
+    void                clear_all_bindings();
     binding_handle      add_bindings(std::shared_ptr<const key_table> table, binding_policy policy=binding_policy::overlay);
     binding_handle      add_bindings(std::shared_ptr<const key_table_list> tables, binding_policy policy=binding_policy::overlay);
     int32_t             push_macro_text(const char* macro, size_t len);

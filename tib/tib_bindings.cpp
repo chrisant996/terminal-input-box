@@ -393,6 +393,11 @@ void dispatcher_target::remove_bindings(const binding_handle& handle) noexcept
         m_bindings.erase(found);
 }
 
+void dispatcher_target::clear_all_bindings()
+{
+    m_bindings.clear();
+}
+
 binding_handle dispatcher_target::add_bindings(std::shared_ptr<const key_table> table, binding_policy policy)
 {
     assert(table);
