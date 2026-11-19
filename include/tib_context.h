@@ -349,7 +349,7 @@ public:
     static void         clear_all_commands();
     static void         register_command(const char* name, editor_command_func_t func);
     static const std::map<const char*, editor_command_func_t, stricmp_less>& get_registered_commands();
-    static editor_command_func_t lookup_command(const char* name); // Global commands only.
+    static editor_command_func_t lookup_registered_command(const char* name); // Global commands only.
     editor_command_func_t find_available_command(const char* name) const; // Includes contextual commands (m_reading_parameter).
 
 private:

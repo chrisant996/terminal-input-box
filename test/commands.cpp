@@ -18,7 +18,7 @@ static void initialize_context(tib::editor_context& context, const char* text,
 
 static void invoke_command(tib::editor_context& context, const char* name)
 {
-    const auto command = tib::editor_context::lookup_command(name);
+    const auto command = tib::editor_context::lookup_registered_command(name);
     REQUIRE(command != nullptr);
     REQUIRE(command(context, 0, name, nullptr) == 0);
 }
@@ -110,8 +110,8 @@ TEST_CASE("Parameter request commands")
         REQUIRE(context->find_available_command("backward-char") == tib::backward_char);
         REQUIRE(context->find_available_command(nullptr) == nullptr);
         REQUIRE(context->find_available_command("missing-command") == nullptr);
-        REQUIRE(tib::editor_context::lookup_command("parameter-end") == nullptr);
-        REQUIRE(tib::editor_context::lookup_command("forward-char") == tib::forward_char);
+        REQUIRE(tib::editor_context::lookup_registered_command("parameter-end") == nullptr);
+        REQUIRE(tib::editor_context::lookup_registered_command("forward-char") == tib::forward_char);
         REQUIRE(other.find_available_command("parameter-end") == tib::begin_of_line);
         REQUIRE(other.find_available_command("forward-char") == tib::forward_char);
 
@@ -1039,7 +1039,7 @@ TEST_CASE("Select word command")
     {
         tib::editor_context context;
         initialize_context(context, "alpha beta", 2);
-        const auto command = tib::editor_context::lookup_command("select-word");
+        const auto command = tib::editor_context::lookup_registered_command("select-word");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "select-word", nullptr) == 0);
         const auto& selection = context.get_selection_state();
@@ -1052,7 +1052,7 @@ TEST_CASE("Select word command")
         static const char text[] = "x \xc3\xa9" "e\xcc\x81" "y z";
         tib::editor_context context;
         initialize_context(context, text, 5);
-        const auto command = tib::editor_context::lookup_command("select-word");
+        const auto command = tib::editor_context::lookup_registered_command("select-word");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "select-word", nullptr) == 0);
         const auto& selection = context.get_selection_state();
@@ -1064,7 +1064,7 @@ TEST_CASE("Select word command")
     {
         tib::editor_context context;
         initialize_context(context, "alpha beta", 10);
-        const auto command = tib::editor_context::lookup_command("select-word");
+        const auto command = tib::editor_context::lookup_registered_command("select-word");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "select-word", nullptr) == 0);
         const auto& selection = context.get_selection_state();
@@ -1275,7 +1275,7 @@ TEST_CASE("Transpose chars command")
     {
         tib::editor_context context;
         initialize_context(context, "abcd", 2);
-        const auto command = tib::editor_context::lookup_command("transpose-chars");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
         REQUIRE(context.get_text() == "acbd");
@@ -1286,7 +1286,7 @@ TEST_CASE("Transpose chars command")
     {
         tib::editor_context context;
         initialize_context(context, "abcd", 4);
-        const auto command = tib::editor_context::lookup_command("transpose-chars");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
         REQUIRE(context.get_text() == "abdc");
@@ -1298,7 +1298,7 @@ TEST_CASE("Transpose chars command")
         static const char text[] = "a" "e\xcc\x81" "b";
         tib::editor_context context;
         initialize_context(context, text, 4);
-        const auto command = tib::editor_context::lookup_command("transpose-chars");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
         REQUIRE(context.get_text() == "ab" "e\xcc\x81");
@@ -1309,7 +1309,7 @@ TEST_CASE("Transpose chars command")
     {
         tib::editor_context context;
         initialize_context(context, "a", 1);
-        const auto command = tib::editor_context::lookup_command("transpose-chars");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-chars");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-chars", nullptr) == 0);
         REQUIRE(context.get_text() == "a");
@@ -1323,7 +1323,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two three", 4);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two one three");
@@ -1334,7 +1334,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one,  two three", 4);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two,  one three");
@@ -1345,7 +1345,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two three", 3);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two one three");
@@ -1356,7 +1356,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one,  two three", 7);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two,  one three");
@@ -1367,7 +1367,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one,  two three", 0);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "one,  two three");
@@ -1378,7 +1378,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two three", 13);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "one three two");
@@ -1389,7 +1389,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two three", 10);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "one three two");
@@ -1400,7 +1400,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two three", 8);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "one three two");
@@ -1411,7 +1411,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "  one two", 0);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "  one two");
@@ -1422,7 +1422,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one$two,,", 9);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two$one,,");
@@ -1433,7 +1433,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two  ", 8);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two one  ");
@@ -1445,7 +1445,7 @@ TEST_CASE("Transpose words command")
         static const char text[] = "a" "e\xcc\x81" " \xc3\xa9" "b";
         tib::editor_context context;
         initialize_context(context, text, 6);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "\xc3\xa9" "b a" "e\xcc\x81");
@@ -1456,7 +1456,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one", 3);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "one");
@@ -1467,7 +1467,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "  , ", 2);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "  , ");
@@ -1479,7 +1479,7 @@ TEST_CASE("Transpose words command")
         tib::editor_context context;
         initialize_context(context, "one two three", 5);
         context.set_selection(0, 5);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         REQUIRE(context.get_text() == "two one three");
@@ -1491,7 +1491,7 @@ TEST_CASE("Transpose words command")
     {
         tib::editor_context context;
         initialize_context(context, "one two", 4);
-        const auto command = tib::editor_context::lookup_command("transpose-words");
+        const auto command = tib::editor_context::lookup_registered_command("transpose-words");
         REQUIRE(command != nullptr);
         REQUIRE(command(context, 0, "transpose-words", nullptr) == 0);
         context.undo();

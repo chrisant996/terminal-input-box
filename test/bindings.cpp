@@ -1428,7 +1428,7 @@ PERF_CASE("PERF, resolve default commands 10000 times")
         {
             for (const auto& command : commands)
             {
-                REQUIRE(tib::editor_context::lookup_command(command.first) == command.second);
+                REQUIRE(tib::editor_context::lookup_registered_command(command.first) == command.second);
                 ++num_resolved;
             }
         }

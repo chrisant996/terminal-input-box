@@ -1176,7 +1176,7 @@ const std::map<const char*, editor_command_func_t, editor_context::stricmp_less>
     return s_commands;
 }
 
-editor_command_func_t editor_context::lookup_command(const char* name)
+editor_command_func_t editor_context::lookup_registered_command(const char* name)
 {
     if (!name)
         return nullptr;
@@ -1195,7 +1195,7 @@ editor_command_func_t editor_context::find_available_command(const char* name) c
     if (m_reading_parameter)
         func = m_reading_parameter->request.find_command(name);
     if (!func)
-        func = lookup_command(name);
+        func = lookup_registered_command(name);
     return func;
 }
 
