@@ -280,6 +280,7 @@ public:
     void                set_auto_clear_numeric_argument(bool clear=true);
     void                clear_numeric_argument();
     bool                has_numeric_argument() const;
+    bool                is_numeric_argument_mode() const;
     int32_t             get_argument_sign() const;
     void                set_argument_sign(int32_t sign);
     void                invert_argument_sign();

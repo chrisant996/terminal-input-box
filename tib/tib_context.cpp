@@ -1064,6 +1064,11 @@ bool editor_context::has_numeric_argument() const
     return !!(m_numflags & NUMFLAG_HAS_ARGUMENT);
 }
 
+bool editor_context::is_numeric_argument_mode() const
+{
+    return !!(m_numflags & NUMFLAG_ARGUMENT_MODE);
+}
+
 int32_t editor_context::get_argument_sign() const
 {
     return m_sign_numeric_argument;
