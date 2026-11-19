@@ -265,6 +265,205 @@ TEST_CASE("Parameter request commands")
     }
 }
 
+TEST_CASE("Parameter request end callback")
+{
+    int32_t calls = 0;
+    bool expected_canceled = true;
+    bool start_next = false;
+    tib::cstring parameter;
+    auto context = std::make_shared<tib::editor_context>();
+    context->initialize("original");
+    context->set_selection(2, 5);
+    context->set_overwrite_mode(true);
+    context->set_numeric_argument(7);
+    const auto normal = context->add_bindings(tib::make_default_key_table(), tib::binding_policy::exclusive);
+    tib::parameter_request request;
+    request.initial_text = "abc";
+    request.on_end = [&](bool canceled)
+    {
+        ++calls;
+        REQUIRE(canceled == expected_canceled);
+        REQUIRE(!context->is_read_parameter());
+        REQUIRE(context->get_text() == "original");
+        REQUIRE(context->get_anchor() == 2);
+        REQUIRE(context->get_caret() == 5);
+        REQUIRE(context->get_overwrite_mode());
+        REQUIRE(context->get_numeric_argument() == 7);
+        REQUIRE(context->get_bindings().size() == 1);
+        REQUIRE(normal);
+        if (!canceled)
+            REQUIRE(parameter == "abc");
+        context->cancel_read_parameter(); // The ended request cannot notify twice.
+        if (start_next)
+            REQUIRE(context->start_read_parameter(tib::parameter_request()));
+    };
+    REQUIRE(context->start_read_parameter(std::move(request)));
+    REQUIRE(calls == 0);
+
+    SECTION("acceptance")
+    {
+        expected_canceled = false;
+        REQUIRE(context->accept_read_parameter(parameter));
+        REQUIRE(parameter == "abc");
+        REQUIRE(!context->accept_read_parameter(parameter));
+    }
+
+    SECTION("explicit cancellation")
+    {
+        context->cancel_read_parameter();
+        context->cancel_read_parameter();
+    }
+
+    SECTION("reset")
+    {
+        context->reset_state();
+    }
+
+    SECTION("done")
+    {
+        context->set_done();
+    }
+
+    SECTION("initialize")
+    {
+        context->initialize("replacement");
+    }
+
+    SECTION("transfer text")
+    {
+        tib::cstring text;
+        context->transfer_text(text);
+        REQUIRE(text == "original");
+    }
+
+    SECTION("the callback can start the next request")
+    {
+        start_next = true;
+        expected_canceled = false;
+        REQUIRE(context->accept_read_parameter(parameter));
+        REQUIRE(context->is_read_parameter());
+        context->cancel_read_parameter();
+    }
+
+    REQUIRE(calls == 1);
+}
+
+TEST_CASE("Rejected parameter request does not call end callback")
+{
+    int32_t calls = 0;
+    auto context = std::make_shared<tib::editor_context>();
+    context->initialize();
+    tib::parameter_request request;
+    request.initial_text = "x";
+    request.max_length = 0;
+    request.on_end = [&](bool) { ++calls; };
+    REQUIRE(!context->start_read_parameter(std::move(request)));
+    context->cancel_read_parameter();
+    tib::cstring parameter;
+    REQUIRE(!context->accept_read_parameter(parameter));
+    REQUIRE(calls == 0);
+}
+
+TEST_CASE("Parameter request backspace")
+{
+    auto context = std::make_shared<tib::editor_context>();
+    context->initialize("original");
+    context->set_selection(2, 5);
+    context->set_overwrite_mode(true);
+    context->set_numeric_argument(7);
+    const auto normal = context->add_bindings(tib::make_default_key_table(), tib::binding_policy::exclusive);
+    REQUIRE(!context->is_read_parameter());
+
+    int32_t end_calls = 0;
+    tib::parameter_request request;
+    request.on_end = [&](bool canceled) { ++end_calls; REQUIRE(canceled); };
+    request.bindings = { std::make_shared<tib::key_table>() };
+    REQUIRE(context->start_read_parameter(std::move(request)));
+    REQUIRE(context->is_read_parameter());
+    const auto request_bindings = context->get_bindings().back().handle;
+    tib::cstring output;
+    test_output_stream capture(output);
+
+    SECTION("empty input cancels before numeric repetition")
+    {
+        context->set_numeric_argument(4);
+    }
+
+    SECTION("deleting the last character needs another backspace to cancel")
+    {
+        context->insert_text("x");
+        invoke_command(*context, "del-char-left");
+        REQUIRE(context->is_read_parameter());
+        REQUIRE(context->get_text() == "");
+        REQUIRE(context->get_caret() == 0);
+    }
+
+    SECTION("deleting a selection needs another backspace to cancel")
+    {
+        context->insert_text("abc");
+        context->set_selection(3, 0);
+        invoke_command(*context, "del-char-left");
+        REQUIRE(context->is_read_parameter());
+        REQUIRE(context->get_text() == "");
+        REQUIRE(context->get_caret() == 0);
+    }
+
+    SECTION("nonempty input at caret zero stays active")
+    {
+        context->insert_text("abc");
+        context->set_caret(0);
+        invoke_command(*context, "del-char-left");
+        REQUIRE(context->is_read_parameter());
+        REQUIRE(context->get_text() == "abc");
+        REQUIRE(context->get_caret() == 0);
+        REQUIRE(capture.get_ding_count() == 1);
+        return;
+    }
+
+    SECTION("normal deletion in nonempty input stays active")
+    {
+        context->insert_text("abc");
+        context->set_caret(2);
+        invoke_command(*context, "del-char-left");
+        REQUIRE(context->is_read_parameter());
+        REQUIRE(context->get_text() == "ac");
+        REQUIRE(context->get_caret() == 1);
+        REQUIRE(capture.get_ding_count() == 0);
+        return;
+    }
+
+    tib::binding_resolver resolver;
+    resolver.add_target(context);
+    auto resolved = resolver.step('\177');
+    REQUIRE(resolved.is_func_name("del-char-left"));
+    REQUIRE(resolved.dispatch());
+    REQUIRE(!context->is_read_parameter());
+    REQUIRE(end_calls == 1);
+    REQUIRE(!request_bindings);
+    REQUIRE(normal);
+    REQUIRE(context->get_text() == "original");
+    REQUIRE(context->get_anchor() == 2);
+    REQUIRE(context->get_caret() == 5);
+    REQUIRE(context->get_overwrite_mode());
+    REQUIRE(!context->has_numeric_argument());
+    REQUIRE(context->get_numeric_argument() == 1);
+    REQUIRE(!context->is_done());
+    REQUIRE(capture.get_ding_count() == 0);
+}
+
+TEST_CASE("Backspace on empty input without a parameter request")
+{
+    tib::editor_context context;
+    context.initialize();
+    tib::cstring output;
+    test_output_stream capture(output);
+    invoke_command(context, "del-char-left");
+    REQUIRE(!context.is_read_parameter());
+    REQUIRE(!context.is_done());
+    REQUIRE(context.get_text() == "");
+    REQUIRE(capture.get_ding_count() == 1);
+}
+
 TEST_CASE("Parameter request default key table")
 {
     auto context = std::make_shared<tib::editor_context>();

@@ -1297,11 +1297,16 @@ bool editor_context::accept_read_parameter(cstring& parameter)
     }
 
     parameter = std::move(m_buffer.m_text);
-    cancel_read_parameter();
+    end_read_parameter(false/*canceled*/);
     return true;
 }
 
 void editor_context::cancel_read_parameter()
+{
+    end_read_parameter(true/*canceled*/);
+}
+
+void editor_context::end_read_parameter(bool canceled)
 {
     if (!m_reading_parameter)
         return;
@@ -1325,6 +1330,9 @@ void editor_context::cancel_read_parameter()
 
     apply_argument_bindings();
     force_redisplay();
+
+    if (r->request.on_end)
+        r->request.on_end(canceled);
 }
 
 bool editor_context::scroll_horizontally(int32_t columns, int32_t cursor_column, bool exclude_auto_scroll)

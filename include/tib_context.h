@@ -123,6 +123,8 @@ struct parameter_request
     void                set_commands(const editor_command* commands, size_t num);
     template<size_t I> void set_commands(const editor_command (&commands)[I]) { set_commands(commands, I); }
     editor_command_func_t find_command(const char* name) const;
+    // Optional; called once after the original editor state is restored.
+    std::function<void(bool canceled)> on_end;
 
 private:
     const editor_command* commands = nullptr;
@@ -360,6 +362,7 @@ private:
     void                clear_overwrite_input();
     void                apply_message_text();
     void                apply_argument_bindings();
+    void                end_read_parameter(bool canceled);
 
 private:
     // Configuration.
