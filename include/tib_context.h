@@ -336,6 +336,12 @@ public:
     int32_t             count_error_messages() const { return int32_t(m_error_messages.size()); }
     void                clear_error_messages() { m_error_messages.clear(); }
 
+    // Look up a key sequence or named command.  This checks whether the
+    // keyseq or name would be resolvable and dispatchable by this
+    // editor_context, but without taking into account quoted insert.
+    resolved_binding    lookup_keyseq(const char* keyseq, size_t len=c_auto_length);
+    resolved_binding    lookup_command(const char* name);
+
     struct stricmp_less
     {
         using is_transparent = void;

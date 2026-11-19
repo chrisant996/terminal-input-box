@@ -181,6 +181,13 @@ TEST_CASE("Binding fallback commits only on dispatch")
     REQUIRE(target->get_fallback_count() == 1);
     argument_handle.remove();
     REQUIRE(!resolver.is_keyseq_recognized("z", 1));
+
+    // Recognition uses the pending prefix without consuming or resetting it.
+    REQUIRE(resolver.step('a').more());
+    REQUIRE(resolver.is_keyseq_recognized("b", 1));
+    REQUIRE(!resolver.is_keyseq_recognized("z", 1));
+    REQUIRE(resolver.pending());
+    REQUIRE(resolver.step('b').is_func_name("base-command"));
 }
 
 TEST_CASE("Binding fallback is reported on a final miss")
@@ -515,6 +522,8 @@ TEST_CASE("Nested binding fallback boundaries")
         REQUIRE(target->fallbacks.empty());
         REQUIRE(resolver.step('a').more());
         REQUIRE(resolver.step('b').more());
+        REQUIRE(resolver.is_keyseq_recognized("c", 1));
+        REQUIRE(resolver.pending());
         REQUIRE(target->fallbacks.empty());
         auto resolved = resolver.step('c');
         REQUIRE(resolved.is_func_name("base"));
